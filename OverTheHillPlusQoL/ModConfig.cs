@@ -28,6 +28,9 @@ internal static class ModConfig
     public static ConfigEntry<int> MeasuredCapacity;
     public static ConfigEntry<bool> MainMenuButton;
     public static ConfigEntry<string> CustomRoomName;
+    public static ConfigEntry<bool> JoinMessageEnabled;
+    public static ConfigEntry<string> JoinMessage;
+    public static ConfigEntry<string> JoinMessageColor;
     public static ConfigEntry<string> RoomNameStyle;
     public static ConfigEntry<bool> RoomNameBold;
     public static ConfigEntry<int> CustomMaxPlayers;
@@ -72,6 +75,9 @@ internal static class ModConfig
         RoomNameStyle = cfg.Bind("Multiplayer", "RoomNameStyle", "None", "Colour of your server's name in everyone's server browser: None, Gold, Cyan, Pink, Green, Red, Purple, Rainbow, Sunset, Ocean.");
         RoomNameBold = cfg.Bind("Multiplayer", "RoomNameBold", false, "Bold server name.");
         CustomMaxPlayers = cfg.Bind("Multiplayer", "CustomMaxPlayers", 0, "Exact player limit for servers you host (0 = use the Create Server choice).");
+        JoinMessageEnabled = cfg.Bind("Multiplayer", "JoinMessageEnabled", false, "When hosting, greet each player who joins with a message everyone sees.");
+        JoinMessage = cfg.Bind("Multiplayer", "JoinMessage", "Welcome to {host}'s server, {name}!", "Join message. {name} = the player who joined, {host} = you.");
+        JoinMessageColor = cfg.Bind("Multiplayer", "JoinMessageColor", "Gold", "Colour of the pop-up's smiley: Gold, Cyan, Pink, Green, Red, Purple, White.");
         CustomRoomName = cfg.Bind("Multiplayer", "CustomRoomName", "", "Name for servers you host (empty = the game's default \"<name>'s room\").");
         MainMenuButton = cfg.Bind("General", "MainMenuButton", true, "Add a PLUS button to the main menu that opens this mod's menu.");
 

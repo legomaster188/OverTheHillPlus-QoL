@@ -14,6 +14,7 @@ Quality-of-life mod for **over the hill** (Funselektor). No cheats: nothing here
 - Crash guards and smart spawn points for bigger lobbies
 - Type an exact lobby size (up to 32)
 - Rename your server and colour its name (gold, cyan, rainbow, sunset…) — shows in everyone's server browser
+- Join message: greet every player who joins your server with a pop-up everyone sees
 - "Plus lobby settings" button on the Create Server screen
 
 **Quality of life**
