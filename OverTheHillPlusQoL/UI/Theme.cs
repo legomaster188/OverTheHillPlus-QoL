@@ -171,6 +171,8 @@ internal static class Theme
     {
         var e = Event.current;
         if (e == null || e.type != EventType.Repaint || r.width <= 0f || r.height <= 0f) return;
+        // Inside the native-style menu, fills become part of the game-styled canvas (same rect, colour, rounding).
+        if (Native.NativeCanvas.Emitting) { Native.NativeCanvas.FillRounded(r, color, radius); return; }
         if (FillStyles.TryGetValue((color, radius), out var f) && f.Texture != null)
         {
             f.Style.Draw(r, false, false, false, false);

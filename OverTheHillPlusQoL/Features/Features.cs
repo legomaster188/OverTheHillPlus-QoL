@@ -29,6 +29,7 @@ internal static class Registry
     {
         public int Mode;
         public string Tab;
+        public string Group; // Advanced view tab it shows in (null = the default grouping of Tab)
         public int Order;
         public Action Draw;
         public string Owner;
@@ -55,10 +56,13 @@ internal static class Registry
     /// <summary>
     /// Adds a block of menu content to a tab (built-in tabs: QoL, Lobby, Servers). A new tab name creates a new tab.
     /// Built-in content of an existing tab draws first, then sections by <paramref name="order"/>.
+    /// These cards show in the menu's Advanced view, where related tabs are grouped (Lobby, Network and Moderation
+    /// under Hosting, ...); <paramref name="advancedTab"/> puts this section in another Advanced tab instead.
+    /// The Simple view has its own short pages (UI/SimpleMenu: <c>SimpleMenu.Page</c>).
     /// </summary>
-    public static void Section(int mode, string tab, Action draw, int order = 0)
+    public static void Section(int mode, string tab, Action draw, int order = 0, string advancedTab = null)
     {
-        Sections.Add(new SectionEntry { Mode = mode, Tab = tab, Order = order, Draw = draw, Owner = _registering });
+        Sections.Add(new SectionEntry { Mode = mode, Tab = tab, Group = advancedTab, Order = order, Draw = draw, Owner = _registering });
         SectionCache.Clear();
     }
 

@@ -17,6 +17,7 @@ internal sealed class MenuUxFeature : IFeature
             "Menu size multiplier on top of the automatic resolution scaling (1 = default).", new AcceptableValueRange<float>(0.5f, 2.5f)));
         MenuUx.Tooltips = cfg.Bind(SectionName, "Tooltips", true, "Show a setting's full description when you hover it in the menu.");
         MenuUx.SearchBar = cfg.Bind(SectionName, "SearchBar", true, "Show the settings search box under the menu tabs (Ctrl+F focuses it).");
+        MenuUx.FoldCards = cfg.Bind(SectionName, "FoldCards", true, "Advanced view: cards start folded, except the first card of each tab.");
 
         Registry.OnTick(() =>
         {
@@ -40,14 +41,15 @@ internal sealed class MenuUxFeature : IFeature
                 ("150%", () => SetScale(1.5f), true));
             Menu.Small($"Screen {Screen.width}×{Screen.height}: the menu already grows with resolution above 1080p; this multiplies that.");
             Menu.Switch(MenuUx.Tooltips, "Hover tooltips", "Full descriptions when you rest the mouse on a setting", true);
-            Menu.Switch(MenuUx.SearchBar, "Settings search box", "Under the tabs. Ctrl+F to focus, Enter jumps to a match", true);
+            Menu.Switch(MenuUx.SearchBar, "Settings search box", "Advanced view, under the tabs. Ctrl+F to focus, Enter jumps to a match", true);
         });
 
-        Menu.Card("Cards", "Click any card's title to fold it away. Folded cards stay folded until the game restarts.", () =>
+        Menu.Card("Cards", "Advanced view: click a card's title to open or fold it. Your choice is kept until the game restarts.", () =>
         {
+            Menu.Switch(MenuUx.FoldCards, "Start with cards folded", "Only the first card of each tab opens by itself", true);
             Menu.KeyValue("Folded now", MenuUx.CollapsedCount.ToString());
             Menu.Chips(2,
-                ("Fold all cards", () => { MenuUx.CollapseAll(true); Menu.SetStatus("Folded every card you've opened (except this tab)"); }, true),
+                ("Fold all cards", () => { MenuUx.CollapseAll(true); Menu.SetStatus("Folded every card you've seen (except these settings)"); }, true),
                 ("Unfold all", () => { MenuUx.CollapseAll(false); Menu.SetStatus("All cards unfolded"); }, MenuUx.CollapsedCount > 0));
         });
 

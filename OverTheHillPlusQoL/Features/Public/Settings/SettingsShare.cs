@@ -59,6 +59,10 @@ internal sealed class SettingsShare : IFeature
     private static readonly HashSet<string> NeverShared = new(StringComparer.OrdinalIgnoreCase)
     {
         "Multiplayer.MeasuredCapacity", // measured on this PC
+        // State the mod keeps for itself (also caught by the description rule below): a remembered search is often a
+        // friend's or a server's name, and importing a fingerprint would break "changed since the profile was applied".
+        "BrowserRefresh.SavedSortCriteria", "BrowserRefresh.SavedSortDirection", "BrowserRefresh.SavedSearch",
+        "Graphics.Profiles.LastApplied", "Graphics.Profiles.LastFingerprint",
     };
 
     private static readonly HashSet<string> PersonalKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -67,7 +71,7 @@ internal sealed class SettingsShare : IFeature
     };
 
     private static readonly string[] SecretWords = { "password", "token", "secret", "apikey", "api_key", "steamid", "webhook" };
-    private static readonly string[] PersonalWords = { "name", "message", "text", "note", "friend", "player", "path", "folder", "file", "url" };
+    private static readonly string[] PersonalWords = { "name", "message", "text", "note", "friend", "player", "path", "folder", "file", "url", "search" };
     private static readonly string[] StyleWords = { "style", "color", "colour" };
 
     /// <summary>Settings that are never exported or imported, whatever the switches say.</summary>
@@ -78,6 +82,15 @@ internal sealed class SettingsShare : IFeature
         if (NeverShared.Contains(id)) return true;
         string lower = id.ToLowerInvariant();
         return SecretWords.Any(w => lower.Contains(w));
+    }
+
+    /// <summary>The entry-level rule: also never shares state the mod sets itself ("Set by the mod" / "Internal:").</summary>
+    private static bool NeverTravels(ConfigEntryBase e)
+    {
+        if (NeverTravels(e.Definition)) return true;
+        string desc = e.Description?.Description ?? "";
+        return desc.StartsWith("Internal:", StringComparison.OrdinalIgnoreCase) ||
+               desc.IndexOf("Set by the mod", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static bool IsPersonal(ConfigEntryBase e)
@@ -93,7 +106,7 @@ internal sealed class SettingsShare : IFeature
     private static bool Exported(ConfigEntryBase e)
     {
         var d = e.Definition;
-        if (NeverTravels(d)) return false;
+        if (NeverTravels(e)) return false;
         return _includePersonal.Value || !IsPersonal(e);
     }
 
@@ -182,7 +195,7 @@ internal sealed class SettingsShare : IFeature
             if (!ModConfig.File.ContainsKey(def)) { plan.Unknown++; continue; }
             var entry = ModConfig.File[def];
             if (entry == null) { plan.Unknown++; continue; }
-            if (NeverTravels(def)) { plan.Skipped++; continue; }
+            if (NeverTravels(entry)) { plan.Skipped++; continue; }
 
             string normalised;
             try

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using BepInEx.Configuration;
 using OverTheHillPlus.UI;
+using OverTheHillPlus.UI.Native;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -20,9 +21,13 @@ internal static class MenuUx
     internal static ConfigEntry<float> UiScale;
     internal static ConfigEntry<bool> Tooltips;
     internal static ConfigEntry<bool> SearchBar;
+    internal static ConfigEntry<bool> FoldCards;
 
     private static bool TooltipsOn => (Tooltips == null || Tooltips.Value) && !_tooltipBroken;
     private static bool SearchOn => SearchBar == null || SearchBar.Value;
+
+    /// <summary>Advanced view: cards start folded, except the first card of each tab.</summary>
+    internal static bool FoldByDefault => FoldCards == null || FoldCards.Value;
 
     // ---------- UI scale ----------
 
@@ -59,8 +64,21 @@ internal static class MenuUx
     /// <summary>Blocks every mod hotkey (menu key, Escape, HUD...) for the current frame.</summary>
     internal static void SuppressHotkeysThisFrame() => _suppressFrame = Time.frameCount;
 
-    /// <summary>True when hotkeys must be ignored this frame (a key is being captured for a rebind).</summary>
-    internal static bool HotkeysCaptured => Time.frameCount <= _suppressFrame;
+    /// <summary>
+    /// True when hotkeys must be ignored this frame: a key is being captured for a rebind, or the chat box is open (or
+    /// closed this frame or the last, so the Enter / Escape that closed it isn't read as a hotkey). The chat check
+    /// doesn't depend on the order features tick in.
+    /// </summary>
+    internal static bool HotkeysCaptured
+    {
+        get
+        {
+            int f = Time.frameCount;
+            if (f <= _suppressFrame) return true;
+            try { return Chat.ChatOverlay.IsOpen || f - Chat.ChatOverlay.ClosedFrame <= 1; }
+            catch { return false; }
+        }
+    }
 
     /// <summary>True while the menu is open and a text field in it has keyboard focus.</summary>
     internal static bool Typing => Time.frameCount - _typingFrame <= 2 && MenuVisible;
@@ -219,31 +237,42 @@ internal static class MenuUx
 
         Theme.Fill(new Rect(r.x - 1f, r.y - 1f, r.width + 2f, r.height + 2f), Theme.Line, 7);
         Theme.Fill(r, Theme.Hex(0x0E1218, 0.98f), 6);
-        var prev = style.normal.textColor;
-        style.normal.textColor = Theme.Text;
-        GUI.Label(new Rect(r.x + 10f, r.y + 7f, w, h), tip, style);
-        style.normal.textColor = prev;
+        Menu.Label(new Rect(r.x + 10f, r.y + 7f, w, h), tip, style, Menu.NativeActive ? NativeLook.Text : Theme.Text);
     }
 
     // ---------- collapsible cards ----------
 
-    private static readonly HashSet<string> Collapsed = new();
-    private static readonly HashSet<string> SeenCards = new();
+    // Cards the user opened or folded (true = open); others follow their default. Kept for the session.
+    private static readonly Dictionary<string, bool> OpenState = new();
+    // Every card drawn so far, with whether it starts open.
+    private static readonly Dictionary<string, bool> SeenCards = new();
 
     internal static string CardKey(int mode, string tab, string title) => $"{mode}/{tab}/{title}";
 
-    internal static int CollapsedCount => Collapsed.Count;
+    private static bool IsOpen(string key, bool defaultOpen) => OpenState.TryGetValue(key, out var open) ? open : defaultOpen;
+
+    internal static int CollapsedCount
+    {
+        get
+        {
+            int n = 0;
+            foreach (var kv in SeenCards) if (!IsOpen(kv.Key, kv.Value)) n++;
+            return n;
+        }
+    }
 
     internal static void CollapseAll(bool collapse)
     {
-        if (!collapse) { Collapsed.Clear(); return; }
-        foreach (var k in SeenCards)
-            if (!k.Contains("/" + MenuUxFeature.Tab + "/")) Collapsed.Add(k); // keep this tab's own cards open
+        foreach (var k in SeenCards.Keys)
+        {
+            if (collapse && k.Contains("/" + MenuUxFeature.Tab + "/")) continue; // keep the menu settings' own cards open
+            OpenState[k] = !collapse;
+        }
     }
 
     /// <summary>Draws a card's title row (title, chevron, search highlight), handles the collapse click and
-    /// returns whether the body should be drawn.</summary>
-    internal static bool CardHeader(string key, string title, Rect card, float inset, float iw)
+    /// returns whether the body should be drawn. <paramref name="defaultOpen"/>: open until the user folds it.</summary>
+    internal static bool CardHeader(string key, string title, Rect card, float inset, float iw, bool defaultOpen = true)
     {
         if (Indexing)
         {
@@ -251,28 +280,30 @@ internal static class MenuUx
             Record(title, null, null);
             return true;
         }
-        SeenCards.Add(key);
+        SeenCards[key] = defaultOpen;
         bool hit = Searching && CardHits.Contains(key);
-        bool collapsed = Collapsed.Contains(key) && !hit;
+        bool collapsed = !IsOpen(key, defaultOpen) && !hit;
         var head = new Rect(card.x, card.y, card.width, 32f);
         bool hover = head.Contains(Event.current.mousePosition);
+        bool native = Menu.NativeActive;
+        Menu.NavItem(head, NavKind.Fold, out bool focused, out bool activated);
 
+        if (focused) Menu.SelectionBar(new Rect(card.x + 4f, card.y + 4f, card.width - 8f, 28f));
         if (hit) Theme.Fill(new Rect(card.x, card.y + 6f, 3f, Mathf.Max(20f, card.height - 12f)), Theme.Accent, 1);
-        var prev = Theme.Section.normal.textColor;
-        Theme.Section.normal.textColor = hit ? Theme.Accent : hover ? Theme.Text : prev;
-        GUI.Label(new Rect(inset, card.y + 12f, iw - 24f, 16f), title.ToUpperInvariant(), Theme.Section);
-        Theme.Section.normal.textColor = prev;
-        if (hover || collapsed)
+        Color titleColor = native
+            ? focused ? NativeLook.HighlightText : hit ? NativeLook.Highlight : NativeLook.Text
+            : hit ? Theme.Accent : hover ? Theme.Text : Theme.Section.normal.textColor;
+        Menu.Label(new Rect(inset, card.y + 12f, iw - 24f, 16f), title.ToUpperInvariant(), Theme.Section, titleColor);
+        if (hover || collapsed || focused)
         {
-            var sp = Theme.Small.alignment;
-            Theme.Small.alignment = TextAnchor.MiddleRight;
-            GUI.Label(new Rect(inset + iw - 40f, card.y + 10f, 40f, 20f), collapsed ? "show ►" : "▼", Theme.Small);
-            Theme.Small.alignment = sp;
+            Color chevron = native ? focused ? NativeLook.HighlightText : NativeLook.Muted : Theme.Small.normal.textColor;
+            Menu.Label(new Rect(inset + iw - 40f, card.y + 10f, 40f, 20f), collapsed ? "show ►" : "▼", Theme.Small, TextAnchor.MiddleRight, chevron);
         }
-        if (GUI.Button(head, GUIContent.none, Theme.Invisible))
+        if (GUI.Button(head, GUIContent.none, Theme.Invisible) || activated)
         {
-            if (collapsed) Collapsed.Remove(key);
-            else if (!hit) Collapsed.Add(key);
+            if (collapsed) OpenState[key] = true;
+            else if (!hit) OpenState[key] = false;
+            if (native) NativeLook.PlayPress();
         }
         return !collapsed;
     }
@@ -309,7 +340,11 @@ internal static class MenuUx
     private static int _indexMode;
     private static string _indexTab, _indexCard;
 
-    internal static bool Searching => SearchOn && _tokens.Length > 0;
+    internal static bool Searching => SearchOn && SearchShown && _tokens.Length > 0;
+
+    /// <summary>Set by the menu each frame: the search box is on screen (Advanced view). A query typed earlier
+    /// neither highlights nor dims anything while the box is hidden.</summary>
+    internal static bool SearchShown = true;
 
     /// <summary>True when the menu should run an indexing pass this Layout event.</summary>
     internal static bool NeedsIndex => Searching && Time.unscaledTime - _indexedAt > 4f;
@@ -423,7 +458,7 @@ internal static class MenuUx
         Theme.Fill(pill, Theme.Accent, 7);
         var prevSize = Theme.Badge.fontSize;
         Theme.Badge.fontSize = 10;
-        GUI.Label(pill, s, Theme.Badge);
+        Menu.Label(pill, s, Theme.Badge);
         Theme.Badge.fontSize = prevSize;
     }
 
@@ -449,24 +484,21 @@ internal static class MenuUx
         string q = GUI.TextField(field, _query ?? "", 40, Theme.TextField);
         if (_focusSearch) { _focusSearch = false; GUI.FocusControl(SearchControl); }
         if (string.IsNullOrEmpty(q) && !focused)
-            GUI.Label(new Rect(field.x + 9f, field.y, field.width - 40f, field.height), "Search settings…  (Ctrl+F)", Theme.Small);
+            Menu.Label(new Rect(field.x + 9f, field.y, field.width - 40f, field.height), "Search settings…  (Ctrl+F)", Theme.Small);
         if (!string.IsNullOrEmpty(q))
         {
             var clear = new Rect(field.xMax + 4f, field.y, 26f, 26f);
-            if (GUI.Button(clear, "×", Theme.Chip)) { q = ""; GUIUtility.keyboardControl = 0; }
+            if (Menu.Button(clear, "×", Theme.Chip)) { q = ""; GUIUtility.keyboardControl = 0; }
         }
         if (q != _query) SetQuery(q);
 
         var info = new Rect(r.xMax - infoW, r.y, infoW, 26f);
         if (!Searching)
         {
-            var sa = Theme.Small.alignment;
-            Theme.Small.alignment = TextAnchor.MiddleRight;
-            GUI.Label(info, "click a card title to fold it", Theme.Small);
-            Theme.Small.alignment = sa;
+            Menu.Label(info, "click a title to open or fold", Theme.Small, TextAnchor.MiddleRight);
             return;
         }
-        if (Index.Count == 0) { GUI.Label(info, "indexing…", Theme.Small); return; }
+        if (Index.Count == 0) { Menu.Label(info, "indexing…", Theme.Small); return; }
 
         int here = 0, tabsHere = 0;
         foreach (var t in tabsByMode[mode]) { int n = HitsFor(mode, t); here += n; if (n > 0) tabsHere++; }
@@ -480,12 +512,12 @@ internal static class MenuUx
         {
             float bw = 74f;
             var lr = new Rect(info.x, info.y, infoW - bw - 4f, 26f);
-            GUI.Label(lr, here == 0 ? "none here" : $"{here} in {tabsHere} tab{(tabsHere == 1 ? "" : "s")}", here == 0 ? Theme.Small : Theme.Label);
-            if (GUI.Button(new Rect(info.xMax - bw, info.y, bw, 26f), $"{modeNames[other]} {otherHits}", Theme.Chip))
+            Menu.Label(lr, here == 0 ? "none here" : $"{here} in {tabsHere} tab{(tabsHere == 1 ? "" : "s")}", here == 0 ? Theme.Small : Theme.Label);
+            if (Menu.Button(new Rect(info.xMax - bw, info.y, bw, 26f), $"{modeNames[other]} {otherHits}", Theme.Chip))
                 JumpToFirstMatch(other, tabsByMode);
         }
-        else if (here == 0) GUI.Label(info, "<color=#E5534B>no matches</color>", Theme.Small);
-        else GUI.Label(info, $"{here} match{(here == 1 ? "" : "es")} in {tabsHere} tab{(tabsHere == 1 ? "" : "s")}", Theme.Label);
+        else if (here == 0) Menu.Label(info, "<color=#E5534B>no matches</color>", Theme.Small);
+        else Menu.Label(info, $"{here} match{(here == 1 ? "" : "es")} in {tabsHere} tab{(tabsHere == 1 ? "" : "s")}", Theme.Label);
     }
 
     private static void SetQuery(string q)

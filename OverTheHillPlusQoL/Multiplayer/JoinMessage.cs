@@ -61,8 +61,8 @@ internal static class JoinMessage
         // Typed markup is neutralised first (see RoomNames.Escape); only the mod's own tags are added when sending.
         joiner = RoomNames.Escape(joiner);
         host = RoomNames.Escape(host);
-        if (Features.Public.Filter.NameFilter.IsBlocked(joiner, out _)) joiner = "a new player";
-        if (Features.Public.Filter.NameFilter.IsBlocked(host, out _)) host = "the host";
+        if (Features.Public.Filter.NameFilter.IsBlockedStrict(joiner, out _)) joiner = "a new player";
+        if (Features.Public.Filter.NameFilter.IsBlockedStrict(host, out _)) host = "the host";
         string text = RoomNames.Escape(ModConfig.JoinMessage.Value).Replace("{name}", joiner).Replace("{host}", host).Trim();
         return Features.Public.Filter.NameFilter.IsBlocked(text, out _) ? "" : text;
     }
@@ -86,6 +86,39 @@ internal static class JoinMessage
             Plugin.Logger.LogWarning("[Lobby] Join message failed: " + e.Message);
             return "Failed: " + e.Message;
         }
+    }
+
+    /// <summary>
+    /// Host: shows a short notice to everyone in the session on the same pop-up as the join message (vanilla players
+    /// see it too). Build <paramref name="text"/> from fixed wording plus names passed through <see cref="SafeName"/>;
+    /// the whole text is escaped and filtered again here and not sent if it fails the filter. False = nothing sent.
+    /// </summary>
+    internal static bool Announce(string text, Color color)
+    {
+        if (string.IsNullOrWhiteSpace(text) || !GameState.IsAuthority || GameState.Runner == null) return false;
+        try { if (GameState.Runner.IsSinglePlayer || !GameState.Runner.IsServer) return false; } catch { return false; }
+        var sp = OverlandSessionPlayers.Instance;
+        if (sp == null) return false;
+        text = RoomNames.Escape(text).Trim();
+        if (Features.Public.Filter.NameFilter.IsBlocked(text, out _)) return false;
+        try
+        {
+            sp.RPC_ShowPlayerLeftNotification(color, Marker + text + HideRest);
+            return true;
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger.LogWarning("[Lobby] Notice failed: " + e.Message);
+            return false;
+        }
+    }
+
+    /// <summary>A player name made safe to show to everyone: markup neutralised, and replaced when it fails the filter.</summary>
+    internal static string SafeName(string name, string fallback = "a player")
+    {
+        name = RoomNames.Escape(name ?? "").Trim();
+        if (name.Length == 0 || Features.Public.Filter.NameFilter.IsBlockedStrict(name, out _)) return fallback;
+        return name;
     }
 
     public static Color ColorFor(string name) => name switch

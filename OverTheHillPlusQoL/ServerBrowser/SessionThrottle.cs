@@ -26,6 +26,16 @@ internal static class SessionThrottle
 
     public static int Applied, SkippedIdentical, Deferred;
 
+    /// <summary>
+    /// True while the game handles an update we let through. Applying a list fires the game's SessionListUpdated,
+    /// whose handler (StateServerBrowser.RefreshSessionList) calls ContextUIServerList.RefreshSessionList: that must
+    /// not reset the throttle, or every update would clear the state that dedupes and spaces out the next one.
+    /// </summary>
+    internal static bool Applying { get; private set; }
+
+    /// <summary>Set around a list rebuild the mod asks for itself (auto refresh): it must not reset the throttle either.</summary>
+    internal static bool QuietRefresh;
+
     /// <summary>Make the next update go through untouched (browser opened, refresh pressed, region changed).</summary>
     public static void Reset()
     {
@@ -33,10 +43,19 @@ internal static class SessionThrottle
         _lastAppliedTime = -100f;
     }
 
+    /// <summary>Forgets a held-back update (the lobby is switching region: that list belongs to the old one).</summary>
+    public static void DropPending()
+    {
+        _pendingList = null;
+        _pendingOwner = null;
+        _pendingRunner = null;
+    }
+
     private static bool Prefix(OverlandNetworkRunner __instance, NetworkRunner runner,
         Il2CppSystem.Collections.Generic.List<SessionInfo> sessionList)
     {
         if (_bypass) return true;
+        Applying = false;
         try { FirstSeenTracker.Observe(runner, sessionList); }
         catch (Exception e) { Plugin.Logger.LogWarning("First-seen observe failed: " + e.Message); }
 
@@ -45,6 +64,7 @@ internal static class SessionThrottle
         {
             _pendingList = null;
             Applied++;
+            Applying = true;
             return true;
         }
 
@@ -71,12 +91,16 @@ internal static class SessionThrottle
 
         _pendingList = null;
         MarkApplied(sig);
+        Applying = true;
         return true;
     }
+
+    private static void Postfix() { if (!_bypass) Applying = false; }
 
     /// <summary>Called every frame; flushes a deferred update once the interval has passed.</summary>
     public static void Tick()
     {
+        Applying = false; // never left set past a frame, even if the game's handler threw
         if (_pendingList == null) return;
         bool due = Time.unscaledTime - _lastAppliedTime >= ModConfig.SessionUpdateInterval.Value;
         if (!due && BrowserState.Open) return;
@@ -85,9 +109,10 @@ internal static class SessionThrottle
         if (owner == null) return;
         MarkApplied(sig);
         _bypass = true;
+        Applying = true;
         try { owner.Fusion_INetworkRunnerCallbacks_OnSessionListUpdated(runner, list); }
         catch (Exception e) { Plugin.Logger.LogWarning("Deferred session update failed: " + e.Message); }
-        finally { _bypass = false; }
+        finally { _bypass = false; Applying = false; }
     }
 
     private static void MarkApplied(string sig)
@@ -96,6 +121,8 @@ internal static class SessionThrottle
         _lastAppliedSig = sig;
         _lastAppliedTime = Time.unscaledTime;
     }
+
+    private const string PlayerNamesKey = Features.Public.ServerPlayers.PlayerNamesProperty.Key;
 
     private static string Signature(Il2CppSystem.Collections.Generic.List<SessionInfo> list)
     {
@@ -106,7 +133,19 @@ internal static class SessionThrottle
             var s = list[i];
             if (s == null) continue;
             sb.Append(s.Name).Append('|').Append(s.PlayerCount).Append('/').Append(s.MaxPlayers)
-              .Append(s.IsOpen ? 'o' : 'c').Append(s.IsVisible ? 'v' : 'h').Append(';');
+              .Append(s.IsOpen ? 'o' : 'c').Append(s.IsVisible ? 'v' : 'h');
+            // Who is in the server (published by modded hosts) changes without the player count changing.
+            try
+            {
+                var props = s.Properties;
+                if (props != null && props.ContainsKey(PlayerNamesKey))
+                {
+                    var p = props[PlayerNamesKey];
+                    if (p != null && p.IsString) sb.Append('#').Append((string)p);
+                }
+            }
+            catch { /* signature only */ }
+            sb.Append(';');
         }
         return sb.ToString();
     }
@@ -125,7 +164,12 @@ internal static class SessionThrottleResetPatches
     // One target per method: stacked [HarmonyPatch] attributes merge into a single target.
     [HarmonyPrefix]
     [HarmonyPatch(typeof(ContextUIServerList), nameof(ContextUIServerList.RefreshSessionList))]
-    private static void OnRefresh() => SessionThrottle.Reset();
+    private static void OnRefresh()
+    {
+        // Only a refresh that isn't the game applying an update (or the mod's own auto refresh) starts afresh.
+        if (SessionThrottle.Applying || SessionThrottle.QuietRefresh) return;
+        SessionThrottle.Reset();
+    }
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(ContextUIServerList), nameof(ContextUIServerList.ServerRegionOnChanged))]

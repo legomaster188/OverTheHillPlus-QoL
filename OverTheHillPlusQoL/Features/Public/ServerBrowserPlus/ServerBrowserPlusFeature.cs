@@ -10,7 +10,7 @@ namespace OverTheHillPlus.Features.Public.ServerBrowserPlus;
 /// <summary>Server browser v2: menu cards in PLUS > Servers and a quick bar drawn over the game's browser.</summary>
 internal sealed class ServerBrowserPlusFeature : IFeature
 {
-    private const float BarW = 600f, BarH = 74f;
+    private const float BarW = 660f, BarH = 74f;
 
     private static GUIStyle _center, _title;
     private static bool _dragging;
@@ -50,7 +50,8 @@ internal sealed class ServerBrowserPlusFeature : IFeature
                 (sel == null ? "Star selected server" : (selFav ? "Unstar " : "Star ") + Short(selName, 22),
                     (Action)(() => BrowserPlus.ToggleFavourite(sel)), sel != null));
             Menu.Small($"Quick join picks an open public server on your game version with a free slot: favourites first, then the busiest. " +
-                       $"In the browser, {BrowserPlus.FavouriteKey.Value} stars the selected server.");
+                       $"In the browser, {BrowserPlus.FavouriteKey.Value} stars the selected server" +
+                       (BrowserPlus.QuickJoinKey.Value != UnityEngine.InputSystem.Key.None ? $" and {BrowserPlus.QuickJoinKey.Value} quick joins." : "."));
 
             Menu.Switch(BrowserPlus.PinFavourites, "Pin favourites to the top", "Starred servers always lead the list", true);
             Menu.Switch(BrowserPlus.HideIncompatible, "Hide other game versions", "Servers you can't join anyway", true);
@@ -67,7 +68,10 @@ internal sealed class ServerBrowserPlusFeature : IFeature
 
             Menu.Switch(BrowserPlus.ShowFavTag, "FAV tag on favourites", null, true);
             Menu.Switch(BrowserPlus.ShowBigTag, "BIG tag on big lobbies", "Shows the lobby size, e.g. BIG 8", true);
-            Menu.Switch(BrowserPlus.ShowBar, "Quick bar in the browser", "Filters, star and quick join on top of the game's browser (drag to move)", true);
+            Menu.Switch(BrowserPlus.ShowBar, "Quick bar in the browser", "Filters, star and quick join on top of the game's browser (drag the title to move)", true);
+            Menu.Switch(BrowserPlus.GameLookBar, "Quick bar in the game's style", QuickBarNative.Failed
+                ? "Failed this session, using the overlay bar (see the log)"
+                : "Built from the game's own UI: its font, flat rows and key prompts. Off = the older overlay bar", BrowserPlus.ShowBar.Value);
             if (BrowserPlus.BarX.Value >= 0f || BrowserPlus.BarY.Value >= 0f)
                 Menu.Chips(1, ("Reset quick bar position", (Action)(() => { BrowserPlus.BarX.Value = -1f; BrowserPlus.BarY.Value = -1f; }), true));
         });
@@ -157,10 +161,12 @@ internal sealed class ServerBrowserPlusFeature : IFeature
     private static void Tick()
     {
         BrowserPlus.Tick();
+        UpdateNativeBar();
 
         // While the pointer is over the quick bar, pause the game's UI input so a click doesn't also hit the
         // browser underneath. Never while the mod menu is open: the menu manages the EventSystem itself.
-        bool want = _barHover && BarVisible && !MenuOpen;
+        bool hover = _mode == QuickBarNative.Mode.Native ? QuickBarNative.Hover : _mode == QuickBarNative.Mode.Fallback && _barHover;
+        bool want = hover && BarVisible && !MenuOpen;
         if (want && _heldEventSystem == null)
         {
             var es = EventSystem.current;
@@ -175,11 +181,152 @@ internal sealed class ServerBrowserPlusFeature : IFeature
 
     private static bool BarVisible => BrowserPlus.ShowBar.Value && BrowserPlus.BrowserAlive && !MenuOpen;
 
-    // ---------------------------------------------------------------- quick bar overlay
+    // ---------------------------------------------------------------- quick bar: shared parts
+
+    // Which renderer has the bar this frame (decided in Update, read by the IMGUI pass that follows).
+    private static QuickBarNative.Mode _mode = QuickBarNative.Mode.Fallback;
+    private static bool _drawingNative;
+
+    /// <summary>
+    /// The filter switches on the bar, in order. Both bars (game look and overlay) lay these out in one row and
+    /// share the width, so a new filter is one more line here.
+    /// </summary>
+    private static (string label, BepInEx.Configuration.ConfigEntry<bool> entry)[] BarToggles() => new[]
+    {
+        ("Compatible", BrowserPlus.HideIncompatible),
+        ("Free slots", BrowserPlus.OnlyFreeSlots),
+        ("Big only", BrowserPlus.OnlyBigLobbies),
+        ("Favourites", BrowserPlus.OnlyFavourites),
+        ("Friends", BrowserFriends.OnlyFriends),
+    };
+
+    /// <summary>An on/off switch for a setting, drawn by whichever bar is active. Returns true when flipped.</summary>
+    private static bool Toggle(Rect r, string label, BepInEx.Configuration.ConfigEntry<bool> entry)
+    {
+        if (entry == null) return false;
+        bool clicked = _drawingNative ? QuickBarNative.Toggle(r, label, entry.Value) : DrawChip(r, label, entry.Value);
+        if (clicked) entry.Value = !entry.Value;
+        return clicked;
+    }
+
+    private static string CountsText() =>
+        BrowserPlus.Hidden > 0 ? $"{BrowserPlus.Shown} shown, {BrowserPlus.Hidden} hidden" : $"{BrowserPlus.Shown} shown";
+
+    private static string AgeLabel(AgeSort age) =>
+        age == AgeSort.Off ? "Age: off" : age == AgeSort.NewestFirst ? "Age: newest" : "Age: oldest";
+
+    /// <summary>"Refresh", or "Refresh 12" counting down to the next automatic refresh.</summary>
+    private static string RefreshLabel()
+    {
+        if (!BrowserRefresh.AutoRefresh.Value) return "Refresh";
+        float next = BrowserRefresh.SecondsToNext;
+        return next >= 0f ? $"Refresh {Mathf.CeilToInt(next)}" : "Refresh";
+    }
+
+    private static string KeyName(UnityEngine.InputSystem.Key key)
+    {
+        string s = key.ToString();
+        if (s.StartsWith("Digit", StringComparison.Ordinal)) s = s.Substring(5);
+        else if (s.StartsWith("Numpad", StringComparison.Ordinal)) s = "Num" + s.Substring(6);
+        return s.Length > 8 ? s.Substring(0, 8) : s;
+    }
+
+    // ---------------------------------------------------------------- quick bar: game look (uGUI, from Update)
+
+    // 1080p units. Title column on the left (drag handle), two rows of flat bars, key prompts under them.
+    private const float NTitleW = 214f, NGridW = 600f, NRowH = 30f, NGap = 4f, NPromptY = 2f * NRowH + NGap + 10f, NPromptH = 20f;
+    private const float NW = NTitleW + NGridW, NH = NPromptY + NPromptH;
+
+    private static void UpdateNativeBar()
+    {
+        if (!BarVisible || !BrowserPlus.GameLookBar.Value || QuickBarNative.Failed)
+        {
+            QuickBarNative.Hide();
+            _mode = QuickBarNative.Failed || !BrowserPlus.GameLookBar.Value ? QuickBarNative.Mode.Fallback : QuickBarNative.Mode.Hidden;
+            return;
+        }
+        var mode = QuickBarNative.Mode.Fallback;
+        try
+        {
+            float s = Mathf.Max(0.01f, Screen.height / 1080f);
+            float sw = Screen.width / s, sh = 1080f;
+            float x = BrowserPlus.BarX.Value >= 0f ? BrowserPlus.BarX.Value : (sw - NW) / 2f;
+            float y = BrowserPlus.BarY.Value >= 0f ? BrowserPlus.BarY.Value : 12f;
+            x = Mathf.Clamp(x, 0f, Mathf.Max(0f, sw - NW));
+            y = Mathf.Clamp(y, 0f, Mathf.Max(0f, sh - NH));
+
+            mode = QuickBarNative.Begin(x, y, NW, NH);
+            if (mode == QuickBarNative.Mode.Native)
+            {
+                _drawingNative = true;
+                try { DrawNativeContent(); }
+                finally
+                {
+                    _drawingNative = false;
+                    QuickBarNative.End();
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            _drawingNative = false;
+            QuickBarNative.Fail("update", e);
+            mode = QuickBarNative.Mode.Fallback;
+        }
+        _mode = mode;
+    }
+
+    private static void DrawNativeContent()
+    {
+        if (QuickBarNative.DragHandle(new Rect(0f, 0f, NTitleW - 14f, 2f * NRowH + NGap), out float nx, out float ny))
+        {
+            if (Mathf.Abs(BrowserPlus.BarX.Value - nx) > 0.5f) BrowserPlus.BarX.Value = nx;
+            if (Mathf.Abs(BrowserPlus.BarY.Value - ny) > 0.5f) BrowserPlus.BarY.Value = ny;
+        }
+
+        QuickBarNative.Title(new Rect(0f, -4f, NTitleW - 8f, 38f), "Plus Servers");
+        QuickBarNative.SubLabel(new Rect(1f, 36f, NTitleW - 10f, 22f), CountsText());
+
+        var sel = BrowserPlus.SelectedSession();
+        bool selFav = sel != null && Favourites.IsFavourite(sel);
+        float gx = NTitleW;
+
+        // Row 1: actions.
+        float w1 = (NGridW - NGap * 3f) / 4f;
+        if (QuickBarNative.Button(new Rect(gx, 0f, w1, NRowH), "Quick join best", true)) BrowserPlus.QuickJoin();
+        if (QuickBarNative.Button(new Rect(gx + (w1 + NGap), 0f, w1, NRowH), selFav ? "Unstar selected" : "Star selected", sel != null))
+            BrowserPlus.ToggleFavourite(sel);
+        if (QuickBarNative.Button(new Rect(gx + (w1 + NGap) * 2f, 0f, w1, NRowH), RefreshLabel(), true))
+            BrowserRefresh.Refresh(manual: true);
+        var age = BrowserPlus.SortByAge.Value;
+        if (QuickBarNative.Toggle(new Rect(gx + (w1 + NGap) * 3f, 0f, w1, NRowH), AgeLabel(age), age != AgeSort.Off))
+            BrowserPlus.SortByAge.Value = (AgeSort)(((int)age + 1) % 3);
+
+        // Row 2: filters.
+        var toggles = BarToggles();
+        int n = Mathf.Max(1, toggles.Length);
+        float w2 = (NGridW - NGap * (n - 1)) / n;
+        for (int i = 0; i < toggles.Length; i++)
+            Toggle(new Rect(gx + i * (w2 + NGap), NRowH + NGap, w2, NRowH), toggles[i].label, toggles[i].entry);
+
+        // Key prompts, right-aligned like the game's (laid out right to left).
+        float right = NW;
+        var qk = BrowserPlus.QuickJoinKey.Value;
+        if (qk != UnityEngine.InputSystem.Key.None && qk != BrowserPlus.FavouriteKey.Value &&
+            QuickBarNative.Prompt(ref right, NPromptY, NPromptH, KeyName(qk), "Quick join", true))
+            BrowserPlus.QuickJoin();
+        var fk = BrowserPlus.FavouriteKey.Value;
+        if (fk != UnityEngine.InputSystem.Key.None &&
+            QuickBarNative.Prompt(ref right, NPromptY, NPromptH, KeyName(fk), selFav ? "Unfavourite" : "Favourite", sel != null))
+            BrowserPlus.ToggleFavourite(sel);
+    }
+
+    // ---------------------------------------------------------------- quick bar: overlay fallback (IMGUI)
 
     private static void DrawBar()
     {
-        if (!BarVisible) { _barHover = false; _dragging = false; return; }
+        // The game-look bar has it (or it's hidden on another browser tab): nothing to draw here.
+        if (_mode != QuickBarNative.Mode.Fallback || !BarVisible) { _barHover = false; _dragging = false; return; }
         var prevMatrix = GUI.matrix;
         try
         {
@@ -207,23 +354,24 @@ internal sealed class ServerBrowserPlusFeature : IFeature
             var sel = BrowserPlus.SelectedSession();
             bool selFav = sel != null && Favourites.IsFavourite(sel);
             float bx = r.x + 140f, top = r.y + 6f, gap = 6f;
-            float w = (BarW - 140f - 12f - gap * 3f) / 4f;
+            float w = (BarW - 140f - 12f - gap * 4f) / 5f;
             if (Menu.ChipButton(new Rect(bx, top, w * 2f + gap, 28f), "Quick join best", true)) BrowserPlus.QuickJoin();
             if (Menu.ChipButton(new Rect(bx + (w + gap) * 2f, top, w * 2f + gap, 28f),
                     selFav ? "Unstar selected" : "Star selected", sel != null))
                 BrowserPlus.ToggleFavourite(sel);
+            if (Menu.ChipButton(new Rect(bx + (w + gap) * 4f, top, w, 28f), RefreshLabel(), true))
+                BrowserRefresh.Refresh(manual: true);
 
-            float y2 = r.y + 40f;
-            Toggle(new Rect(bx, y2, w, 28f), "Compatible", BrowserPlus.HideIncompatible);
-            Toggle(new Rect(bx + (w + gap), y2, w, 28f), "Free slots", BrowserPlus.OnlyFreeSlots);
-            Toggle(new Rect(bx + (w + gap) * 2f, y2, w, 28f), "Big only", BrowserPlus.OnlyBigLobbies);
-            Toggle(new Rect(bx + (w + gap) * 3f, y2, w, 28f), "Favourites", BrowserPlus.OnlyFavourites);
+            var toggles = BarToggles();
+            int n = Mathf.Max(1, toggles.Length);
+            float tw = (BarW - 140f - 12f - gap * (n - 1)) / n;
+            for (int i = 0; i < toggles.Length; i++)
+                Toggle(new Rect(bx + i * (tw + gap), r.y + 40f, tw, 28f), toggles[i].label, toggles[i].entry);
 
             // Age sort cycles Off -> Newest -> Oldest from a small chip in the title column.
             var age = BrowserPlus.SortByAge.Value;
-            string ageLabel = age == AgeSort.Off ? "Age: off" : age == AgeSort.NewestFirst ? "Age: newest" : "Age: oldest";
             var ageRect = new Rect(r.x + 12f, r.y + 42f, 120f, 26f);
-            if (DrawChip(ageRect, ageLabel, age != AgeSort.Off))
+            if (DrawChip(ageRect, AgeLabel(age), age != AgeSort.Off))
                 BrowserPlus.SortByAge.Value = (AgeSort)(((int)age + 1) % 3);
         }
         catch (Exception e)
@@ -235,11 +383,6 @@ internal sealed class ServerBrowserPlusFeature : IFeature
             }
         }
         finally { GUI.matrix = prevMatrix; }
-    }
-
-    private static void Toggle(Rect r, string label, BepInEx.Configuration.ConfigEntry<bool> entry)
-    {
-        if (DrawChip(r, label, entry.Value)) entry.Value = !entry.Value;
     }
 
     /// <summary>A pill that shows on/off state (filled with the accent colour when on).</summary>

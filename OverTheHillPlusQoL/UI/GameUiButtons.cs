@@ -18,8 +18,8 @@ internal static class GameUiButtons
     private const string CreateServerName = "OTHPlus_CreateServerButton";
 
     private static Sprite _icon;
-    private static GameObject _relabelTarget;
-    private static string _relabelText;
+    // Several buttons can be added in the same frame (e.g. PLUS and REJOIN on the main menu): keep all their labels.
+    private static readonly System.Collections.Generic.List<(GameObject go, string text)> Relabel = new();
     private static float _relabelUntil;
 
     /// <summary>Clones <paramref name="source"/> next to it with a new label and click action.</summary>
@@ -47,8 +47,9 @@ internal static class GameUiButtons
         if (withIcon) AddIcon(go);
 
         // Some text components get re-filled a frame or two later; keep our label for a moment.
-        _relabelTarget = go;
-        _relabelText = label;
+        if (_relabelUntil <= 0f || Time.unscaledTime > _relabelUntil) Relabel.Clear();
+        Relabel.RemoveAll(r => r.go == null || r.go.name == name);
+        Relabel.Add((go, label));
         _relabelUntil = Time.unscaledTime + 2f;
         return go;
     }
@@ -58,14 +59,22 @@ internal static class GameUiButtons
     {
         // Time first: the Unity null check is a native call, and this runs every frame forever.
         if (_relabelUntil <= 0f) return;
-        if (Time.unscaledTime > _relabelUntil || _relabelTarget == null)
+        if (Time.unscaledTime > _relabelUntil || Relabel.Count == 0)
         {
             _relabelUntil = 0f;
-            _relabelTarget = null; // drop the reference so the destroyed button's wrapper can be collected
+            Relabel.Clear(); // drop the references so destroyed buttons' wrappers can be collected
             return;
         }
-        try { SetLabel(_relabelTarget, _relabelText); }
-        catch { _relabelUntil = 0f; _relabelTarget = null; }
+        for (int i = Relabel.Count - 1; i >= 0; i--)
+        {
+            var (go, text) = Relabel[i];
+            try
+            {
+                if (go == null) { Relabel.RemoveAt(i); continue; }
+                SetLabel(go, text);
+            }
+            catch { Relabel.RemoveAt(i); }
+        }
     }
 
     private static void StripLocalization(GameObject go)

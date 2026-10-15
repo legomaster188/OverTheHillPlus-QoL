@@ -23,9 +23,9 @@ internal enum AgeSort { Off, NewestFirst, OldestFirst }
 internal static class BrowserPlus
 {
     public static ConfigEntry<bool> PinFavourites, HideIncompatible, OnlyBigLobbies, OnlyFreeSlots, OnlyFavourites;
-    public static ConfigEntry<bool> ShowFavTag, ShowBigTag, ShowBar;
+    public static ConfigEntry<bool> ShowFavTag, ShowBigTag, ShowBar, GameLookBar;
     public static ConfigEntry<AgeSort> SortByAge;
-    public static ConfigEntry<Key> FavouriteKey;
+    public static ConfigEntry<Key> FavouriteKey, QuickJoinKey;
     public static ConfigEntry<float> BarX, BarY;
 
     /// <summary>Last list adapter seen (the browser's list view). Unity-null when the browser UI is gone.</summary>
@@ -34,8 +34,19 @@ internal static class BrowserPlus
     internal static StateServerBrowser Browser;
 
     public static int Shown, Hidden;
-    private static bool _loggedSortError, _loggedRefreshError, _loggedJoinError;
+
+    // Hooks for other server browser features (friends): all optional, null = not used.
+    /// <summary>Extra filter: return false to hide a row. Set it only while that filter is switched on.</summary>
+    internal static Func<OverlandSessionInfo, bool> ExtraKeep;
+    /// <summary>Rows this returns true for are pinned right after favourites (and preferred by quick join).</summary>
+    internal static Func<OverlandSessionInfo, bool> ExtraPin;
+    /// <summary>Extra rich-text tags shown before FAV/BIG.</summary>
+    internal static Func<OverlandSessionInfo, Fusion.SessionInfo, string> ExtraTags;
+    private static bool _loggedSortError, _loggedRefreshError, _loggedJoinError, _loggedNeverReady;
     private static bool _refreshPending;
+    // A refresh waiting for the list view: retried 4 times a second, given up after 5 s (a list that never gets ready,
+    // e.g. after a game update broke the check, must not cost an exception every frame).
+    private static float _deferredSince = -1f, _nextRefreshTry;
     private static OverlandSessionInfo _pendingJoin;
 
     public static void Bind(ConfigFile cfg)
@@ -50,7 +61,10 @@ internal static class BrowserPlus
         ShowFavTag = cfg.Bind(s, "ShowFavTag", true, "Tag favourite servers with FAV in the list.");
         ShowBigTag = cfg.Bind(s, "ShowBigTag", true, "Tag big lobbies (more than 4 slots) with BIG and their size.");
         ShowBar = cfg.Bind(s, "ShowBar", true, "Show the PLUS quick bar (filters, favourite, quick join) while the server browser is open.");
+        GameLookBar = cfg.Bind(s, "GameLookBar", true,
+            "Build the quick bar from the game's own UI (its font, flat rows and key prompts). Off = the older overlay bar.");
         FavouriteKey = cfg.Bind(s, "FavouriteKey", Key.F5, "While the server browser is open: star/unstar the selected server.");
+        QuickJoinKey = cfg.Bind(s, "QuickJoinKey", Key.F3, "While the server browser is open: quick join the best server (None = no hotkey).");
         BarX = cfg.Bind(s, "BarX", -1f, "Quick bar position (1080p units, -1 = default).");
         BarY = cfg.Bind(s, "BarY", -1f, "Quick bar position (1080p units, -1 = default).");
 
@@ -86,6 +100,8 @@ internal static class BrowserPlus
     private static string RowTags(OverlandSessionInfo info, Fusion.SessionInfo session)
     {
         string tags = "";
+        try { tags = AllRegions.RowTag(info, session) ?? ""; } catch { tags = ""; }
+        try { tags += ExtraTags?.Invoke(info, session) ?? ""; } catch { }
         if (ShowFavTag.Value && Favourites.IsFavourite(info)) tags += "<color=#F2B33D><b>FAV</b></color>  ";
         if (ShowBigTag.Value && IsBig(session)) tags += $"<color=#4FD8F7><b>BIG {session.MaxPlayers}</b></color>  ";
         return tags.Length == 0 ? null : tags;
@@ -101,6 +117,8 @@ internal static class BrowserPlus
         if (OnlyBigLobbies.Value && !IsBig(s)) return false;
         if (OnlyFreeSlots.Value && !HasFreeSlot(s)) return false;
         if (HideIncompatible.Value && RowStyler.Classify(info, s) == ServerStatus.Incompatible) return false;
+        var extra = ExtraKeep;
+        if (extra != null && !extra(info)) return false;
         return true;
     }
 
@@ -115,14 +133,16 @@ internal static class BrowserPlus
 
         bool pin = PinFavourites.Value && Favourites.Count > 0;
         var age = SortByAge.Value;
-        bool filter = AnyFilter;
-        if (!pin && age == AgeSort.Off && !filter)
+        var extraPin = ExtraPin;
+        bool filter = AnyFilter || ExtraKeep != null;
+        if (!pin && extraPin == null && age == AgeSort.Off && !filter)
         {
             Shown = n; Hidden = 0;
             return;
         }
 
         var rows = new List<(OverlandSessionInfo info, int index, bool fav, long first)>(n);
+        HashSet<IntPtr> extraPinned = null;
         for (int i = 0; i < n; i++)
         {
             var info = list[i];
@@ -137,13 +157,20 @@ internal static class BrowserPlus
             long first = 0;
             if (age != AgeSort.Off && !FirstSeenTracker.TryGetFirstSeen(info.FusionSessionInfo?.Name, out first))
                 first = age == AgeSort.NewestFirst ? long.MinValue : long.MaxValue; // unknown age goes last
+            if (extraPin != null)
+            {
+                bool p2 = false;
+                try { p2 = extraPin(info); } catch { }
+                if (p2) (extraPinned ??= new HashSet<IntPtr>()).Add(info.Pointer);
+            }
             rows.Add((info, i, fav, first));
         }
 
         IEnumerable<(OverlandSessionInfo info, int index, bool fav, long first)> ordered = rows;
-        if (pin || age != AgeSort.Off)
+        if (pin || extraPinned != null || age != AgeSort.Off)
         {
-            var o = rows.OrderBy(r => pin && r.fav ? 0 : 1); // LINQ OrderBy is stable: the game's order breaks ties
+            // LINQ OrderBy is stable: the game's order breaks ties.
+            var o = rows.OrderBy(r => pin && r.fav ? 0 : extraPinned != null && extraPinned.Contains(r.info.Pointer) ? 1 : 2);
             if (age == AgeSort.NewestFirst) o = o.ThenByDescending(r => r.first);
             else if (age == AgeSort.OldestFirst) o = o.ThenBy(r => r.first);
             ordered = o.ToList();
@@ -169,7 +196,27 @@ internal static class BrowserPlus
     private static void RefreshNow()
     {
         _refreshPending = false;
-        if (!AdapterAlive || !BrowserState.Open) return;
+        if (!BrowserState.Open || EnsureAdapter() == null) { _deferredSince = -1f; return; }
+        if (!ListReady)
+        {
+            // The list view sets itself up a frame or two after opening.
+            float now = Time.unscaledTime;
+            if (_deferredSince < 0f) _deferredSince = now;
+            if (now - _deferredSince > 5f)
+            {
+                _deferredSince = -1f;
+                if (!_loggedNeverReady)
+                {
+                    _loggedNeverReady = true;
+                    Plugin.Logger.LogWarning("[Browser+] the server list never became ready; skipped a refresh (further ones skipped quietly)");
+                }
+                return;
+            }
+            _refreshPending = true;
+            _nextRefreshTry = now + 0.25f;
+            return;
+        }
+        _deferredSince = -1f;
         try
         {
             Adapter.ApplyFilters();
@@ -206,9 +253,13 @@ internal static class BrowserPlus
         RequestRefresh();
     }
 
-    /// <summary>All sessions the game knows about (before any filtering).</summary>
-    public static List<OverlandSessionInfo> AllSessions()
+    /// <summary>
+    /// All sessions the game knows about (before any filtering). With "All regions" on this includes the rooms
+    /// remembered from the other regions, unless <paramref name="otherRegions"/> is false (connected region only).
+    /// </summary>
+    public static List<OverlandSessionInfo> AllSessions(bool otherRegions = true)
     {
+        if (otherRegions && AllRegions.Merging) return AllRegions.MergedSessions();
         var result = new List<OverlandSessionInfo>();
         try
         {
@@ -243,7 +294,10 @@ internal static class BrowserPlus
             if (status != ServerStatus.Public) continue; // private (needs a code), full or other version
             if (OnlyBigLobbies.Value && !IsBig(s)) continue;
             candidates++;
+            bool extra = false;
+            try { extra = ExtraPin != null && ExtraPin(info); } catch { }
             long score = (Favourites.IsFavourite(info) ? 1_000_000L : 0L)
+                         + (extra ? 500_000L : 0L)
                          + Math.Min(s.PlayerCount, 64) * 1_000L
                          + Math.Min(Math.Max(0, s.MaxPlayers - s.PlayerCount), 64);
             if (score > bestScore) { bestScore = score; best = info; }
@@ -260,9 +314,40 @@ internal static class BrowserPlus
             Menu.SetStatus(candidates == 0 ? "Blocked: no joinable public server right now" : "Blocked: nothing suitable to join");
             return;
         }
-        var s = best.FusionSessionInfo;
-        Menu.SetStatus($"Joining {Favourites.PlainName(Favourites.DisplayNameOf(best))} ({s.PlayerCount}/{s.MaxPlayers})");
-        _pendingJoin = best; // joined from Update, not from inside OnGUI
+        Join(best);
+    }
+
+    /// <summary>Joins a server the same way as clicking its row (next frame, from Update).</summary>
+    public static void Join(OverlandSessionInfo info)
+    {
+        if (!BrowserAlive) { Menu.SetStatus("Blocked: open the server browser (Play online) first"); return; }
+        var s = info?.FusionSessionInfo;
+        if (s == null) { Menu.SetStatus("Blocked: that server is gone"); return; }
+        Menu.SetStatus($"Joining {Favourites.PlainName(Favourites.DisplayNameOf(info))} ({s.PlayerCount}/{s.MaxPlayers})");
+        _pendingJoin = info; // joined from Update, not from inside OnGUI
+    }
+
+    /// <summary>Whether the list view has finished setting up (sorting before that throws).</summary>
+    public static bool ListReady
+    {
+        get
+        {
+            try { return AdapterAlive && Adapter.IsInitialized; }
+            catch { return false; }
+        }
+    }
+
+    /// <summary>The browser's list adapter (taken from the open browser if no sort has been seen yet).</summary>
+    public static SessionInfoListAdapter EnsureAdapter()
+    {
+        if (AdapterAlive) return Adapter;
+        try
+        {
+            var a = BrowserAlive ? Browser.ui?.ContextUIServerList?.SessionInfoListAdapter : null;
+            if (a != null) Adapter = a;
+        }
+        catch { }
+        return AdapterAlive ? Adapter : null;
     }
 
     private static void JoinNow()
@@ -289,16 +374,25 @@ internal static class BrowserPlus
     internal static void Tick()
     {
         if (_pendingJoin != null) JoinNow();
-        if (_refreshPending) RefreshNow();
+        if (_refreshPending && Time.unscaledTime >= _nextRefreshTry) RefreshNow();
         Favourites.SaveIfDue();
 
         if (!BrowserState.Open) return;
         var kb = Keyboard.current;
         if (kb == null) return;
         var key = FavouriteKey.Value;
-        if (key == Key.None) return;
-        try { if (kb[key].wasPressedThisFrame) ToggleFavourite(SelectedSession()); }
-        catch { /* invalid key in config */ }
+        if (key != Key.None)
+        {
+            try { if (kb[key].wasPressedThisFrame) ToggleFavourite(SelectedSession()); }
+            catch { /* invalid key in config */ }
+        }
+        key = QuickJoinKey.Value;
+        if (key != Key.None && key != FavouriteKey.Value)
+        {
+            // Not while a pop-up (filters, join dialog) is on top of the browser.
+            try { if (kb[key].wasPressedThisFrame && Browser != null && Browser.isFocused) QuickJoin(); }
+            catch { /* invalid key in config */ }
+        }
     }
 
     internal static void OnSortDone(SessionInfoListAdapter adapter)
