@@ -39,6 +39,7 @@ public class ModBehaviour : MonoBehaviour
             GameUiButtons.Tick();
             Qol.Tick();
             Multiplayer.JoinMessage.Tick();
+            Multiplayer.BigLobby.Tick();
 
             var kb = Keyboard.current;
             if (kb == null) return;

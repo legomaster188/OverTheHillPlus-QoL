@@ -25,6 +25,7 @@ internal static class ModConfig
     public static ConfigEntry<bool> ExpandLobbySize;
     public static ConfigEntry<int> DefaultMaxPlayers;
     public static ConfigEntry<bool> LobbyGuards;
+    public static ConfigEntry<bool> FallRescue;
     public static ConfigEntry<int> MeasuredCapacity;
     public static ConfigEntry<bool> MainMenuButton;
     public static ConfigEntry<string> CustomRoomName;
@@ -70,6 +71,7 @@ internal static class ModConfig
 
         ExpandLobbySize = cfg.Bind("Multiplayer", "ExpandLobbySize", true, "Offer 2-16 players in the Create Server screen.");
         DefaultMaxPlayers = cfg.Bind("Multiplayer", "DefaultMaxPlayers", 4, new ConfigDescription("Player limit preselected in Create Server.", new AcceptableValueRange<int>(2, 16)));
+        FallRescue = cfg.Bind("Multiplayer", "FallRescue", true, "Solo/host: put cars that end up under the ground or off the map back onto it.");
         LobbyGuards = cfg.Bind("Multiplayer", "LobbyGuards", true, "Crash guards and smart spawn points for lobbies above the stock size.");
         MeasuredCapacity = cfg.Bind("Multiplayer", "MeasuredCapacity", 0, "Player slots in the game's networked player tables, measured in-game (0 = not measured yet).");
         RoomNameStyle = cfg.Bind("Multiplayer", "RoomNameStyle", "None", "Colour of your server's name in everyone's server browser: None, Gold, Cyan, Pink, Green, Red, Purple, Rainbow, Sunset, Ocean.");

@@ -130,12 +130,9 @@ internal static class FusionStartGamePatch
             Plugin.Logger.LogInfo($"[Lobby] Fusion StartGame: mode={args.GameMode} PlayerCount={count} session='{args.SessionName}'");
             if (args.GameMode != GameMode.Client) RenameSession(args);
             if (!ModConfig.ExpandLobbySize.Value || args.GameMode == GameMode.Client || PlayerLimit.Pending <= 0) return;
+            // Writing args.PlayerCount doesn't stick through the interop wrapper; Fusion takes the size from the
+            // project config raised here instead (verified: rooms open at the chosen size).
             PlayerLimit.RaiseFusionCapacity(PlayerLimit.Pending);
-            if (!args.PlayerCount.HasValue || args.PlayerCount.Value != PlayerLimit.Pending)
-            {
-                args.PlayerCount = new Il2CppSystem.Nullable<int>(PlayerLimit.Pending);
-                Plugin.Logger.LogInfo($"[Lobby] Fusion StartGame PlayerCount -> {PlayerLimit.Pending} (reads back {(args.PlayerCount.HasValue ? args.PlayerCount.Value.ToString() : "unset")})");
-            }
         }
         catch (Exception e) { Plugin.Logger.LogWarning("[Lobby] Fusion StartGame patch: " + e.Message); }
         finally { PlayerLimit.Pending = 0; }

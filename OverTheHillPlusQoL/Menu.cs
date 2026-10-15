@@ -270,7 +270,10 @@ internal static class Menu
         });
         Card("Stability", null, () =>
         {
-            Switch(ModConfig.LobbyGuards, "Lobby crash guards", "Smart spawn points + safe player join/leave", true);
+            Switch(ModConfig.LobbyGuards, "Lobby crash guards", "Smart spawn points, safe join/leave, finish registering extra players", true);
+            Switch(ModConfig.FallRescue, "Fall rescue", "Host/solo: cars under the ground or off the map are put back", true);
+            KeyValue("Extra players recovered", BigLobby.Recovered.ToString());
+            KeyValue("Cars rescued", BigLobby.Rescued.ToString());
             KeyValue("Errors absorbed", LobbyRules.GuardedErrors.ToString());
             KeyValue("Spawn fallbacks", LobbyRules.SpawnFallbacks.ToString());
         });
