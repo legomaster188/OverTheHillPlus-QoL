@@ -27,6 +27,10 @@ internal static class ModConfig
     public static ConfigEntry<bool> LobbyGuards;
     public static ConfigEntry<int> MeasuredCapacity;
     public static ConfigEntry<bool> MainMenuButton;
+    public static ConfigEntry<string> CustomRoomName;
+    public static ConfigEntry<string> RoomNameStyle;
+    public static ConfigEntry<bool> RoomNameBold;
+    public static ConfigEntry<int> CustomMaxPlayers;
 
     // Server browser
     public static ConfigEntry<bool> ColorRows;
@@ -65,6 +69,10 @@ internal static class ModConfig
         DefaultMaxPlayers = cfg.Bind("Multiplayer", "DefaultMaxPlayers", 4, new ConfigDescription("Player limit preselected in Create Server.", new AcceptableValueRange<int>(2, 16)));
         LobbyGuards = cfg.Bind("Multiplayer", "LobbyGuards", true, "Crash guards and smart spawn points for lobbies above the stock size.");
         MeasuredCapacity = cfg.Bind("Multiplayer", "MeasuredCapacity", 0, "Player slots in the game's networked player tables, measured in-game (0 = not measured yet).");
+        RoomNameStyle = cfg.Bind("Multiplayer", "RoomNameStyle", "None", "Colour of your server's name in everyone's server browser: None, Gold, Cyan, Pink, Green, Red, Purple, Rainbow, Sunset, Ocean.");
+        RoomNameBold = cfg.Bind("Multiplayer", "RoomNameBold", false, "Bold server name.");
+        CustomMaxPlayers = cfg.Bind("Multiplayer", "CustomMaxPlayers", 0, "Exact player limit for servers you host (0 = use the Create Server choice).");
+        CustomRoomName = cfg.Bind("Multiplayer", "CustomRoomName", "", "Name for servers you host (empty = the game's default \"<name>'s room\").");
         MainMenuButton = cfg.Bind("General", "MainMenuButton", true, "Add a PLUS button to the main menu that opens this mod's menu.");
 
         ColorRows = cfg.Bind("ServerBrowser", "ColorRows", true, "Color-code server rows by status.");
