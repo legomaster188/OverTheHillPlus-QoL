@@ -67,7 +67,7 @@ internal static class Menu
         float h = Mathf.Min(H, sh - _pos.y - 10f);
         var win = new Rect(_pos.x, _pos.y, W, h);
 
-        HandleDrag(new Rect(win.x, win.y, W - 56f, HeaderH));
+        HandleDrag(new Rect(win.x, win.y, 250f, HeaderH)); // title area only: the right side has buttons
         GUI.Box(win, GUIContent.none, Theme.Window);
         DrawHeader(win);
         DrawTabs(new Rect(win.x + Pad, win.y + HeaderH, W - Pad * 2, TabsH));
