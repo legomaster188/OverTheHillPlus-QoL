@@ -61,7 +61,7 @@ internal static class OverlandStartGamePatch
             if (gameSetupContext == null) return;
             var sim = NetworkProjectConfig.Global?.Simulation;
             int configPlayers = sim?.PlayerCount ?? -1;
-            Plugin.Logger.LogInfo($"[Lobby] StartGame: mode={gameSetupContext.GameMode} MaxPlayers={gameSetupContext.MaxPlayers} fusionConfigPlayers={configPlayers}");
+            Plugin.Logger.LogInfo($"[Lobby] StartGame: mode={gameSetupContext.GameMode} MaxPlayers={gameSetupContext.MaxPlayers} fusionConfigPlayers={configPlayers} room='{gameSetupContext.RoomName}'");
             if (!ModConfig.ExpandLobbySize.Value || gameSetupContext.GameMode == GameMode.Client) return;
 
             if (PlayerLimit.Pending > 0 && gameSetupContext.MaxPlayers != PlayerLimit.Pending)
@@ -96,12 +96,39 @@ internal static class OverlandStartGamePatch
 [HarmonyPatch(typeof(NetworkRunner), nameof(NetworkRunner.StartGame))]
 internal static class FusionStartGamePatch
 {
+    /// <summary>Last chance to rename: the session name Fusion/Photon will publish ("&lt;id&gt;_&lt;name&gt;").</summary>
+    private static void RenameSession(StartGameArgs args)
+    {
+        string name = args.SessionName;
+        if (string.IsNullOrEmpty(name))
+        {
+            // The name may come from a generator callback instead: wrap it so its result gets styled.
+            var original = args.SessionNameGenerator;
+            Plugin.Logger.LogInfo($"[Lobby] No session name set; generator present: {original != null}");
+            if (original == null) return;
+            args.SessionNameGenerator = Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Func<string>>(
+                new Func<string>(() =>
+                {
+                    string generated = original.Invoke();
+                    string styled = RoomNamePatch.Restyle(generated);
+                    Plugin.Logger.LogInfo($"[Lobby] Generated session name '{generated}' -> '{styled}'");
+                    return styled;
+                }));
+            return;
+        }
+        string renamed = RoomNamePatch.Restyle(name);
+        if (renamed == name) return;
+        args.SessionName = renamed;
+        Plugin.Logger.LogInfo($"[Lobby] Session name '{name}' -> '{renamed}' (reads back '{args.SessionName}')");
+    }
+
     private static void Prefix(StartGameArgs args)
     {
         try
         {
             string count = args.PlayerCount.HasValue ? args.PlayerCount.Value.ToString() : "unset";
-            Plugin.Logger.LogInfo($"[Lobby] Fusion StartGame: mode={args.GameMode} PlayerCount={count}");
+            Plugin.Logger.LogInfo($"[Lobby] Fusion StartGame: mode={args.GameMode} PlayerCount={count} session='{args.SessionName}'");
+            if (args.GameMode != GameMode.Client) RenameSession(args);
             if (!ModConfig.ExpandLobbySize.Value || args.GameMode == GameMode.Client || PlayerLimit.Pending <= 0) return;
             PlayerLimit.RaiseFusionCapacity(PlayerLimit.Pending);
             if (!args.PlayerCount.HasValue || args.PlayerCount.Value != PlayerLimit.Pending)
@@ -192,18 +219,24 @@ internal static class RoomNames
 [HarmonyPatch(typeof(OverlandNetworkUtils), nameof(OverlandNetworkUtils.GenerateRoomName))]
 internal static class RoomNamePatch
 {
+    /// <summary>Applies the custom name/style to the part after the id. Idempotent: styled names are left alone.</summary>
+    public static string Restyle(string full)
+    {
+        if (string.IsNullOrEmpty(full) || full.Contains("<color=") || full.Contains("<b>")) return full;
+        int cut = full.IndexOf('_');
+        string prefix = cut >= 0 ? full.Substring(0, cut + 1) : "";
+        string display = cut >= 0 ? full.Substring(cut + 1) : full;
+        return prefix + RoomNames.Style(RoomNames.DisplayName(display));
+    }
+
     private static void Postfix(ref string __result)
     {
         try
         {
-            if (string.IsNullOrEmpty(__result)) return;
-            int cut = __result.IndexOf('_');
-            string prefix = cut >= 0 ? __result.Substring(0, cut + 1) : "";
-            string display = cut >= 0 ? __result.Substring(cut + 1) : __result;
-            string styled = RoomNames.Style(RoomNames.DisplayName(display));
-            if (styled == display) return;
-            Plugin.Logger.LogInfo($"[Lobby] Room name '{__result}' -> '{prefix + styled}' ({(prefix + styled).Length} chars)");
-            __result = prefix + styled;
+            string renamed = Restyle(__result);
+            if (renamed == __result) return;
+            Plugin.Logger.LogInfo($"[Lobby] Room name '{__result}' -> '{renamed}' ({renamed.Length} chars)");
+            __result = renamed;
         }
         catch (Exception e) { Plugin.Logger.LogWarning("[Lobby] Room rename failed: " + e.Message); }
     }
