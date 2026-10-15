@@ -154,10 +154,10 @@ internal static class KeybindEditor
             else if (capturing || row.Contains(Event.current.mousePosition)) Theme.Fill(row, Theme.CardHover, 6);
 
             float textW = Menu.Width - 220f;
-            GUI.Label(new Rect(Menu.Left + 4f, Menu.Y + (rh > 32f ? 2f : 5f), textW, 22f), label, Theme.Label);
+            Menu.Label(new Rect(Menu.Left + 4f, Menu.Y + (rh > 32f ? 2f : 5f), textW, 22f), label, Theme.Label);
             if (!string.IsNullOrEmpty(desc))
             {
-                GUI.Label(new Rect(Menu.Left + 4f, Menu.Y + 22f, textW, 18f), desc, Theme.Small);
+                Menu.Label(new Rect(Menu.Left + 4f, Menu.Y + 22f, textW, 18f), desc, Theme.Small);
                 MenuUx.Tooltip(new Rect(Menu.Left, Menu.Y, textW, rh), desc.Length > 60 ? desc : null);
             }
             else MenuUx.Tooltip(new Rect(Menu.Left, Menu.Y, textW, rh), null);
@@ -167,7 +167,7 @@ internal static class KeybindEditor
             var keyRect = new Rect(Menu.Left + Menu.Width - 206f, by, 140f, 28f);
             string keyText = capturing ? "press a key…" : clash.Count > 0 ? $"<color=#F2B33D>{KeyName(entry.Value)} !</color>" : KeyName(entry.Value);
             if (capturing) Theme.Fill(new Rect(keyRect.x - 2f, keyRect.y - 2f, keyRect.width + 4f, keyRect.height + 4f), Theme.Accent, 8);
-            if (GUI.Button(keyRect, keyText, capturing ? Theme.TabActive : Theme.Chip))
+            if (Menu.Button(keyRect, keyText, capturing ? Theme.TabActive : Theme.Chip))
             {
                 if (capturing) CancelCapture("Blocked: rebind cancelled");
                 else StartCapture(entry);

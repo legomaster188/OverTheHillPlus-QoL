@@ -543,6 +543,53 @@ internal sealed class FogAtmosphere : IFeature
         Set(_tintR, r); Set(_tintG, g); Set(_tintB, b); Set(_tintStrength, strength);
     }
 
+    // ---- Simple view (UI/SimplePages: Graphics > Fog) ----
+
+    /// <summary>Fog looks offered in the Simple view: the game's fog, three looks of the card below, no fog.</summary>
+    internal static readonly string[] SimpleLooks = { "Game", "Clear", "Light haze", "Thick fog", "No fog" };
+
+    // density, visibility, ground fog, sky haze, god rays: the same values as the card's buttons
+    private static readonly float[][] SimpleLookValues =
+    {
+        new[] { 0.35f, 2.5f, 0.4f, 0.6f, 1f },
+        new[] { 0.7f, 1.5f, 0.8f, 0.9f, 1.2f },
+        new[] { 2.2f, 0.6f, 1.8f, 1.3f, 1f },
+    };
+
+    /// <summary>Index into <see cref="SimpleLooks"/> of the current fog, or -1 for a custom one.</summary>
+    internal static int CurrentSimpleLook()
+    {
+        if (_enabled == null) return -1;
+        if (!_enabled.Value) return 0;
+        if (_noFog.Value) return 4;
+        for (int i = 0; i < SimpleLookValues.Length; i++)
+        {
+            var v = SimpleLookValues[i];
+            if (Near(_density, v[0]) && Near(_visibility, v[1]) && Near(_heightFog, v[2]) && Near(_skyHaze, v[3]) && Near(_godRays, v[4])
+                && Near(_heightOffset, 0f) && _tintStrength.Value < 0.001f)
+                return i + 1;
+        }
+        return -1;
+    }
+
+    private static bool Near(ConfigEntry<float> e, float v) => Mathf.Abs(e.Value - v) < 0.005f;
+
+    internal static void ApplySimpleLook(int index)
+    {
+        if (_enabled == null) return;
+        if (index <= 0) { _enabled.Value = false; return; }
+        if (index == 4)
+        {
+            _enabled.Value = true;
+            _noFog.Value = true;
+            return;
+        }
+        var v = SimpleLookValues[Mathf.Clamp(index - 1, 0, SimpleLookValues.Length - 1)];
+        Look(v[0], v[1], v[2], v[3], v[4]);
+        Set(_heightOffset, 0f);
+        Set(_tintStrength, 0f);
+    }
+
     private static void DrawMenu()
     {
         bool on = _enabled.Value;

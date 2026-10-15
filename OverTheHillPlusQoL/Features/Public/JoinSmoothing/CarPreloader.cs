@@ -22,7 +22,9 @@ internal sealed class CarPreloader : IFeature
         "Polyana", "Protector", "Roamer", "RustOx", "Timberbox", "Tinny", "TrailBurner", "Trailrat", "Wombat", "Woodman",
     };
 
+    internal static ConfigEntry<bool> Enabled => _enabled;
     private static ConfigEntry<bool> _enabled;
+    internal static ConfigEntry<bool> PreloadEnabled => _enabled; // also shown in the Simple view (Hosting)
     private static readonly Queue<string> Pending = new();
     private static IntPtr _preparedForRunner;
     private static float _next;

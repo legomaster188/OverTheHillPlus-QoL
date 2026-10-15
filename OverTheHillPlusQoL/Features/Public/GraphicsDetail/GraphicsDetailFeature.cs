@@ -73,7 +73,7 @@ internal sealed class GraphicsDetailFeature : IFeature
 
         Registry.Section(Registry.PlusMode, "Graphics", DrawMenu, 0);
         Registry.OnTick(Tick);
-        PatchBrain();
+        Registry.OnTick(FarTick);
     }
 
     private static void OnSettingChanged(object sender, SettingChangedEventArgs a)
@@ -403,24 +403,15 @@ internal sealed class GraphicsDetailFeature : IFeature
         }, Abs(far));
     }
 
-    // Brain postfix: every camera Cinemachine drives (cut-scenes, merchant and lobby cameras too) gets the far clip.
-    private static void PatchBrain()
-    {
-        try
-        {
-            var target = AccessTools.Method(typeof(CinemachineBrain), "PushStateToUnityCamera");
-            if (target == null) { Plugin.Logger.LogWarning("[Graphics.Detail] CinemachineBrain.PushStateToUnityCamera not found; far clip uses the lens only."); return; }
-            new Harmony(Plugin.Guid + ".graphics.detail").Patch(target, postfix: new HarmonyMethod(typeof(GraphicsDetailFeature), nameof(BrainPostfix)));
-        }
-        catch (Exception e) { Plugin.Logger.LogWarning($"[Graphics.Detail] far clip patch failed, lens fallback only: {e.Message}"); }
-    }
-
-    private static void BrainPostfix(CinemachineBrain __instance)
+    // Every camera Cinemachine drives gets the far clip through its lens (above); this also keeps the main camera's
+    // own value in line each frame. No Harmony patch on CinemachineBrain.PushStateToUnityCamera: its IL2CPP
+    // trampoline crashed the game at startup (native access violation, not catchable).
+    private static void FarTick()
     {
         if (!_farActive) return;
         try
         {
-            var cam = __instance.OutputCamera;
+            var cam = Camera.main;
             if (cam != null && !Near(cam.farClipPlane, _farTarget)) cam.farClipPlane = _farTarget;
         }
         catch { }

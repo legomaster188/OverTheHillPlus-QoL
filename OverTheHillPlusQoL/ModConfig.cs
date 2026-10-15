@@ -26,6 +26,7 @@ internal static class ModConfig
     public static ConfigEntry<bool> FallRescue;
     public static ConfigEntry<int> MeasuredCapacity;
     public static ConfigEntry<bool> MainMenuButton;
+    public static ConfigEntry<bool> AdvancedMenu;
     public static ConfigEntry<string> CustomRoomName;
     public static ConfigEntry<bool> JoinMessageEnabled;
     public static ConfigEntry<string> JoinMessage;
@@ -77,6 +78,8 @@ internal static class ModConfig
         JoinMessageColor = cfg.Bind("Multiplayer", "JoinMessageColor", "Gold", "Colour of the pop-up's smiley: Gold, Cyan, Pink, Green, Red, Purple, White.");
         CustomRoomName = cfg.Bind("Multiplayer", "CustomRoomName", "", "Name for servers you host (empty = the game's default \"<name>'s room\").");
         MainMenuButton = cfg.Bind("General", "MainMenuButton", true, "Add a PLUS button to the main menu that opens this mod's menu.");
+        AdvancedMenu = cfg.Bind("General", "AdvancedMenu", false,
+            "Mod menu view. Off: Simple, a few short pages with the settings most players use. On: Advanced, every setting. Both change the same settings.");
 
         ColorRows = cfg.Bind("ServerBrowser", "ColorRows", true, "Color-code server rows by status.");
         ShowAge = cfg.Bind("ServerBrowser", "ShowAge", true, "Show how long ago each server was first seen.");

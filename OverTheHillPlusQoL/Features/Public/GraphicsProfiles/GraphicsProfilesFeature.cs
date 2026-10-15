@@ -216,6 +216,26 @@ internal sealed class GraphicsProfilesFeature : IFeature
         Menu.SetStatus($"Failed: {what}: {e.Message}");
     }
 
+    // ---- Simple view (UI/SimplePages: Graphics > Quality) ----
+
+    /// <summary>The tier in effect (index into <see cref="GraphicsTiers.Names"/>), or -1 for a custom look.</summary>
+    internal static int CurrentTier()
+    {
+        if (_lastApplied == null) return -1;
+        RefreshStats();
+        return _modified ? -1 : Array.IndexOf(GraphicsTiers.Names, _lastApplied.Value);
+    }
+
+    /// <summary>The tier applied last (even if settings changed since), or -1.</summary>
+    internal static int LastTier() => _lastApplied == null ? -1 : Array.IndexOf(GraphicsTiers.Names, _lastApplied.Value);
+
+    internal static void ApplyTierAt(int index)
+    {
+        if (_lastApplied == null || index < 0 || index >= GraphicsTiers.Names.Length) return;
+        ApplyTier((GraphicsTier)index);
+        _statsAt = -100f;
+    }
+
     // ---- menu ----
 
     private static void RefreshStats()

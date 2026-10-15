@@ -111,6 +111,7 @@ public class ModBehaviour : MonoBehaviour
             // car while you type or click in the menu, and no key gets "stuck" when the menu closes.
             try { if (_inputMap == null) _inputMap = GameInput.PushMap(GameInput.Map.Terminal, 1000); }
             catch (Exception e) { Plugin.Logger.LogDebug("Menu input map: " + e.Message); }
+            UI.Native.MenuNav.Reset(false);
         }
         else
         {
@@ -123,6 +124,9 @@ public class ModBehaviour : MonoBehaviour
                 catch (Exception e) { Plugin.Logger.LogDebug("Menu input map: " + e.Message); }
                 _inputMap = null;
             }
+            // The native-style menu is a canvas: take it off screen now, not when the next tick notices.
+            try { UI.Native.NativeCanvas.Hide(); } catch (Exception e) { Plugin.Logger.LogDebug("Native menu hide: " + e.Message); }
+            UI.Native.MenuNav.ClearPending();
             Features.Public.Stability.ConfigAutosave.SaveNow();
         }
     }
@@ -133,7 +137,11 @@ public class ModBehaviour : MonoBehaviour
     private void OnGUI()
     {
         // Nothing of the mod's IMGUI goes into a screenshot (self-expiring flag, see PhotoCapture).
-        if (Features.Public.Photo.PhotoCapture.Capturing) return;
+        if (Features.Public.Photo.PhotoCapture.Capturing)
+        {
+            UI.Native.NativeCanvas.Hide();
+            return;
+        }
         Features.Registry.RunGuis();
         if (ModConfig.ShowHud.Value && !Features.Public.Photo.PhotoCapture.CleanViewActive && Time.unscaledTime >= _hudRetryAt)
         {
@@ -160,5 +168,6 @@ public class ModBehaviour : MonoBehaviour
     {
         FirstSeenTracker.SaveIfDue(force: true);
         Features.Public.Stability.ConfigAutosave.SaveNow();
+        Features.Public.HostGovernor.GovernorRuntime.Shutdown();
     }
 }

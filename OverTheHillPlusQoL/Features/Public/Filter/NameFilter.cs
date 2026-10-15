@@ -104,6 +104,12 @@ internal static class NameFilter
     /// <summary>True when the text must not be published. <paramref name="reason"/> says why, with the word masked.</summary>
     public static bool IsBlocked(string text, out string reason) => IsBlocked(text, out reason, false);
 
+    /// <summary>
+    /// Always the strict check (no AllowSwears): for text that isn't the host's own, such as other players' names
+    /// shown to strangers.
+    /// </summary>
+    internal static bool IsBlockedStrict(string text, out string reason) => IsBlocked(text, out reason, false);
+
     private static bool IsBlocked(string text, out string reason, bool allowSwears)
     {
         reason = null;

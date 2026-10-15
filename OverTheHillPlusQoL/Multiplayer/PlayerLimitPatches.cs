@@ -102,7 +102,14 @@ internal static class FusionStartGamePatch
                 new Func<string>(() =>
                 {
                     string generated = original.Invoke();
-                    string styled = RoomNamePatch.Restyle(generated);
+                    // Runs inside Fusion's StartGame, outside the prefix's try: a styling error must not stop hosting.
+                    string styled;
+                    try { styled = RoomNamePatch.Restyle(generated); }
+                    catch (Exception e)
+                    {
+                        Plugin.Logger.LogWarning("[Lobby] Session name style failed, name left as generated: " + e.Message);
+                        return generated;
+                    }
                     return styled;
                 }));
             return;
@@ -129,18 +136,21 @@ internal static class FusionStartGamePatch
     }
 }
 
-/// <summary>Server-name text and colour styles (rich-text tags, which the game's server list renders).</summary>
+/// <summary>
+/// Server-name text and colour styles (rich-text tags, which the game's server list renders). The extra looks
+/// (highlight, size, italic, underline, spacing) and the markup budget live in Features/Public/ServerNameStyles.
+/// </summary>
 internal static class RoomNames
 {
     public const int MaxCustomPlayers = 100; // above ~32 is untested: Photon room limits and host bandwidth apply
     public static readonly string[] Styles = { "None", "Gold", "Cyan", "Pink", "Green", "Red", "Purple", "Rainbow", "Sunset", "Ocean" };
 
-    private static readonly System.Collections.Generic.Dictionary<string, string> Solid = new()
+    internal static readonly System.Collections.Generic.Dictionary<string, string> Solid = new()
     {
         ["Gold"] = "#F2B33D", ["Cyan"] = "#4FD8F7", ["Pink"] = "#FF6FB5", ["Green"] = "#5BE38A", ["Red"] = "#FF5A4E", ["Purple"] = "#B48CFF",
     };
 
-    private static readonly System.Collections.Generic.Dictionary<string, (UnityEngine.Color a, UnityEngine.Color b)> Gradients = new()
+    internal static readonly System.Collections.Generic.Dictionary<string, (UnityEngine.Color a, UnityEngine.Color b)> Gradients = new()
     {
         ["Sunset"] = (new UnityEngine.Color(1f, 0.85f, 0.25f), new UnityEngine.Color(1f, 0.25f, 0.45f)),
         ["Ocean"] = (new UnityEngine.Color(0.3f, 0.95f, 1f), new UnityEngine.Color(0.25f, 0.35f, 1f)),
@@ -153,7 +163,13 @@ internal static class RoomNames
     public static string DisplayName(string gameDefault)
     {
         string custom = Escape(ModConfig.CustomRoomName.Value).Trim();
-        if (custom.Length > 40) custom = custom.Substring(0, 40);
+        if (custom.Length > 40)
+        {
+            custom = custom.Substring(0, 40);
+            // Never publish half an emoji: a lone high surrogate breaks Photon's UTF-8 and the style runs.
+            if (char.IsHighSurrogate(custom[custom.Length - 1])) custom = custom.Substring(0, custom.Length - 1);
+            custom = custom.TrimEnd();
+        }
         if (custom.Length == 0) return gameDefault;
         if (Features.Public.Filter.NameFilter.IsBlocked(custom, out string why))
         {
@@ -177,33 +193,37 @@ internal static class RoomNames
     public static string Escape(string text) =>
         string.IsNullOrEmpty(text) ? (text ?? "") : text.Replace('<', '‹').Replace('>', '›');
 
+    /// <summary>
+    /// The name with the chosen look (colour, bold, and the extra styles of
+    /// <see cref="Features.Public.ServerNameStyles.NameStyle"/>), within the markup budget.
+    /// </summary>
     public static string Style(string name)
     {
         if (string.IsNullOrEmpty(name)) return name;
-        string style = ModConfig.RoomNameStyle.Value ?? "None";
-        string result = name;
-        if (Solid.TryGetValue(style, out var hex)) result = $"<color={hex}>{name}</color>";
-        else if (style == "Rainbow") result = PerChar(name, i => UnityEngine.Color.HSVToRGB((i * 0.09f) % 1f, 0.7f, 1f));
-        else if (Gradients.TryGetValue(style, out var g))
-            result = PerChar(name, i => UnityEngine.Color.Lerp(g.a, g.b, name.Length <= 1 ? 0f : i / (float)(name.Length - 1)));
-        if (ModConfig.RoomNameBold.Value) result = $"<b>{result}</b>";
-        return result;
+        string text;
+        try { text = Features.Public.ServerNameStyles.NameStyle.Compose(name, Features.Public.ServerNameStyles.NameStyle.Current()).Text; }
+        catch (Exception e)
+        {
+            if (!_styleErrorLogged)
+            {
+                _styleErrorLogged = true;
+                Plugin.Logger.LogWarning("[Lobby] Server name style failed, name left plain: " + e.Message);
+            }
+            text = name;
+        }
+        if (Produced.Count > 64) Produced.Clear();
+        if (!string.IsNullOrEmpty(text)) Produced.Add(text);
+        return text;
     }
 
-    /// <summary>Colours the text in up to 8 runs, so a gradient costs ~150 characters instead of ~20 per letter.</summary>
-    private static string PerChar(string text, System.Func<int, UnityEngine.Color> colorAt)
-    {
-        const int maxRuns = 8;
-        int run = System.Math.Max(1, (int)System.Math.Ceiling(text.Length / (double)maxRuns));
-        var sb = new System.Text.StringBuilder(text.Length + maxRuns * 24);
-        for (int i = 0; i < text.Length; i += run)
-        {
-            var c = colorAt(i);
-            string part = text.Substring(i, System.Math.Min(run, text.Length - i));
-            sb.Append($"<color=#{(int)(c.r * 255):X2}{(int)(c.g * 255):X2}{(int)(c.b * 255):X2}>{part}</color>");
-        }
-        return sb.ToString();
-    }
+    private static bool _styleErrorLogged;
+
+    // Every display name Style() returned. "Already styled" is decided by this, never by tag substrings: those can
+    // come from the game-default name (a host's own name with "<b>" in it) and would skip the custom name.
+    private static readonly System.Collections.Generic.HashSet<string> Produced = new();
+
+    /// <summary>True if <paramref name="display"/> is exactly a name this mod already styled.</summary>
+    public static bool IsOwnOutput(string display) => !string.IsNullOrEmpty(display) && Produced.Contains(display);
 }
 
 /// <summary>
@@ -216,11 +236,13 @@ internal static class RoomNamePatch
     /// <summary>Applies the custom name/style to the part after the id. Idempotent: styled names are left alone.</summary>
     public static string Restyle(string full)
     {
-        if (string.IsNullOrEmpty(full) || full.Contains("<color=") || full.Contains("<b>")) return full;
+        if (string.IsNullOrEmpty(full)) return full;
         int cut = full.IndexOf('_');
         string prefix = cut >= 0 ? full.Substring(0, cut + 1) : "";
         string display = cut >= 0 ? full.Substring(cut + 1) : full;
-        return prefix + RoomNames.Style(RoomNames.DisplayName(display));
+        if (RoomNames.IsOwnOutput(display)) return full; // already styled by us (e.g. GenerateRoomName, then StartGame)
+        // The game default (the host's own name) is escaped too, so markup in it can't mix with the mod's style tags.
+        return prefix + RoomNames.Style(RoomNames.DisplayName(RoomNames.Escape(display)));
     }
 
     private static void Postfix(ref string __result)
