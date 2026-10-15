@@ -14,7 +14,8 @@ internal static class RowStyler
     private const string StripeName = "OTHPlus_Stripe";
     private const string TintName = "OTHPlus_Tint";
     private const string AgeMarker = "<size=80%><color=#9AA4AE>  · ";
-    private static int _diagRows;
+    /// <summary>Optional rich-text tags (e.g. "FAV", "BIG 8") shown before the age; set by feature files.</summary>
+    internal static Func<OverlandSessionInfo, Fusion.SessionInfo, string> ExtraTags;
     private static bool _loggedError;
 
     public static Color ColorFor(ServerStatus s) => Parse(s switch
@@ -25,8 +26,20 @@ internal static class RowStyler
         _ => ModConfig.ColorPublic.Value,
     });
 
-    // Own "#RRGGBB" parser: ColorUtility may be stripped from the IL2CPP build.
+    // Rows restyle on every scroll/recycle: remember the last parse per status colour string instead of
+    // trimming/parsing (and allocating) for each row.
+    private static readonly System.Collections.Generic.Dictionary<string, Color> Parsed = new();
+
     private static Color Parse(string html)
+    {
+        if (html == null) return Color.white;
+        if (Parsed.TryGetValue(html, out var c)) return c;
+        if (Parsed.Count > 32) Parsed.Clear(); // only grows if the colours are edited a lot
+        return Parsed[html] = ParseHex(html);
+    }
+
+    // Own "#RRGGBB" parser: ColorUtility may be stripped from the IL2CPP build.
+    private static Color ParseHex(string html)
     {
         var hex = (html ?? "").Trim().TrimStart('#');
         if (hex.Length != 6 || !uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var rgb))
@@ -62,25 +75,32 @@ internal static class RowStyler
             var color = ColorFor(status);
             var tint = GetOrCreate(root, TintName, stripe: false);
             var stripe = GetOrCreate(root, StripeName, stripe: true);
-            tint.gameObject.SetActive(on);
-            stripe.gameObject.SetActive(on);
-            tint.color = new Color(color.r, color.g, color.b, 0.12f);
-            stripe.color = color;
+            if (tint != null && stripe != null)
+            {
+                tint.gameObject.SetActive(on);
+                stripe.gameObject.SetActive(on);
+                tint.color = new Color(color.r, color.g, color.b, 0.12f);
+                stripe.color = color;
+            }
         }
 
         var label = vh.sessionListItem?.SessionNameLabel;
         if (label != null)
         {
-            string text = label.text ?? "";
+            string original = label.text ?? ""; // read once: each read marshals a new string across interop
+            string text = original;
             int cut = text.IndexOf(AgeMarker, StringComparison.Ordinal);
             if (cut >= 0) text = text.Substring(0, cut);
             string age = ModConfig.ShowAge.Value ? FirstSeenTracker.AgeText(session.Name) : null;
-            if (age != null)
+            string tags = null;
+            try { tags = ExtraTags?.Invoke(info, session); }
+            catch { /* a feature's tags must never break row styling */ }
+            if (age != null || !string.IsNullOrEmpty(tags))
             {
                 label.richText = true;
-                text += AgeMarker + age + "</color></size>";
+                text += AgeMarker + (tags ?? "") + (age ?? "") + "</color></size>";
             }
-            if (text != label.text) label.text = text;
+            if (text != original) label.text = text;
         }
     }
 
@@ -91,13 +111,6 @@ internal static class RowStyler
         // Not OverlandSessionInfo.GameVersionsMatch: it throws on some inputs (Substring out of range).
         string local = LocalVersion();
         bool versionOk = VersionsMatch(info, ver, local);
-
-        if (_diagRows < 5)
-        {
-            _diagRows++;
-            Plugin.Logger.LogInfo($"[row] '{info.RoomDisplayName}' players={session.PlayerCount}/{session.MaxPlayers} open={session.IsOpen} " +
-                                  $"private={props?.PrivateServer} mods={props?.AllowMods} ver='{ver}' local='{local}' match={versionOk}");
-        }
 
         if (!versionOk) return ServerStatus.Incompatible;
         if (!session.IsOpen || (session.MaxPlayers > 0 && session.PlayerCount >= session.MaxPlayers)) return ServerStatus.Full;

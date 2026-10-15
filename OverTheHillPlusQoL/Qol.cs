@@ -7,11 +7,12 @@ using Object = UnityEngine.Object;
 
 namespace OverTheHillPlus;
 
-/// <summary>Non-cheat quality-of-life tweaks. None of these give an advantage; all work in any session.</summary>
+/// <summary>Quality-of-life tweaks. None of these give an advantage; all work in any session.</summary>
 internal static class Qol
 {
     private static float _nextSlowTick;
     private static CameraSettingsInitializer _camera;
+    private static float _nextCameraSearch;
     private static readonly Dictionary<IntPtr, float> CompassOriginal = new();
     private static bool _headlightsByUs;
 
@@ -72,8 +73,15 @@ internal static class Qol
         if (fov <= 0f) return;
         try
         {
-            if (_camera == null) _camera = Object.FindObjectOfType<CameraSettingsInitializer>();
-            var cam = _camera?.cinemachineVirtualCamera;
+            if (_camera == null)
+            {
+                // FindObjectOfType walks every object: while there is no camera (menus, loading) this ran every frame.
+                if (Time.unscaledTime < _nextCameraSearch) return;
+                _nextCameraSearch = Time.unscaledTime + 1f;
+                _camera = Object.FindObjectOfType<CameraSettingsInitializer>();
+                if (_camera == null) return;
+            }
+            var cam = _camera.cinemachineVirtualCamera;
             if (cam == null) return;
             var lens = cam.m_Lens;
             if (Math.Abs(lens.FieldOfView - fov) < 0.01f) return;
@@ -88,6 +96,8 @@ internal static class Qol
         float mult = ModConfig.CompassRange.Value;
         try
         {
+            // Nothing to do while the compass is untouched and was never changed (skips the object search).
+            if (Math.Abs(mult - 1f) < 0.001f && CompassOriginal.Count == 0) return;
             foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<CompassController>()))
             {
                 var c = o.TryCast<CompassController>();
@@ -129,6 +139,7 @@ internal static class SkipSplashPatch
 {
     private static readonly HashSet<IntPtr> Skipped = new();
 
+    // Runs every frame while a logo screen is up; the screens are only shown at startup, so the set stays tiny.
     private static void Postfix(StateDeveloperSplashScreen __instance)
     {
         if (!ModConfig.SkipSplash.Value || !Skipped.Add(__instance.Pointer)) return;
@@ -141,13 +152,23 @@ internal static class SkipSplashPatch
 [HarmonyPatch(typeof(StateFadeTransition), nameof(StateFadeTransition.Open))]
 internal static class FasterFadesPatch
 {
-    private static readonly HashSet<IntPtr> Scaled = new();
+    // Fades are new objects each time (see QuitToMenuAsync); the GC reuses their addresses, so remember the value we
+    // set too: a new fade at a recycled address has its own (unscaled) duration and must still be shortened.
+    private static readonly Dictionary<IntPtr, float> Scaled = new();
 
     private static void Prefix(StateFadeTransition __instance)
     {
-        if (Scaled.Count > 256) Scaled.Clear();
-        if (!Scaled.Add(__instance.Pointer)) return;
-        __instance.duration *= Mathf.Clamp(ModConfig.FadeSpeed.Value, 0.05f, 1f);
+        try
+        {
+            var ptr = __instance.Pointer;
+            float current = __instance.duration;
+            if (Scaled.TryGetValue(ptr, out var set) && Math.Abs(current - set) < 1e-5f) return; // Open called again
+            if (Scaled.Count > 256) Scaled.Clear();
+            float scaled = current * Mathf.Clamp(ModConfig.FadeSpeed.Value, 0.05f, 1f);
+            __instance.duration = scaled;
+            Scaled[ptr] = scaled;
+        }
+        catch { /* never break the game's screen transition */ }
     }
 }
 

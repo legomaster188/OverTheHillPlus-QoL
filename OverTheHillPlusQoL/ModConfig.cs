@@ -19,8 +19,6 @@ internal static class ModConfig
     public static ConfigEntry<bool> AutoHeadlights;
     public static ConfigEntry<bool> HideTutorialHints;
 
-
-
     // Multiplayer
     public static ConfigEntry<bool> ExpandLobbySize;
     public static ConfigEntry<int> DefaultMaxPlayers;
@@ -41,7 +39,6 @@ internal static class ModConfig
     public static ConfigEntry<bool> ShowAge;
     public static ConfigEntry<bool> ThrottleSessionUpdates;
     public static ConfigEntry<float> SessionUpdateInterval;
-    public static ConfigEntry<bool> ProfileServerBrowser;
     public static ConfigEntry<string> ColorPublic;
     public static ConfigEntry<string> ColorPrivate;
     public static ConfigEntry<string> ColorFull;
@@ -67,8 +64,6 @@ internal static class ModConfig
         HudKey = cfg.Bind("General", "HudKey", Key.F8, "Shows/hides the driving HUD.");
         ShowHud = cfg.Bind("General", "ShowHud", false, "Driving HUD: speed, RPM, gear, power, torque, slip.");
 
-
-
         ExpandLobbySize = cfg.Bind("Multiplayer", "ExpandLobbySize", true, "Offer 2-16 players in the Create Server screen.");
         DefaultMaxPlayers = cfg.Bind("Multiplayer", "DefaultMaxPlayers", 4, new ConfigDescription("Player limit preselected in Create Server.", new AcceptableValueRange<int>(2, 16)));
         FallRescue = cfg.Bind("Multiplayer", "FallRescue", true, "Solo/host: put cars that end up under the ground or off the map back onto it.");
@@ -87,7 +82,6 @@ internal static class ModConfig
         ShowAge = cfg.Bind("ServerBrowser", "ShowAge", true, "Show how long ago each server was first seen.");
         ThrottleSessionUpdates = cfg.Bind("ServerBrowser", "ThrottleSessionUpdates", true, "Skip identical list updates and rebuild at most once per interval.");
         SessionUpdateInterval = cfg.Bind("ServerBrowser", "SessionUpdateInterval", 1.5f, "Minimum seconds between list rebuilds.");
-        ProfileServerBrowser = cfg.Bind("ServerBrowser", "Profiling", false, "Log timing of server browser code while it is open (needs a game restart; for troubleshooting only).");
         ColorPublic = cfg.Bind("ServerBrowser", "ColorPublic", "#3FBF5F", "Public, joinable.");
         ColorPrivate = cfg.Bind("ServerBrowser", "ColorPrivate", "#E0A030", "Private / locked.");
         ColorFull = cfg.Bind("ServerBrowser", "ColorFull", "#D04545", "Full or closed.");

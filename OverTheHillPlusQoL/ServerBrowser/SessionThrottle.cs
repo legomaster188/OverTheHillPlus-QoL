@@ -41,7 +41,7 @@ internal static class SessionThrottle
         catch (Exception e) { Plugin.Logger.LogWarning("First-seen observe failed: " + e.Message); }
 
         // Only the visible browser benefits; when it's closed let the game keep its list current.
-        if (!ModConfig.ThrottleSessionUpdates.Value || !BrowserProfiler.BrowserOpen)
+        if (!ModConfig.ThrottleSessionUpdates.Value || !BrowserState.Open)
         {
             _pendingList = null;
             Applied++;
@@ -79,7 +79,7 @@ internal static class SessionThrottle
     {
         if (_pendingList == null) return;
         bool due = Time.unscaledTime - _lastAppliedTime >= ModConfig.SessionUpdateInterval.Value;
-        if (!due && BrowserProfiler.BrowserOpen) return;
+        if (!due && BrowserState.Open) return;
         var owner = _pendingOwner; var runner = _pendingRunner; var list = _pendingList; var sig = _pendingSig;
         _pendingList = null;
         if (owner == null) return;

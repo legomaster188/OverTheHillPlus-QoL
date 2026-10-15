@@ -5,9 +5,8 @@ using HarmonyLib;
 namespace OverTheHillPlus.Multiplayer;
 
 /// <summary>
-/// Makes the chosen lobby size reach Photon. In testing, an "8 player" lobby still refused the 5th player with
-/// GameIsFull, so the number is capped on the way from the Create Server screen to the session. These patches
-/// re-apply the chosen size at each step and log every value, so the log shows exactly where it was capped.
+/// Makes the chosen lobby size reach the network session: the patches re-apply the size picked in Create Server
+/// at each step on the way from that screen to the running session.
 /// </summary>
 internal static class PlayerLimit
 {
@@ -24,7 +23,6 @@ internal static class PlayerLimit
         {
             var sim = cfg?.Simulation;
             if (sim == null || sim.PlayerCount >= players) return;
-            Plugin.Logger.LogInfo($"[Lobby] {what} player capacity {sim.PlayerCount} -> {players}");
             sim.PlayerCount = players;
         }
         try { Raise("Fusion global config", NetworkProjectConfig.Global); } catch (Exception e) { Plugin.Logger.LogWarning("[Lobby] global config: " + e.Message); }
@@ -43,7 +41,6 @@ internal static class SetupContextPatch
             var options = __instance.maxPlayersOptionsRange;
             int index = __instance.maxPlayersOptionsSelectedIndex;
             if (options == null || index < 0 || index >= options.Count || !int.TryParse(options[index], out int chosen)) return;
-            Plugin.Logger.LogInfo($"[Lobby] Create Server: chosen {chosen}, game set MaxPlayers={gameSetupContext.MaxPlayers}");
             if (gameSetupContext.MaxPlayers != chosen) gameSetupContext.MaxPlayers = chosen;
             PlayerLimit.Pending = chosen;
         }
@@ -59,9 +56,6 @@ internal static class OverlandStartGamePatch
         try
         {
             if (gameSetupContext == null) return;
-            var sim = NetworkProjectConfig.Global?.Simulation;
-            int configPlayers = sim?.PlayerCount ?? -1;
-            Plugin.Logger.LogInfo($"[Lobby] StartGame: mode={gameSetupContext.GameMode} MaxPlayers={gameSetupContext.MaxPlayers} fusionConfigPlayers={configPlayers} room='{gameSetupContext.RoomName}'");
             if (!ModConfig.ExpandLobbySize.Value || gameSetupContext.GameMode == GameMode.Client) return;
 
             if (PlayerLimit.Pending > 0 && gameSetupContext.MaxPlayers != PlayerLimit.Pending)
@@ -77,7 +71,7 @@ internal static class OverlandStartGamePatch
     }
 
     /// <summary>
-    /// Room names look like "&lt;id&gt;_legomaster188's room": the id before the first '_' keeps the session unique and
+    /// Room names look like "&lt;id&gt;_&lt;player&gt;'s room": the id before the first '_' keeps the session unique and
     /// backs join-by-code, so only the display part after it is replaced.
     /// </summary>
     internal static void RenameRoom(GameSetupContext ctx)
@@ -88,7 +82,6 @@ internal static class OverlandStartGamePatch
         string display = cut >= 0 ? ctx.RoomName.Substring(cut + 1) : ctx.RoomName;
         string styled = RoomNames.Style(RoomNames.DisplayName(display));
         if (styled == display) return;
-        Plugin.Logger.LogInfo($"[Lobby] Room name '{ctx.RoomName}' -> '{prefix + styled}'");
         ctx.RoomName = prefix + styled;
     }
 }
@@ -104,14 +97,12 @@ internal static class FusionStartGamePatch
         {
             // The name may come from a generator callback instead: wrap it so its result gets styled.
             var original = args.SessionNameGenerator;
-            Plugin.Logger.LogInfo($"[Lobby] No session name set; generator present: {original != null}");
             if (original == null) return;
             args.SessionNameGenerator = Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Func<string>>(
                 new Func<string>(() =>
                 {
                     string generated = original.Invoke();
                     string styled = RoomNamePatch.Restyle(generated);
-                    Plugin.Logger.LogInfo($"[Lobby] Generated session name '{generated}' -> '{styled}'");
                     return styled;
                 }));
             return;
@@ -119,46 +110,29 @@ internal static class FusionStartGamePatch
         string renamed = RoomNamePatch.Restyle(name);
         if (renamed == name) return;
         args.SessionName = renamed;
-        Plugin.Logger.LogInfo($"[Lobby] Session name '{name}' -> '{renamed}' (reads back '{args.SessionName}')");
     }
 
     private static void Prefix(StartGameArgs args)
     {
         try
         {
-            string count = args.PlayerCount.HasValue ? args.PlayerCount.Value.ToString() : "unset";
-            Plugin.Logger.LogInfo($"[Lobby] Fusion StartGame: mode={args.GameMode} PlayerCount={count} session='{args.SessionName}'");
             if (args.GameMode != GameMode.Client) RenameSession(args);
             if (!ModConfig.ExpandLobbySize.Value || args.GameMode == GameMode.Client || PlayerLimit.Pending <= 0) return;
-            // Writing args.PlayerCount doesn't stick through the interop wrapper; Fusion takes the size from the
-            // project config raised here instead (verified: rooms open at the chosen size).
             PlayerLimit.RaiseFusionCapacity(PlayerLimit.Pending);
+            // Required: without this the room opens at 4 even with the config raised (verified in-game). Reading the
+            // value back through the interop wrapper shows 0, but the write does reach Fusion.
+            args.PlayerCount = new Il2CppSystem.Nullable<int>(PlayerLimit.Pending);
+            Plugin.Logger.LogInfo($"[Lobby] Fusion StartGame PlayerCount -> {PlayerLimit.Pending}");
         }
         catch (Exception e) { Plugin.Logger.LogWarning("[Lobby] Fusion StartGame patch: " + e.Message); }
         finally { PlayerLimit.Pending = 0; }
     }
 }
 
-/// <summary>Logs the size Photon actually gave the room, once the session is up.</summary>
-[HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.Spawned))]
-internal static class SessionSizeLogPatch
-{
-    private static void Postfix()
-    {
-        try
-        {
-            var r = GameState.Runner ?? UnityEngine.Object.FindObjectOfType<NetworkRunner>();
-            var info = r?.SessionInfo;
-            if (info != null) Plugin.Logger.LogInfo($"[Lobby] Session '{info.Name}' is open for {info.MaxPlayers} players ({info.PlayerCount} in now)");
-        }
-        catch (Exception e) { Plugin.Logger.LogDebug("[Lobby] session size: " + e.Message); }
-    }
-}
-
 /// <summary>Server-name text and colour styles (rich-text tags, which the game's server list renders).</summary>
 internal static class RoomNames
 {
-    public const int MaxCustomPlayers = 32;
+    public const int MaxCustomPlayers = 100; // above ~32 is untested: Photon room limits and host bandwidth apply
     public static readonly string[] Styles = { "None", "Gold", "Cyan", "Pink", "Green", "Red", "Purple", "Rainbow", "Sunset", "Ocean" };
 
     private static readonly System.Collections.Generic.Dictionary<string, string> Solid = new()
@@ -172,13 +146,36 @@ internal static class RoomNames
         ["Ocean"] = (new UnityEngine.Color(0.3f, 0.95f, 1f), new UnityEngine.Color(0.25f, 0.35f, 1f)),
     };
 
-    /// <summary>The custom name if set, otherwise the game's own display name.</summary>
+    /// <summary>
+    /// The custom name if set and allowed, otherwise the game's own display name. Names with swears or slurs are
+    /// refused (not censored); the menu shows why.
+    /// </summary>
     public static string DisplayName(string gameDefault)
     {
-        string custom = (ModConfig.CustomRoomName.Value ?? "").Trim();
+        string custom = Escape(ModConfig.CustomRoomName.Value).Trim();
         if (custom.Length > 40) custom = custom.Substring(0, 40);
-        return custom.Length > 0 ? custom : gameDefault;
+        if (custom.Length == 0) return gameDefault;
+        if (Features.Public.Filter.NameFilter.IsBlocked(custom, out string why))
+        {
+            if (_refusedLogged != custom)
+            {
+                _refusedLogged = custom;
+                Plugin.Logger.LogWarning($"[Lobby] Custom server name not used: {why}");
+            }
+            return gameDefault;
+        }
+        return custom;
     }
+
+    private static string _refusedLogged;
+
+    /// <summary>
+    /// Neutralises markup the user typed: '&lt;' and '&gt;' become look-alike angle quotes, so "&lt;size=0&gt;" or
+    /// "&lt;alpha=#00&gt;" can neither hide letters from the word filter nor restyle everyone's server list. Only the
+    /// mod's own style tags (<see cref="Style"/>) are added afterwards.
+    /// </summary>
+    public static string Escape(string text) =>
+        string.IsNullOrEmpty(text) ? (text ?? "") : text.Replace('<', '‹').Replace('>', '›');
 
     public static string Style(string name)
     {
@@ -232,7 +229,6 @@ internal static class RoomNamePatch
         {
             string renamed = Restyle(__result);
             if (renamed == __result) return;
-            Plugin.Logger.LogInfo($"[Lobby] Room name '{__result}' -> '{renamed}' ({renamed.Length} chars)");
             __result = renamed;
         }
         catch (Exception e) { Plugin.Logger.LogWarning("[Lobby] Room rename failed: " + e.Message); }

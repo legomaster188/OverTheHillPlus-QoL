@@ -56,8 +56,16 @@ internal static class GameUiButtons
     /// <summary>Called every frame by ModBehaviour.</summary>
     public static void Tick()
     {
-        if (_relabelTarget == null || Time.unscaledTime > _relabelUntil) return;
-        SetLabel(_relabelTarget, _relabelText);
+        // Time first: the Unity null check is a native call, and this runs every frame forever.
+        if (_relabelUntil <= 0f) return;
+        if (Time.unscaledTime > _relabelUntil || _relabelTarget == null)
+        {
+            _relabelUntil = 0f;
+            _relabelTarget = null; // drop the reference so the destroyed button's wrapper can be collected
+            return;
+        }
+        try { SetLabel(_relabelTarget, _relabelText); }
+        catch { _relabelUntil = 0f; _relabelTarget = null; }
     }
 
     private static void StripLocalization(GameObject go)
