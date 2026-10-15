@@ -38,6 +38,7 @@ public class ModBehaviour : MonoBehaviour
             FirstSeenTracker.SaveIfDue();
             GameUiButtons.Tick();
             Qol.Tick();
+            Multiplayer.JoinMessage.Tick();
 
             var kb = Keyboard.current;
             if (kb == null) return;

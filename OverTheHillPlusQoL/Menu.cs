@@ -257,6 +257,17 @@ internal static class Menu
             _y += 40f;
             Small("Colours show in everyone's server browser, including players without the mod.");
         });
+        Card("Join message", "When you host: a pop-up for everyone each time a player joins. {name} = who joined, {host} = you.", () =>
+        {
+            Switch(ModConfig.JoinMessageEnabled, "Greet players who join", null, true);
+            string msg = GUI.TextField(new Rect(Inset, _y, IW, 28f), ModConfig.JoinMessage.Value ?? "", 90, Theme.TextField);
+            if (msg != ModConfig.JoinMessage.Value) ModConfig.JoinMessage.Value = msg;
+            _y += 34f;
+            var colors = JoinMessage.Colors.Select(c => (c == ModConfig.JoinMessageColor.Value ? $"[{c}]" : c, (Action)(() => ModConfig.JoinMessageColor.Value = c), true)).ToArray();
+            Chips(7, colors);
+            KeyValue("Preview", JoinMessage.Preview());
+            Chips(1, ("Send it now (test)", () => SetStatus(JoinMessage.SendTest()), GameState.IsAuthority && GameState.Runner != null));
+        });
         Card("Stability", null, () =>
         {
             Switch(ModConfig.LobbyGuards, "Lobby crash guards", "Smart spawn points + safe player join/leave", true);
