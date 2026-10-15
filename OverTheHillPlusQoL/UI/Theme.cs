@@ -25,6 +25,7 @@ internal static class Theme
 
     private static readonly Dictionary<(Color, int), Texture2D> Cache = new();
     private static bool _ready;
+    private static Texture2D _windowTexture;
 
     public static Color Hex(int rgb, float a = 1f) =>
         new(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, a);
@@ -32,11 +33,15 @@ internal static class Theme
     public static void Ensure()
     {
         // Textures can be destroyed by scene unloads in rare cases; rebuild if so.
-        if (_ready && Window?.normal?.background != null) return;
+        // Checked on a cached reference: going through Window.normal.background would allocate two interop
+        // wrappers on every call (HUD + menu, several OnGUI events per frame).
+        if (_ready && _windowTexture != null) return;
         Cache.Clear();
         FillStyles.Clear();
+        TintStyles.Clear();
 
         Window = Box(Bg, 10);
+        _windowTexture = Rounded(Bg, 10);
         CardBox = Box(Card, 8);
         Window.padding = new RectOffset(0, 0, 0, 0);
 
@@ -148,19 +153,51 @@ internal static class Theme
         return tex;
     }
 
-    private static readonly Dictionary<(Color, int), GUIStyle> FillStyles = new();
+    private sealed class FillStyle
+    {
+        public GUIStyle Style;
+        public Texture2D Texture; // kept here so the per-draw validity check doesn't allocate interop wrappers
+    }
+
+    private static readonly Dictionary<(Color, int), FillStyle> FillStyles = new();
+    private static readonly Dictionary<int, FillStyle> TintStyles = new();
+
+    // Each distinct colour gets its own texture. Overlays that fade or animate colours would otherwise create
+    // textures without limit (a slow leak), so past this many colours fills switch to a tinted white texture.
+    private const int MaxColorStyles = 192;
 
     /// <summary>Solid rounded fill in any color (styles cached per color/radius).</summary>
     public static void Fill(Rect r, Color color, int radius = 4)
     {
-        if (Event.current.type != EventType.Repaint || r.width <= 0f || r.height <= 0f) return;
-        if (!FillStyles.TryGetValue((color, radius), out var s) || s.normal.background == null)
+        var e = Event.current;
+        if (e == null || e.type != EventType.Repaint || r.width <= 0f || r.height <= 0f) return;
+        if (FillStyles.TryGetValue((color, radius), out var f) && f.Texture != null)
         {
-            s = new GUIStyle();
-            s.normal.background = Rounded(color, radius);
-            s.border = new RectOffset(radius, radius, radius, radius);
-            FillStyles[(color, radius)] = s;
+            f.Style.Draw(r, false, false, false, false);
+            return;
         }
-        s.Draw(r, false, false, false, false);
+        if (FillStyles.Count < MaxColorStyles || f != null)
+        {
+            f = MakeFill(Rounded(color, radius), radius);
+            FillStyles[(color, radius)] = f;
+            f.Style.Draw(r, false, false, false, false);
+            return;
+        }
+        // Too many distinct colours: white rounded texture tinted through GUI.backgroundColor (same result, multiplied
+        // with GUI.color as before), one texture per radius.
+        if (!TintStyles.TryGetValue(radius, out var t) || t.Texture == null)
+            TintStyles[radius] = t = MakeFill(Rounded(Color.white, radius), radius);
+        var prev = GUI.backgroundColor;
+        GUI.backgroundColor = color;
+        t.Style.Draw(r, false, false, false, false);
+        GUI.backgroundColor = prev;
+    }
+
+    private static FillStyle MakeFill(Texture2D tex, int radius)
+    {
+        var s = new GUIStyle();
+        s.normal.background = tex;
+        s.border = new RectOffset(radius, radius, radius, radius);
+        return new FillStyle { Style = s, Texture = tex };
     }
 }

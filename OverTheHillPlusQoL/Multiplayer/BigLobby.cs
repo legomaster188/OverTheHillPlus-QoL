@@ -19,15 +19,30 @@ namespace OverTheHillPlus.Multiplayer;
 /// </summary>
 internal static class BigLobby
 {
-    public const int TargetSpawnPoints = 16;
+    public const int MinSpawnPoints = 16;
+
+    /// <summary>Spawn points needed: the configured lobby size (at least 16).</summary>
+    public static int TargetSpawnPoints
+    {
+        get
+        {
+            int size = MinSpawnPoints;
+            try { size = Math.Max(size, Fusion.NetworkProjectConfig.Global?.Simulation?.PlayerCount ?? 0); } catch { }
+            size = Math.Max(size, ModConfig.CustomMaxPlayers.Value);
+            return Math.Min(size, RoomNames.MaxCustomPlayers);
+        }
+    }
     public static int Overflowed, Promoted, Rescued;
     private static float _nextRescueCheck;
     private static readonly Dictionary<IntPtr, float> LastRescue = new();
 
     // ---- AddPlayer replacement ----
 
-    /// <summary>Same steps as the game's AddPlayer, in the same order, but never throws for extra players.</summary>
-    public static void AddPlayer(OverlandSessionPlayers sp, PlayerRef player, string name)
+    /// <summary>
+    /// Kept for reference, not used: writing names through the interop NetworkString conversion corrupted them
+    /// ("Invalid Length" on GetPlayerName). The game's own AddPlayer runs instead; see FinishOverflowJoin.
+    /// </summary>
+    private static void AddPlayerUnused(OverlandSessionPlayers sp, PlayerRef player, string name)
     {
         int key = player.RawEncoded - 1; // the game keys names by RawEncoded-1 (== PlayerId)
 
@@ -61,6 +76,20 @@ internal static class BigLobby
         // 6. join pop-up + connected event, which the original skipped for extra players
         sp.RPC_ShowPlayerJoinedNotification(player);
         sp.RPC_ConnectedPlayer(player);
+    }
+
+    /// <summary>
+    /// The game's AddPlayer stores the name and dev flag, then throws when its 4 player slots are full (or, past 7
+    /// players, when a dictionary is full). Its finalizer swallows that and calls this to do what was skipped:
+    /// the join pop-up and the connected event. The player gets a slot later via PromoteOverflow.
+    /// </summary>
+    public static void FinishOverflowJoin(OverlandSessionPlayers sp, PlayerRef player)
+    {
+        if (!ModConfig.LobbyGuards.Value || sp == null) return;
+        Overflowed++;
+        try { sp.RPC_ShowPlayerJoinedNotification(player); } catch (Exception e) { Plugin.Logger.LogDebug("[Lobby] join pop-up: " + e.Message); }
+        try { sp.RPC_ConnectedPlayer(player); } catch (Exception e) { Plugin.Logger.LogDebug("[Lobby] connected event: " + e.Message); }
+        Plugin.Logger.LogInfo($"[Lobby] Player {player.PlayerId} joined beyond the game's 4 player slots");
     }
 
     /// <summary>Puts the player in the first free OrderedPlayerRefs slot and PlayerColors entry. False if full.</summary>
@@ -131,7 +160,8 @@ internal static class BigLobby
         int original = points.Count;
         try
         {
-            for (int i = original; i < TargetSpawnPoints; i++)
+            int target = TargetSpawnPoints;
+            for (int i = original; i < target; i++)
             {
                 var src = points[i % original];
                 if (src == null) continue;
@@ -143,7 +173,6 @@ internal static class BigLobby
                 clone.name = $"{src.gameObject.name}_OTHPlus{i}";
                 points.Add(clone.GetComponent<SpawnPoint>());
             }
-            Plugin.Logger.LogInfo($"[Lobby] {where}: spawn points {original} -> {points.Count}");
         }
         catch (Exception e) { Plugin.Logger.LogWarning($"[Lobby] {where} spawn points: {e.Message}"); }
     }
@@ -157,21 +186,29 @@ internal static class BigLobby
         if (!GameState.IsAuthority) return; // only the game that simulates the cars can move them
         try
         {
-            foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<FusionPlayer>()))
+            // Only judge cars on the map's terrain: the lobby/garage scene has no terrain and must be left alone.
+            // activeTerrains allocates a new array per read, so it's read once per check (was twice per car).
+            _terrains = Terrain.activeTerrains;
+            if (_terrains == null || _terrains.Length == 0) return;
+            if (LastRescue.Count > 64) LastRescue.Clear();
+            foreach (var o in GameState.FusionPlayers)
             {
                 var car = o.TryCast<FusionPlayer>()?.vehicleBase;
-                if (car != null) CheckCar(car);
+                if (car == null) continue;
+                try { CheckCar(car); }
+                catch (Exception e) { Plugin.Logger.LogDebug("[Lobby] fall rescue (car): " + e.Message); } // one bad car doesn't skip the rest
             }
         }
         catch (Exception e) { Plugin.Logger.LogDebug("[Lobby] fall rescue: " + e.Message); }
+        finally { _terrains = null; }
     }
+
+    private static Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<Terrain> _terrains;
 
     private static void CheckCar(VehicleBase car)
     {
         var pos = car.transform.position;
         bool overMap = TryGroundHeight(pos, out float ground);
-        // Only judge cars on the map's terrain: the lobby/garage scene has no terrain and must be left alone.
-        if (Terrain.activeTerrains.Length == 0) return;
         bool underGround = overMap && pos.y < ground - 6f;
         bool offMap = !overMap && pos.y < -50f;
         if (!underGround && !offMap) return;
@@ -198,7 +235,7 @@ internal static class BigLobby
     private static bool TryGroundHeight(Vector3 pos, out float height)
     {
         height = 0f;
-        foreach (var t in Terrain.activeTerrains)
+        foreach (var t in _terrains ?? Terrain.activeTerrains)
         {
             if (t == null || t.terrainData == null) continue;
             var origin = t.transform.position;
@@ -208,22 +245,6 @@ internal static class BigLobby
             return true;
         }
         return false;
-    }
-}
-
-[HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.AddPlayer))]
-internal static class AddPlayerReplacement
-{
-    [HarmonyPriority(Priority.First)]
-    private static bool Prefix(OverlandSessionPlayers __instance, PlayerRef playerRef, string runtimePlayerPlayerName)
-    {
-        if (!ModConfig.LobbyGuards.Value) return true;
-        try
-        {
-            BigLobby.AddPlayer(__instance, playerRef, runtimePlayerPlayerName);
-        }
-        catch (Exception e) { Plugin.Logger.LogWarning($"[Lobby] AddPlayer replacement: {e.GetType().Name}: {e.Message}"); }
-        return false; // never fall back to the original: it would repeat steps and throw for extra players
     }
 }
 
@@ -256,4 +277,29 @@ internal static class SupporterFlagGuard
 internal static class BusyStateRpcGuard
 {
     private static Exception Finalizer(Exception __exception) => LobbyRules.Guard("RPC_SetBusyState", __exception);
+}
+
+/// <summary>
+/// The meteorite spawner picks its setup from SpawnableMeteoritesByPlayersCount[ActivePlayers count], a list with
+/// entries for 1-4 players only; with 5+ it threw inside OverlandSessionPlayers.Render every update (which also cut
+/// that render short). Pad the list by repeating the last entry; the finalizer is a safety net.
+/// </summary>
+[HarmonyPatch(typeof(MeteoriteSpawnController), nameof(MeteoriteSpawnController.UpdateSpawnableMeteoritesConfig))]
+internal static class MeteoriteConfigPatch
+{
+    private static void Prefix(MeteoriteSpawnController __instance)
+    {
+        try
+        {
+            var list = __instance.meteoriteSpawnConfig?.SpawnableMeteoritesByPlayersCount;
+            if (list == null || list.Count == 0 || list.Count > RoomNames.MaxCustomPlayers) return;
+            var last = list[list.Count - 1];
+            int before = list.Count;
+            while (list.Count <= RoomNames.MaxCustomPlayers) list.Add(last);
+            Plugin.Logger.LogInfo($"[Lobby] Meteorite setups padded {before} -> {list.Count} for big lobbies");
+        }
+        catch (Exception e) { Plugin.Logger.LogDebug("[Lobby] meteorite pad: " + e.Message); }
+    }
+
+    private static Exception Finalizer(Exception __exception) => LobbyRules.Guard("MeteoriteSpawnController.UpdateSpawnableMeteoritesConfig", __exception);
 }

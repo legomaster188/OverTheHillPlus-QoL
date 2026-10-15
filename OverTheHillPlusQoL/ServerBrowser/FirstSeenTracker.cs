@@ -81,8 +81,30 @@ internal static class FirstSeenTracker
         if (!_dirty || (!force && Time.unscaledTime < _nextSave)) return;
         _nextSave = Time.unscaledTime + 30f;
         _dirty = false;
-        try { File.WriteAllText(FilePath, JsonSerializer.Serialize(_entries)); }
+        try
+        {
+            // Pruning only ran at load, so a game left open for days kept every server ever listed.
+            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            List<string> stale = null;
+            foreach (var kv in _entries)
+                if (now - kv.Value.Last > PruneAfterSeconds) (stale ??= new List<string>()).Add(kv.Key);
+            if (stale != null) foreach (var key in stale) _entries.Remove(key);
+
+            // Write to a temp file and swap it in: a crash or kill mid-write no longer wipes the whole history.
+            string tmp = FilePath + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(_entries));
+            File.Move(tmp, FilePath, overwrite: true);
+        }
         catch (Exception e) { Plugin.Logger.LogWarning("Could not save first-seen data: " + e.Message); }
+    }
+
+    /// <summary>Unix seconds when the session was first seen (used for sorting by age).</summary>
+    public static bool TryGetFirstSeen(string sessionName, out long firstUnix)
+    {
+        firstUnix = 0;
+        if (sessionName == null || !_entries.TryGetValue(sessionName, out var e)) return false;
+        firstUnix = e.First;
+        return true;
     }
 
     /// <summary>"2h 15m", "≥3d 4h", or null if unknown.</summary>

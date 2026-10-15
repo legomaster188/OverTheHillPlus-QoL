@@ -36,31 +36,49 @@ internal static class JoinMessage
             if (Time.unscaledTime < Queue[i].at) continue;
             var player = Queue[i].player;
             Queue.RemoveAt(i);
-            Send(player);
+            string result = Send(player);
+            if (!result.StartsWith("Sent", StringComparison.Ordinal)) Plugin.Logger.LogInfo("[Lobby] Join message: " + result);
         }
     }
 
-    public static string Preview(string joinerName = "NewPlayer") => Format(joinerName);
+    public static string Preview(string joinerName = "NewPlayer")
+    {
+        if (TemplateBlocked(out string why)) return "Blocked: " + why;
+        return Format(joinerName);
+    }
 
+    /// <summary>Swear/slur filter on the message the host typed: such a message is refused, not censored.</summary>
+    private static bool TemplateBlocked(out string why) =>
+        Features.Public.Filter.NameFilter.IsBlocked(RoomNames.Escape(ModConfig.JoinMessage.Value), out why);
+
+    /// <summary>The message for this joiner, or "" when it must not be sent (blocked words).</summary>
     private static string Format(string joiner)
     {
+        if (TemplateBlocked(out _)) return "";
         string host = "host";
         try { host = OverlandSessionPlayers.Instance?.GetPlayerName(GameState.Runner.LocalPlayer) ?? host; } catch { }
-        return (ModConfig.JoinMessage.Value ?? "").Replace("{name}", joiner).Replace("{host}", host).Trim();
+        // Player names are not ours to refuse; a name that fails the filter is left out of the greeting instead.
+        // Typed markup is neutralised first (see RoomNames.Escape); only the mod's own tags are added when sending.
+        joiner = RoomNames.Escape(joiner);
+        host = RoomNames.Escape(host);
+        if (Features.Public.Filter.NameFilter.IsBlocked(joiner, out _)) joiner = "a new player";
+        if (Features.Public.Filter.NameFilter.IsBlocked(host, out _)) host = "the host";
+        string text = RoomNames.Escape(ModConfig.JoinMessage.Value).Replace("{name}", joiner).Replace("{host}", host).Trim();
+        return Features.Public.Filter.NameFilter.IsBlocked(text, out _) ? "" : text;
     }
 
     public static string Send(PlayerRef player)
     {
+        if (TemplateBlocked(out string why)) return "Blocked: join message not sent, " + why + ".";
         var sp = OverlandSessionPlayers.Instance;
         if (sp == null) return "Failed: not in a session.";
         string joiner = $"Player {player.PlayerId}";
         try { joiner = sp.GetPlayerName(player); } catch { }
         string text = Format(joiner);
-        if (text.Length == 0) return "Failed: empty message.";
+        if (text.Length == 0) return "Failed: empty message, or it would contain a blocked word.";
         try
         {
             sp.RPC_ShowPlayerLeftNotification(ColorFor(ModConfig.JoinMessageColor.Value), Marker + text + HideRest);
-            Plugin.Logger.LogInfo($"[Lobby] Join message for {joiner}: {text}");
             return "Sent: " + text;
         }
         catch (Exception e)
@@ -68,14 +86,6 @@ internal static class JoinMessage
             Plugin.Logger.LogWarning("[Lobby] Join message failed: " + e.Message);
             return "Failed: " + e.Message;
         }
-    }
-
-    /// <summary>Host test button: sends the message now, as if someone joined.</summary>
-    public static string SendTest()
-    {
-        if (!GameState.IsAuthority || GameState.Runner == null) return "Blocked: host a session first.";
-        try { return Send(GameState.Runner.LocalPlayer); }
-        catch (Exception e) { return "Failed: " + e.Message; }
     }
 
     public static Color ColorFor(string name) => name switch

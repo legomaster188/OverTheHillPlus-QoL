@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using BepInEx.Configuration;
+using OverTheHillPlus.Features.Public;
 using OverTheHillPlus.Multiplayer;
 using OverTheHillPlus.ServerBrowser;
 using OverTheHillPlus.UI;
@@ -16,18 +17,34 @@ namespace OverTheHillPlus;
 internal static class Menu
 {
     private const float W = 600f, H = 720f, HeaderH = 60f, TabsH = 36f, FooterH = 34f, Pad = 16f, Inset = 14f;
-    // Two menus in one window: PLUS (no cheats: QoL, hosting, lobby, servers) and CHEATS.
-    private static readonly string[][] TabsByMode =
+    private static readonly List<string>[] TabsByMode =
     {
-        new[] { "QoL", "Lobby", "Servers" },
+        new() { "QoL", "Lobby", "Servers" },
     };
+    private static bool _featureTabsAdded;
+
+    /// <summary>Adds tabs that features registered (Features.Registry.Section with a new tab name).</summary>
+    private static void EnsureFeatureTabs()
+    {
+        if (_featureTabsAdded) return;
+        _featureTabsAdded = true;
+        foreach (var s in Features.Registry.Sections)
+        {
+            if (s.Mode < 0 || s.Mode >= TabsByMode.Length) continue;
+            if (!TabsByMode[s.Mode].Contains(s.Tab)) TabsByMode[s.Mode].Add(s.Tab);
+        }
+    }
     public const string LobbyTab = "Lobby";
+    private static readonly string[] ModeNames =
+    {
+        "PLUS",
+    };
 
     public static bool CloseRequested;
 
     private static int _mode;
-    private static readonly int[] TabByMode = new int[2];
-    private static string[] Tabs => TabsByMode[_mode];
+    private static readonly int[] TabByMode = new int[TabsByMode.Length];
+    private static List<string> Tabs => TabsByMode[_mode];
     private static int _tab { get => TabByMode[_mode]; set => TabByMode[_mode] = value; }
 
     /// <summary>Jumps to a tab by name in whichever mode has it.</summary>
@@ -35,7 +52,8 @@ internal static class Menu
     {
         for (int m = 0; m < TabsByMode.Length; m++)
         {
-            int i = Array.IndexOf(TabsByMode[m], name);
+            EnsureFeatureTabs();
+            int i = TabsByMode[m].IndexOf(name);
             if (i >= 0) { _mode = m; TabByMode[m] = i; return; }
         }
     }
@@ -52,13 +70,18 @@ internal static class Menu
     private static string _status = "";
     private static float _statusAt = -100f;
 
-
     // ---- frame ----
+
+    /// <summary>Time.frameCount of the last menu draw; lets features tell whether the menu is open.</summary>
+    internal static int DrawnFrame = -100;
 
     public static void Draw()
     {
+        DrawnFrame = Time.frameCount;
         Theme.Ensure();
-        float scale = Mathf.Max(1f, Screen.height / 1080f);
+        EnsureFeatureTabs();
+        MenuUx.BeginFrame();
+        float scale = MenuUx.MenuScale(Mathf.Max(1f, Screen.height / 1080f));
         GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
 
         float sw = Screen.width / scale, sh = Screen.height / scale;
@@ -70,25 +93,53 @@ internal static class Menu
         HandleDrag(new Rect(win.x, win.y, 250f, HeaderH)); // title area only: the right side has buttons
         GUI.Box(win, GUIContent.none, Theme.Window);
         DrawHeader(win);
-        DrawTabs(new Rect(win.x + Pad, win.y + HeaderH, W - Pad * 2, TabsH));
+        float tabsH = TabRows * TabsH;
+        DrawTabs(new Rect(win.x + Pad, win.y + HeaderH, W - Pad * 2, tabsH));
+        float searchH = MenuUx.SearchBarHeight;
+        MenuUx.DrawSearchBar(new Rect(win.x + Pad, win.y + HeaderH + tabsH + 8f, W - Pad * 2, searchH), _mode, TabsByMode, ModeNames);
 
-        var area = new Rect(win.x + Pad, win.y + HeaderH + TabsH + 10f, W - Pad * 2, h - HeaderH - TabsH - FooterH - 18f);
-        string tab = Tabs[Mathf.Clamp(_tab, 0, Tabs.Length - 1)];
+        var area = new Rect(win.x + Pad, win.y + HeaderH + tabsH + searchH + 10f, W - Pad * 2, h - HeaderH - tabsH - searchH - FooterH - 18f);
+        string tab = Tabs[Mathf.Clamp(_tab, 0, Tabs.Count - 1)];
         Scroll.TryGetValue(tab, out var scroll);
         float contentH = ContentH.TryGetValue(tab, out var ch) ? ch : 600f;
         Scroll[tab] = GUI.BeginScrollView(area, scroll, new Rect(0f, 0f, area.width - 16f, contentH));
         _y = 0f;
         _cw = area.width - 18f;
+        DrawTabContent(_mode, tab);
+        ContentH[tab] = _y + 6f;
+        GUI.EndScrollView();
+
+        if (MenuUx.NeedsIndex && Event.current.type == EventType.Layout)
+        {
+            // Search index: walk every tab once in a Layout event (nothing is drawn or clicked in Layout).
+            float cw = _cw;
+            MenuUx.BuildIndex(TabsByMode, (m, t) => { _y = 0f; _cw = cw; DrawTabContent(m, t); });
+            _drawMode = _mode;
+            _drawTab = tab;
+        }
+
+        DrawFooter(new Rect(win.x, win.yMax - FooterH, W, FooterH));
+        MenuUx.EndFrame(area);
+    }
+
+    private static int _drawMode;
+    private static string _drawTab = "";
+
+    private static void DrawTabContent(int mode, string tab)
+    {
+        _drawMode = mode;
+        _drawTab = tab;
         switch (tab)
         {
             case "QoL": DrawQol(); break;
             case "Lobby": DrawLobby(); break;
             case "Servers": DrawServers(); break;
         }
-        ContentH[tab] = _y + 6f;
-        GUI.EndScrollView();
-
-        DrawFooter(new Rect(win.x, win.yMax - FooterH, W, FooterH));
+        foreach (var section in Features.Registry.SectionsFor(mode, tab))
+        {
+            try { section.Draw(); }
+            catch (Exception e) { Small($"<color=#E5534B>{section.Owner} failed: {e.Message}</color>"); }
+        }
     }
 
     private static void HandleDrag(Rect handle)
@@ -129,14 +180,24 @@ internal static class Menu
         if (GUI.Button(new Rect(win.xMax - 48f, win.y + 14f, 32f, 30f), "×", Theme.Button)) CloseRequested = true;
     }
 
+    private const int TabsPerRow = 7;
+    private static int TabRows => Math.Max(1, (Tabs.Count + TabsPerRow - 1) / TabsPerRow);
+
     private static void DrawTabs(Rect bar)
     {
         Theme.Fill(bar, Theme.Hex(0x0E1218), 8);
-        float tw = (bar.width - 8f) / Tabs.Length;
-        for (int i = 0; i < Tabs.Length; i++)
+        int rows = TabRows;
+        int perRow = (Tabs.Count + rows - 1) / rows;
+        float tw = (bar.width - 8f) / perRow;
+        for (int i = 0; i < Tabs.Count; i++)
         {
-            var r = new Rect(bar.x + 4f + i * tw, bar.y + 4f, tw - 4f, bar.height - 8f);
+            int row = i / perRow, col = i % perRow;
+            var r = new Rect(bar.x + 4f + col * tw, bar.y + 4f + row * TabsH, tw - 4f, TabsH - 8f);
+            var prev = GUI.color;
+            GUI.color = MenuUx.TabTint(_mode, Tabs[i], prev);
             if (GUI.Button(r, Tabs[i], i == _tab ? Theme.TabActive : Theme.Tab)) _tab = i;
+            GUI.color = prev;
+            MenuUx.TabBadge(r, _mode, Tabs[i]);
         }
     }
 
@@ -156,7 +217,7 @@ internal static class Menu
         Theme.Status.normal.textColor = prev;
     }
 
-    private static void SetStatus(string s)
+    internal static void SetStatus(string s)
     {
         if (string.IsNullOrEmpty(s)) return;
         _status = s;
@@ -165,10 +226,10 @@ internal static class Menu
 
     // ---- tabs ----
 
-
-
-
     private static string _customSizeText;
+
+    /// <summary>Drops text typed into menu fields so they re-read their settings (after settings change from outside).</summary>
+    internal static void ForgetTypedText() => _customSizeText = null;
 
     // ---- PLUS mode ----
 
@@ -205,17 +266,9 @@ internal static class Menu
             Switch(ModConfig.SkipSplash, "Skip logo screens", "Straight to the main menu at startup", true);
             SliderRow(ModConfig.FadeSpeed, "Screen fade length", 0.1f, 1f, "0.00", "×", true);
             Switch(ModConfig.HideTutorialHints, "Hide tutorial hints", "No more reminder pop-ups", true);
-            Switch(ModConfig.MainMenuButton, "PLUS button on the main menu", null, true);
+            Switch(ModConfig.MainMenuButton, "PLUS button on the main menu", "Takes effect next time the main menu opens", true);
         });
     }
-
-
-    // ---- CHEATS mode: vehicles ----
-
-
-
-
-
 
     private static void DrawLobby()
     {
@@ -224,11 +277,11 @@ internal static class Menu
             Switch(ModConfig.ExpandLobbySize, "Up to 16 players", "Adds 2–16 to the Max Players option", true);
             GUI.Label(new Rect(Inset + 4f, _y, 190f, 28f), "Exact size (typed)", Theme.Label);
             _customSizeText ??= ModConfig.CustomMaxPlayers.Value >= 2 ? ModConfig.CustomMaxPlayers.Value.ToString() : "";
-            _customSizeText = GUI.TextField(new Rect(Inset + 200f, _y, 80f, 28f), _customSizeText, 2, Theme.TextField);
+            _customSizeText = GUI.TextField(new Rect(Inset + 200f, _y, 80f, 28f), _customSizeText, 3, Theme.TextField);
             int typed = int.TryParse(_customSizeText, out int ts) ? ts : 0;
             int wanted = typed >= 2 ? Math.Min(typed, RoomNames.MaxCustomPlayers) : 0;
             if (wanted != ModConfig.CustomMaxPlayers.Value) ModConfig.CustomMaxPlayers.Value = wanted;
-            GUI.Label(new Rect(Inset + 290f, _y, IW - 290f, 28f), wanted >= 2 ? $"hosting uses {wanted} (max {RoomNames.MaxCustomPlayers})" : "empty = Create Server choice", Theme.Small);
+            GUI.Label(new Rect(Inset + 290f, _y, IW - 290f, 28f), wanted >= 2 ? $"hosting uses {wanted} (max {RoomNames.MaxCustomPlayers}{(wanted > 32 ? ", untested above 32" : "")})" : "empty = Create Server choice", Theme.Small);
             _y += 34f;
             float v = RawSlider("Preselected size", ModConfig.DefaultMaxPlayers.Value, 2f, LobbyRules.MaxPlayers,
                 LobbyRules.OptionLabel(ModConfig.DefaultMaxPlayers.Value), ModConfig.ExpandLobbySize.Value);
@@ -247,10 +300,12 @@ internal static class Menu
             if (ChipButton(new Rect(Inset + IW - 92f, _y, 92f, 28f), "Clear", !string.IsNullOrEmpty(ModConfig.CustomRoomName.Value)))
                 ModConfig.CustomRoomName.Value = "";
             _y += 36f;
+            if (Features.Public.Filter.NameFilter.IsBlocked(RoomNames.Escape(ModConfig.CustomRoomName.Value), out string nameWhy))
+                Small($"<color=#E5534B>Not used: {nameWhy}. Servers keep the game's default name until you change it.</color>");
             var styles = RoomNames.Styles.Select(st => (st == ModConfig.RoomNameStyle.Value ? $"[{st}]" : st, (Action)(() => ModConfig.RoomNameStyle.Value = st), true)).ToArray();
             Chips(5, styles);
             Switch(ModConfig.RoomNameBold, "Bold", null, true);
-            string preview = RoomNames.Style(RoomNames.DisplayName("legomaster188's room"));
+            string preview = RoomNames.Style(RoomNames.DisplayName("Player's room"));
             var row = new Rect(Inset - 6f, _y, IW + 12f, 34f);
             Theme.Fill(row, Theme.Hex(0x0E1218), 6);
             GUI.Label(new Rect(Inset + 4f, _y + 4f, IW - 8f, 26f), "Preview:  " + preview, Theme.Label);
@@ -263,20 +318,17 @@ internal static class Menu
             string msg = GUI.TextField(new Rect(Inset, _y, IW, 28f), ModConfig.JoinMessage.Value ?? "", 90, Theme.TextField);
             if (msg != ModConfig.JoinMessage.Value) ModConfig.JoinMessage.Value = msg;
             _y += 34f;
+            if (Features.Public.Filter.NameFilter.IsBlocked(RoomNames.Escape(ModConfig.JoinMessage.Value), out string msgWhy))
+                Small($"<color=#E5534B>Not sent: {msgWhy}.</color>");
             var colors = JoinMessage.Colors.Select(c => (c == ModConfig.JoinMessageColor.Value ? $"[{c}]" : c, (Action)(() => ModConfig.JoinMessageColor.Value = c), true)).ToArray();
             Chips(7, colors);
             KeyValue("Preview", JoinMessage.Preview());
-            Chips(1, ("Send it now (test)", () => SetStatus(JoinMessage.SendTest()), GameState.IsAuthority && GameState.Runner != null));
         });
         Card("Stability", null, () =>
         {
             Switch(ModConfig.LobbyGuards, "Lobby crash guards", "Smart spawn points, safe join/leave, finish registering extra players", true);
             Switch(ModConfig.FallRescue, "Fall rescue", "Host/solo: cars under the ground or off the map are put back", true);
-            KeyValue("Players beyond 4 slots", BigLobby.Overflowed.ToString());
-            KeyValue("Moved into free slots", BigLobby.Promoted.ToString());
             KeyValue("Cars rescued", BigLobby.Rescued.ToString());
-            KeyValue("Errors absorbed", LobbyRules.GuardedErrors.ToString());
-            KeyValue("Spawn fallbacks", LobbyRules.SpawnFallbacks.ToString());
         });
         Card("This session", null, () =>
         {
@@ -288,12 +340,7 @@ internal static class Menu
             KeyValue("Players", max > 0 ? $"{players} / {max}" : players.ToString());
             KeyValue("You are", GameState.Badge.ToLowerInvariant());
         });
-        Card("Menu", null, () =>
-        {
-            Switch(ModConfig.MainMenuButton, "PLUS button on the main menu", "Takes effect next time the main menu opens", true);
-        });
     }
-
 
     private static void DrawServers()
     {
@@ -303,7 +350,6 @@ internal static class Menu
             Switch(ModConfig.ShowAge, "Show server age", "How long ago the mod first saw each server", true);
             Switch(ModConfig.ThrottleSessionUpdates, "Smooth list refreshes", "Skip duplicate updates and merge bursts", true);
             SliderRow(ModConfig.SessionUpdateInterval, "Min time between rebuilds", 0.25f, 5f, "0.00", " s", ModConfig.ThrottleSessionUpdates.Value);
-            Switch(ModConfig.ProfileServerBrowser, "Performance logging", "Troubleshooting only, takes effect after a restart", true);
         });
         Card("Legend", null, () =>
         {
@@ -316,9 +362,6 @@ internal static class Menu
         Card("Stats", null, () =>
         {
             KeyValue("Servers remembered", FirstSeenTracker.Count.ToString());
-            KeyValue("List updates applied", SessionThrottle.Applied.ToString());
-            KeyValue("Duplicates skipped", SessionThrottle.SkippedIdentical.ToString());
-            KeyValue("Bursts merged", SessionThrottle.Deferred.ToString());
         });
     }
 
@@ -326,23 +369,61 @@ internal static class Menu
 
     private static float IW => _cw - Inset * 2;
 
-    private static void Card(string title, string subtitle, Action body)
+    // ---- layout access for feature files (Features/*) ----
+
+    /// <summary>Current vertical position inside the tab's scroll area.</summary>
+    internal static float Y { get => _y; set => _y = value; }
+    /// <summary>Left edge for content inside a card.</summary>
+    internal static float Left => Inset;
+    /// <summary>Usable content width inside a card.</summary>
+    internal static float Width => IW;
+
+    /// <summary>Reserves a full-width row of the given height inside a card and returns its rect.</summary>
+    internal static Rect NextRow(float height)
+    {
+        var r = new Rect(Inset, _y, IW, height);
+        _y += height + 6f;
+        return r;
+    }
+
+    /// <summary>A labelled single-line text field row.</summary>
+    internal static string TextRow(string label, string value, int maxLength = 64)
+    {
+        if (MenuUx.Note(label)) MenuUx.Highlight(new Rect(Inset - 6f, _y - 2f, IW + 12f, 32f));
+        GUI.Label(new Rect(Inset + 4f, _y, 150f, 28f), label, Theme.Label);
+        string v = GUI.TextField(new Rect(Inset + 156f, _y, IW - 156f, 28f), value ?? "", maxLength, Theme.TextField);
+        _y += 34f;
+        return v;
+    }
+
+    internal static void Card(string title, string subtitle, Action body)
     {
         float top = _y;
-        float h = CardH.TryGetValue(title, out var cached) ? cached : 80f;
+        string key = MenuUx.CardKey(_drawMode, _drawTab, title);
+        float h = CardH.TryGetValue(key, out var cached) ? cached : 80f;
         GUI.Box(new Rect(0f, top, _cw, h), GUIContent.none, Theme.CardBox);
-        _y += 12f;
-        GUI.Label(new Rect(Inset, _y, IW, 16f), title.ToUpperInvariant(), Theme.Section);
-        _y += 20f;
-        if (!string.IsNullOrEmpty(subtitle)) Small(subtitle);
-        body();
-        _y += 8f;
-        CardH[title] = _y - top;
+        bool open = MenuUx.CardHeader(key, title, new Rect(0f, top, _cw, h), Inset, IW);
+        _y += 32f;
+        if (open)
+        {
+            var prev = GUI.color;
+            GUI.color = MenuUx.CardTint(key, prev);
+            try
+            {
+                if (!string.IsNullOrEmpty(subtitle)) Small(subtitle);
+                body();
+            }
+            finally { GUI.color = prev; }
+            _y += 8f;
+        }
+        else _y = top + 38f; // folded: title row only
+        if (!MenuUx.Indexing) CardH[key] = _y - top;
         _y += 10f;
     }
 
-    private static void Banner(string text, Color color)
+    internal static void Banner(string text, Color color)
     {
+        MenuUx.Note(text);
         float th = Theme.Muted_.CalcHeight(new GUIContent(text), _cw - 36f);
         var r = new Rect(0f, _y, _cw, th + 16f);
         Theme.Fill(r, new Color(color.r, color.g, color.b, 0.16f), 8);
@@ -354,20 +435,22 @@ internal static class Menu
         _y += r.height + 10f;
     }
 
-    private static void Small(string text)
+    internal static void Small(string text)
     {
+        MenuUx.Note(text);
         float th = Theme.Muted_.CalcHeight(new GUIContent(text), IW);
         GUI.Label(new Rect(Inset, _y, IW, th), text, Theme.Muted_);
         _y += th + 6f;
     }
 
-    private static void Switch(ConfigEntry<bool> entry, string label, string hint, bool enabled)
+    internal static void Switch(ConfigEntry<bool> entry, string label, string hint, bool enabled)
     {
         float rh = hint == null ? 30f : 42f;
         var row = new Rect(Inset - 6f, _y, IW + 12f, rh);
         var prev = GUI.color;
         if (!enabled) GUI.color = new Color(1f, 1f, 1f, 0.45f);
-        if (row.Contains(Event.current.mousePosition)) Theme.Fill(row, Theme.CardHover, 6);
+        if (MenuUx.Note(label, hint, entry?.Description?.Description)) MenuUx.Highlight(row);
+        else if (row.Contains(Event.current.mousePosition)) Theme.Fill(row, Theme.CardHover, 6);
 
         GUI.Label(new Rect(Inset + 4f, _y + (hint == null ? 4f : 2f), IW - 70f, 22f), label, Theme.Label);
         if (hint != null) GUI.Label(new Rect(Inset + 4f, _y + 21f, IW - 70f, 18f), hint, Theme.Small);
@@ -376,23 +459,25 @@ internal static class Menu
         Theme.Fill(track, entry.Value ? Theme.Accent : Theme.Off, 11);
         Theme.Fill(new Rect(entry.Value ? track.xMax - 20f : track.x + 2f, track.y + 2f, 18f, 18f), Theme.Text, 9);
 
-        if (GUI.Button(row, GUIContent.none, Theme.Invisible)) entry.Value = !entry.Value;
+        if (GUI.Button(row, MenuUx.TipContent(entry, hint), Theme.Invisible)) entry.Value = !entry.Value;
         GUI.color = prev;
         _y += rh + 2f;
     }
 
-    private static void SliderRow(ConfigEntry<float> entry, string label, float min, float max, string fmt, string suffix, bool enabled, bool percent = false)
+    internal static void SliderRow(ConfigEntry<float> entry, string label, float min, float max, string fmt, string suffix, bool enabled, bool percent = false)
     {
         string shown = percent ? (entry.Value * 100f).ToString("0") + "%" : entry.Value.ToString(fmt) + suffix;
-        float v = RawSlider(label, entry.Value, min, max, shown, enabled);
+        float v = RawSlider(label, entry.Value, min, max, shown, enabled, MenuUx.TipFor(entry, null), entry.Description?.Description);
         if (Mathf.Abs(v - entry.Value) > 0.0001f) entry.Value = Mathf.Round(v * 100f) / 100f;
     }
 
-    private static float RawSlider(string label, float value, float min, float max, string shown, bool enabled)
+    internal static float RawSlider(string label, float value, float min, float max, string shown, bool enabled, string tooltip = null, string searchText = null)
     {
+        if (MenuUx.Note(label, searchText)) MenuUx.Highlight(new Rect(Inset - 6f, _y - 1f, IW + 12f, 30f));
         var prev = GUI.color;
         if (!enabled) GUI.color = new Color(1f, 1f, 1f, 0.45f);
         GUI.Label(new Rect(Inset + 4f, _y, 190f, 28f), label, Theme.Label);
+        MenuUx.Tooltip(new Rect(Inset, _y, 196f, 28f), tooltip);
         GUI.Label(new Rect(Inset + IW - 80f, _y, 80f, 28f), shown, Theme.Value);
 
         var track = new Rect(Inset + 200f, _y + 11f, IW - 290f, 6f);
@@ -405,15 +490,17 @@ internal static class Menu
         return enabled ? v : value;
     }
 
-    private static void KeyValue(string key, string value)
+    internal static void KeyValue(string key, string value)
     {
+        if (MenuUx.Note(key)) MenuUx.Highlight(new Rect(Inset - 6f, _y, IW + 12f, 22f));
         GUI.Label(new Rect(Inset + 4f, _y, 176f, 22f), key, Theme.Muted_);
         GUI.Label(new Rect(Inset + 180f, _y, IW - 184f, 22f), value, Theme.Label);
         _y += 24f;
     }
 
-    private static void Bar(string label, float fraction, Color color, string text)
+    internal static void Bar(string label, float fraction, Color color, string text)
     {
+        MenuUx.Note(label);
         GUI.Label(new Rect(Inset + 4f, _y, 176f, 22f), label, Theme.Muted_);
         var track = new Rect(Inset + 180f, _y + 7f, IW - 250f, 8f);
         Theme.Fill(track, Theme.Off, 4);
@@ -432,8 +519,7 @@ internal static class Menu
         _y += 26f;
     }
 
-
-    private static void Chips(int columns, params (string label, Action action, bool enabled)[] items)
+    internal static void Chips(int columns, params (string label, Action action, bool enabled)[] items)
     {
         const float gap = 6f;
         float w = (IW - gap * (columns - 1)) / columns;
@@ -441,12 +527,15 @@ internal static class Menu
         {
             int col = i % columns;
             if (i > 0 && col == 0) _y += 36f;
-            if (ChipButton(new Rect(Inset + col * (w + gap), _y, w, 30f), items[i].label, items[i].enabled)) items[i].action();
+            var r = new Rect(Inset + col * (w + gap), _y, w, 30f);
+            bool hit = MenuUx.Note(items[i].label);
+            if (ChipButton(r, items[i].label, items[i].enabled)) items[i].action();
+            if (hit) Theme.Fill(new Rect(r.x + 6f, r.yMax - 3f, r.width - 12f, 2f), Theme.Accent, 1);
         }
         _y += 36f;
     }
 
-    private static bool ChipButton(Rect r, string label, bool enabled)
+    internal static bool ChipButton(Rect r, string label, bool enabled)
     {
         var prev = GUI.color;
         if (!enabled) GUI.color = new Color(1f, 1f, 1f, 0.35f);

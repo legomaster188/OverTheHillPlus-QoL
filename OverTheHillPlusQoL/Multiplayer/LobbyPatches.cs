@@ -102,7 +102,6 @@ internal static class MeasureCapacityPatch
             int colors = __instance.PlayerColors.Length;
             int names = __instance.PlayerRefToNameDictionary.Capacity;
             int cap = Math.Min(order, Math.Min(colors, names));
-            Plugin.Logger.LogInfo($"[Lobby] Networked player tables: order={order} colours={colors} names={names} -> capacity {cap}");
             if (cap > 0 && cap != ModConfig.MeasuredCapacity.Value)
             {
                 ModConfig.MeasuredCapacity.Value = cap;
@@ -146,18 +145,14 @@ internal static class SpawnPointPatch
 [HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.AddPlayer))]
 internal static class AddPlayerGuard
 {
-    private static void Prefix(OverlandSessionPlayers __instance, PlayerRef playerRef, string runtimePlayerPlayerName)
-    {
-        try
-        {
-            Plugin.Logger.LogInfo($"[Lobby] AddPlayer '{runtimePlayerPlayerName}': id={playerRef.PlayerId} index={playerRef.AsIndex} " +
-                                  $"(tables: order={__instance.OrderedPlayerRefs.Length} colours={__instance.PlayerColors.Length})");
-        }
-        catch { }
-    }
 
-    // Safety net only: with lobby guards on, AddPlayer is replaced entirely (BigLobby) and doesn't throw.
-    private static Exception Finalizer(Exception __exception) => LobbyRules.Guard("AddPlayer", __exception);
+    private static Exception Finalizer(Exception __exception, OverlandSessionPlayers __instance, PlayerRef playerRef)
+    {
+        var result = LobbyRules.Guard("AddPlayer", __exception);
+        // The game's AddPlayer stopped at the 4-slot limit: finish the steps it skipped.
+        if (__exception != null && result == null) BigLobby.FinishOverflowJoin(__instance, playerRef);
+        return result;
+    }
 }
 
 [HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.RemovePlayer))]

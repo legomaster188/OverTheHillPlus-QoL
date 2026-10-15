@@ -12,7 +12,7 @@
     <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
 
-    <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\over the hill</GameDir>
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\over the hill</GameDir>
     <BepInExDir>$(GameDir)\BepInEx</BepInExDir>
   </PropertyGroup>
 
