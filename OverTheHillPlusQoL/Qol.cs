@@ -137,11 +137,18 @@ internal static class SkipSplashPatch
     }
 }
 
-/// <summary>Shortens menu/screen fades.</summary>
-[HarmonyPatch(typeof(StateFadeTransition), MethodType.Constructor, typeof(FunCore.StateMachine.State), typeof(FunCore.StateMachine.State), typeof(float), typeof(bool))]
+/// <summary>Shortens menu/screen fades (scaled when the fade opens; the constructor can't be patched for native callers).</summary>
+[HarmonyPatch(typeof(StateFadeTransition), nameof(StateFadeTransition.Open))]
 internal static class FasterFadesPatch
 {
-    private static void Prefix(ref float fadeDuration) => fadeDuration *= Mathf.Clamp(ModConfig.FadeSpeed.Value, 0.05f, 1f);
+    private static readonly HashSet<IntPtr> Scaled = new();
+
+    private static void Prefix(StateFadeTransition __instance)
+    {
+        if (Scaled.Count > 256) Scaled.Clear();
+        if (!Scaled.Add(__instance.Pointer)) return;
+        __instance.duration *= Mathf.Clamp(ModConfig.FadeSpeed.Value, 0.05f, 1f);
+    }
 }
 
 /// <summary>Optional: no contextual tutorial hints.</summary>

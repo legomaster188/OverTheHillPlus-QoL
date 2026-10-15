@@ -146,7 +146,23 @@ internal static class SpawnPointPatch
 [HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.AddPlayer))]
 internal static class AddPlayerGuard
 {
-    private static Exception Finalizer(Exception __exception) => LobbyRules.Guard("AddPlayer", __exception);
+    private static void Prefix(OverlandSessionPlayers __instance, PlayerRef playerRef, string runtimePlayerPlayerName)
+    {
+        try
+        {
+            Plugin.Logger.LogInfo($"[Lobby] AddPlayer '{runtimePlayerPlayerName}': id={playerRef.PlayerId} index={playerRef.AsIndex} " +
+                                  $"(tables: order={__instance.OrderedPlayerRefs.Length} colours={__instance.PlayerColors.Length})");
+        }
+        catch { }
+    }
+
+    private static Exception Finalizer(Exception __exception, OverlandSessionPlayers __instance, PlayerRef playerRef, string runtimePlayerPlayerName)
+    {
+        var result = LobbyRules.Guard("AddPlayer", __exception);
+        // The game stopped halfway through registering this player: finish the important parts.
+        if (__exception != null && result == null) BigLobby.RecoverAddPlayer(__instance, playerRef, runtimePlayerPlayerName);
+        return result;
+    }
 }
 
 [HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.RemovePlayer))]
