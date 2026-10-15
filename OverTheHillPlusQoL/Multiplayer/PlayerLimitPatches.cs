@@ -64,7 +64,6 @@ internal static class OverlandStartGamePatch
             Plugin.Logger.LogInfo($"[Lobby] StartGame: mode={gameSetupContext.GameMode} MaxPlayers={gameSetupContext.MaxPlayers} fusionConfigPlayers={configPlayers}");
             if (!ModConfig.ExpandLobbySize.Value || gameSetupContext.GameMode == GameMode.Client) return;
 
-            RenameRoom(gameSetupContext);
             if (PlayerLimit.Pending > 0 && gameSetupContext.MaxPlayers != PlayerLimit.Pending)
                 gameSetupContext.MaxPlayers = PlayerLimit.Pending;
             int custom = ModConfig.CustomMaxPlayers.Value;
@@ -81,7 +80,7 @@ internal static class OverlandStartGamePatch
     /// Room names look like "&lt;id&gt;_legomaster188's room": the id before the first '_' keeps the session unique and
     /// backs join-by-code, so only the display part after it is replaced.
     /// </summary>
-    private static void RenameRoom(GameSetupContext ctx)
+    internal static void RenameRoom(GameSetupContext ctx)
     {
         if (string.IsNullOrEmpty(ctx.RoomName)) return;
         int cut = ctx.RoomName.IndexOf('_');
@@ -170,15 +169,42 @@ internal static class RoomNames
         return result;
     }
 
+    /// <summary>Colours the text in up to 8 runs, so a gradient costs ~150 characters instead of ~20 per letter.</summary>
     private static string PerChar(string text, System.Func<int, UnityEngine.Color> colorAt)
     {
-        var sb = new System.Text.StringBuilder(text.Length * 20);
-        for (int i = 0; i < text.Length; i++)
+        const int maxRuns = 8;
+        int run = System.Math.Max(1, (int)System.Math.Ceiling(text.Length / (double)maxRuns));
+        var sb = new System.Text.StringBuilder(text.Length + maxRuns * 24);
+        for (int i = 0; i < text.Length; i += run)
         {
-            if (char.IsWhiteSpace(text[i])) { sb.Append(text[i]); continue; }
             var c = colorAt(i);
-            sb.Append($"<color=#{(int)(c.r * 255):X2}{(int)(c.g * 255):X2}{(int)(c.b * 255):X2}>{text[i]}</color>");
+            string part = text.Substring(i, System.Math.Min(run, text.Length - i));
+            sb.Append($"<color=#{(int)(c.r * 255):X2}{(int)(c.g * 255):X2}{(int)(c.b * 255):X2}>{part}</color>");
         }
         return sb.ToString();
+    }
+}
+
+/// <summary>
+/// Renames and styles the server where the game builds the room name ("&lt;id&gt;_&lt;player&gt;'s room"). The id before the
+/// first '_' keeps the session unique and backs join-by-code, so only the part after it changes.
+/// </summary>
+[HarmonyPatch(typeof(OverlandNetworkUtils), nameof(OverlandNetworkUtils.GenerateRoomName))]
+internal static class RoomNamePatch
+{
+    private static void Postfix(ref string __result)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(__result)) return;
+            int cut = __result.IndexOf('_');
+            string prefix = cut >= 0 ? __result.Substring(0, cut + 1) : "";
+            string display = cut >= 0 ? __result.Substring(cut + 1) : __result;
+            string styled = RoomNames.Style(RoomNames.DisplayName(display));
+            if (styled == display) return;
+            Plugin.Logger.LogInfo($"[Lobby] Room name '{__result}' -> '{prefix + styled}' ({(prefix + styled).Length} chars)");
+            __result = prefix + styled;
+        }
+        catch (Exception e) { Plugin.Logger.LogWarning("[Lobby] Room rename failed: " + e.Message); }
     }
 }
