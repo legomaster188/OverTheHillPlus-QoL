@@ -12,6 +12,8 @@ Quality-of-life mod for **over the hill** (Funselektor). No cheats: nothing here
 **Lobbies**
 - Create Server offers 2–16 players (sizes above the game's tested 4 are marked *experimental*; everyone above 4 players should run the mod)
 - Crash guards and smart spawn points for bigger lobbies
+- Type an exact lobby size (up to 32)
+- Rename your server and colour its name (gold, cyan, rainbow, sunset…) — shows in everyone's server browser
 - "Plus lobby settings" button on the Create Server screen
 
 **Quality of life**

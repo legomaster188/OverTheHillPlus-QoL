@@ -168,6 +168,8 @@ internal static class Menu
 
 
 
+    private static string _customSizeText;
+
     // ---- PLUS mode ----
 
     private static void DrawQol()
@@ -220,6 +222,14 @@ internal static class Menu
         Card("Lobby size", "Bigger lobbies in the game's Create Server screen. Everyone in a lobby above 4 players should run this mod.", () =>
         {
             Switch(ModConfig.ExpandLobbySize, "Up to 16 players", "Adds 2–16 to the Max Players option", true);
+            GUI.Label(new Rect(Inset + 4f, _y, 190f, 28f), "Exact size (typed)", Theme.Label);
+            _customSizeText ??= ModConfig.CustomMaxPlayers.Value >= 2 ? ModConfig.CustomMaxPlayers.Value.ToString() : "";
+            _customSizeText = GUI.TextField(new Rect(Inset + 200f, _y, 80f, 28f), _customSizeText, 2, Theme.TextField);
+            int typed = int.TryParse(_customSizeText, out int ts) ? ts : 0;
+            int wanted = typed >= 2 ? Math.Min(typed, RoomNames.MaxCustomPlayers) : 0;
+            if (wanted != ModConfig.CustomMaxPlayers.Value) ModConfig.CustomMaxPlayers.Value = wanted;
+            GUI.Label(new Rect(Inset + 290f, _y, IW - 290f, 28f), wanted >= 2 ? $"hosting uses {wanted} (max {RoomNames.MaxCustomPlayers})" : "empty = Create Server choice", Theme.Small);
+            _y += 34f;
             float v = RawSlider("Preselected size", ModConfig.DefaultMaxPlayers.Value, 2f, LobbyRules.MaxPlayers,
                 LobbyRules.OptionLabel(ModConfig.DefaultMaxPlayers.Value), ModConfig.ExpandLobbySize.Value);
             int n = Mathf.RoundToInt(v);
@@ -228,6 +238,24 @@ internal static class Menu
                 ? $"{ModConfig.MeasuredCapacity.Value} players (measured)"
                 : "not measured yet — join or host any session once");
             Small("Above the network capacity, extra players get fallback spawn spots and placeholder names instead of crashing the lobby.");
+        });
+        Card("Server name", "Used for servers you host from now on. Leave empty for the game's default.", () =>
+        {
+            GUI.Label(new Rect(Inset + 4f, _y, 60f, 28f), "Name", Theme.Label);
+            string name = GUI.TextField(new Rect(Inset + 64f, _y, IW - 64f - 98f, 28f), ModConfig.CustomRoomName.Value ?? "", 40, Theme.TextField);
+            if (name != ModConfig.CustomRoomName.Value) ModConfig.CustomRoomName.Value = name;
+            if (ChipButton(new Rect(Inset + IW - 92f, _y, 92f, 28f), "Clear", !string.IsNullOrEmpty(ModConfig.CustomRoomName.Value)))
+                ModConfig.CustomRoomName.Value = "";
+            _y += 36f;
+            var styles = RoomNames.Styles.Select(st => (st == ModConfig.RoomNameStyle.Value ? $"[{st}]" : st, (Action)(() => ModConfig.RoomNameStyle.Value = st), true)).ToArray();
+            Chips(5, styles);
+            Switch(ModConfig.RoomNameBold, "Bold", null, true);
+            string preview = RoomNames.Style(RoomNames.DisplayName("legomaster188's room"));
+            var row = new Rect(Inset - 6f, _y, IW + 12f, 34f);
+            Theme.Fill(row, Theme.Hex(0x0E1218), 6);
+            GUI.Label(new Rect(Inset + 4f, _y + 4f, IW - 8f, 26f), "Preview:  " + preview, Theme.Label);
+            _y += 40f;
+            Small("Colours show in everyone's server browser, including players without the mod.");
         });
         Card("Stability", null, () =>
         {
