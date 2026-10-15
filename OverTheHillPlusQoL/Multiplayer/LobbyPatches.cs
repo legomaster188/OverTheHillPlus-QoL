@@ -156,13 +156,8 @@ internal static class AddPlayerGuard
         catch { }
     }
 
-    private static Exception Finalizer(Exception __exception, OverlandSessionPlayers __instance, PlayerRef playerRef, string runtimePlayerPlayerName)
-    {
-        var result = LobbyRules.Guard("AddPlayer", __exception);
-        // The game stopped halfway through registering this player: finish the important parts.
-        if (__exception != null && result == null) BigLobby.RecoverAddPlayer(__instance, playerRef, runtimePlayerPlayerName);
-        return result;
-    }
+    // Safety net only: with lobby guards on, AddPlayer is replaced entirely (BigLobby) and doesn't throw.
+    private static Exception Finalizer(Exception __exception) => LobbyRules.Guard("AddPlayer", __exception);
 }
 
 [HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.RemovePlayer))]
