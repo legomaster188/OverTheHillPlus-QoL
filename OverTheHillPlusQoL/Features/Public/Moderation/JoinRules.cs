@@ -305,7 +305,9 @@ internal static class JoinRules
         // Block list: a Steam id match needs no name.
         if (BlockEnabled.Value && Blocked.Count > 0)
         {
-            var hit = Match(Blocked, w.SteamId, key, labelsMatch: true);
+            // Labels only once the token was read: before that SteamId is 0 for everyone, and a "steam:X=Bob" entry
+            // would remove any Bob whose different Steam id just hadn't arrived yet.
+            var hit = Match(Blocked, w.SteamId, key, labelsMatch: w.TokenRead);
             if (hit != null) return RemovePlayer(w, name, $"on the block list ({hit.Shown})", now);
         }
         if (name == null && !timedOut && w.TokenRead && BlockEnabled.Value && HasNameEntries(Blocked)) return false; // wait for the name

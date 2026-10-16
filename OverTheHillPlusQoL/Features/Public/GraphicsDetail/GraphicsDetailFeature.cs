@@ -494,7 +494,7 @@ internal sealed class GraphicsDetailFeature : IFeature
 
     private static void IntSlider(ConfigEntry<int> e, string label, int min, int max, Func<int, string> shown, bool enabled)
     {
-        int v = Mathf.RoundToInt(Menu.RawSlider(label, e.Value, min, max, shown(e.Value), enabled));
+        int v = Mathf.RoundToInt(Menu.RawSlider(label, e.Value, min, max, shown(e.Value), enabled, keyStep: 1f));
         if (v != e.Value) e.Value = Mathf.Clamp(v, min, max);
     }
 

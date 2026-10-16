@@ -183,15 +183,37 @@ internal static class PlayerListRoster
 
     // ---- real names for players past the name table (host only knows them) ----
 
+    // Player ids start over in every session and are handed out again after someone leaves: a name is only kept for
+    // the session (runner) it was seen in and until that player leaves, so a new player never shows (or is judged by
+    // the join rules) under the name of whoever had their id before.
+    private static IntPtr _namesSession;
+
+    private static void SyncNamesSession()
+    {
+        IntPtr ptr = IntPtr.Zero;
+        try { ptr = GameState.Runner != null ? GameState.Runner.Pointer : IntPtr.Zero; } catch { }
+        if (ptr == _namesSession) return;
+        _namesSession = ptr;
+        RememberedNames.Clear();
+    }
+
     public static void Remember(PlayerRef p, string name)
     {
         if (string.IsNullOrEmpty(name)) return;
+        SyncNamesSession();
         try { RememberedNames[p.PlayerId] = name; } catch { }
+    }
+
+    /// <summary>The player left: their id may be given to the next player who joins.</summary>
+    public static void Forget(PlayerRef p)
+    {
+        try { RememberedNames.Remove(p.PlayerId); } catch { }
     }
 
     public static bool TryKnownName(PlayerRef p, out string name)
     {
         name = null;
+        SyncNamesSession();
         try { if (RememberedNames.TryGetValue(p.PlayerId, out name) && !string.IsNullOrEmpty(name)) return true; } catch { }
         try
         {
@@ -221,9 +243,21 @@ internal static class PlayerListRoster
 [HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.AddPlayer))]
 internal static class PlayerListRememberNamePatch
 {
-    private static void Postfix(PlayerRef playerRef, string runtimePlayerPlayerName)
+    // A prefix: the game's AddPlayer throws for players past its 4 slots, which would skip a postfix.
+    private static void Prefix(PlayerRef playerRef, string runtimePlayerPlayerName)
     {
         try { PlayerListRoster.Remember(playerRef, runtimePlayerPlayerName); } catch { }
+    }
+}
+
+/// <summary>Host: forget a leaving player's name, so the next player given their id doesn't inherit it.</summary>
+[HarmonyPatch(typeof(OverlandNetworkRunner), nameof(OverlandNetworkRunner.Fusion_INetworkRunnerCallbacks_OnPlayerLeft))]
+internal static class PlayerListForgetNamePatch
+{
+    // After the game's own leave handling (its "left" pop-up still finds the name); a finalizer also runs if it threw.
+    private static void Finalizer(PlayerRef player)
+    {
+        try { PlayerListRoster.Forget(player); } catch { }
     }
 }
 

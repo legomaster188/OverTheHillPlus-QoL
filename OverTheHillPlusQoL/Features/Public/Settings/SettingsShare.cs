@@ -34,6 +34,8 @@ internal sealed class SettingsShare : IFeature
     private static string _field = "";
     private static Plan _plan;
     private static List<(ConfigEntryBase entry, string value)> _undo;
+    private static string _undoWhat = "last import";
+    private static float _resetArmedUntil;
     private static bool _fileExists;
     private static float _nextFileCheck;
 
@@ -52,6 +54,7 @@ internal sealed class SettingsShare : IFeature
         _includePersonal = ModConfig.File.Bind(ConfigSection, "IncludePersonalText", false,
             "Include your server name and join message when you copy or save your settings.");
         Registry.Section(Registry.PlusMode, "QoL", Draw, 1000);
+        Registry.Section(Registry.PlusMode, "QoL", DrawReset, 1001);
     }
 
     // ---- which settings travel ----
@@ -260,7 +263,7 @@ internal sealed class SettingsShare : IFeature
         }
         // Never leave the menu without a working key.
         if (ModConfig.MenuKey.Value == Key.None) ModConfig.MenuKey.Value = menuKeyBefore == Key.None ? Key.F7 : menuKeyBefore;
-        _undo = undo.Count > 0 ? undo : _undo;
+        if (undo.Count > 0) { _undo = undo; _undoWhat = "last import"; }
         Save();
         Menu.SetStatus($"Imported {applied} settings from {plan.Source}");
     }
@@ -385,7 +388,73 @@ internal sealed class SettingsShare : IFeature
             Menu.Small("You can also paste a code into the box (Ctrl+V) and press Read.");
 
             if (_plan != null) DrawPlan(_plan);
-            if (_undo != null) Menu.Chips(1, ($"Undo last import ({_undo.Count} settings)", Undo, true));
+            if (_undo != null) Menu.Chips(1, ($"Undo {_undoWhat} ({_undo.Count} settings)", Undo, true));
+        });
+    }
+
+    // ---- reset ----
+
+    /// <summary>
+    /// What "Reset all settings" puts back to its default: every setting, except what is yours rather than a
+    /// preference (server name, join message, names and lists, see IsPersonal) and state the mod keeps for itself
+    /// (NeverTravels: measured capacity, remembered sort and search, profile fingerprints).
+    /// </summary>
+    private static bool Resettable(ConfigEntryBase e) => !NeverTravels(e) && !IsPersonal(e);
+
+    private static int CountChangedFromDefault()
+    {
+        int n = 0;
+        foreach (var kv in ModConfig.File)
+        {
+            var e = kv.Value;
+            try { if (Resettable(e) && !Equals(e.BoxedValue, e.DefaultValue)) n++; } catch { }
+        }
+        return n;
+    }
+
+    private static void ResetAll()
+    {
+        float now = Time.unscaledTime;
+        if (now > _resetArmedUntil)
+        {
+            int n = CountChangedFromDefault();
+            if (n == 0) { Menu.SetStatus("All settings are already at their defaults"); return; }
+            _resetArmedUntil = now + 5f;
+            Menu.SetStatus($"Press Reset again within 5 s to put {n} settings back to their defaults");
+            return;
+        }
+        _resetArmedUntil = 0f;
+
+        var undo = new List<(ConfigEntryBase, string)>();
+        foreach (var kv in ModConfig.File)
+        {
+            var e = kv.Value;
+            if (!Resettable(e)) continue;
+            try
+            {
+                if (Equals(e.BoxedValue, e.DefaultValue)) continue;
+                string before = e.GetSerializedValue();
+                e.BoxedValue = e.DefaultValue;
+                if (e.GetSerializedValue() != before) undo.Add((e, before));
+            }
+            catch (Exception ex) { Plugin.Logger.LogWarning($"Reset settings: {e.Definition.Key}: {ex.Message}"); }
+        }
+        // Never leave the menu without a working key.
+        if (ModConfig.MenuKey.Value == Key.None) ModConfig.MenuKey.Value = Key.F7;
+        if (undo.Count > 0) { _undo = undo; _undoWhat = "reset"; }
+        Save();
+        Plugin.Logger.LogInfo($"[Settings] Reset {undo.Count} settings to their defaults");
+        Menu.SetStatus(undo.Count == 0 ? "All settings are already at their defaults" : $"Reset {undo.Count} settings to their defaults (Undo is in Share settings)");
+    }
+
+    private static void DrawReset()
+    {
+        Menu.Card("Reset all settings", "Puts every setting back to its default. Your server name, join message and lists " +
+                                        "(favourites, block and allow lists, mutes) are kept.", () =>
+        {
+            bool armed = Time.unscaledTime <= _resetArmedUntil;
+            Menu.Chips(1, (armed ? "Press again to confirm" : "Reset all settings", ResetAll, true));
+            if (_undo != null && _undoWhat == "reset") Menu.Chips(1, ($"Undo reset ({_undo.Count} settings)", Undo, true));
         });
     }
 

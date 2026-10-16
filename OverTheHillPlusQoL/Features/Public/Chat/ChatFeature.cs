@@ -134,7 +134,7 @@ internal sealed class ChatFeature : IFeature
                     chips.Add(((muted ? "Unmute " : "Mute ") + Trim(ChatNet.NoTags(n), 20), () =>
                     {
                         ChatNet.SetMuted(n, !muted);
-                        Menu.SetStatus((muted ? "Unmuted " : "Muted ") + n);
+                        Menu.SetStatus((muted ? "Unmuted " : "Muted ") + ChatNet.NoTags(n));
                     }, true));
                 }
                 Menu.Chips(2, chips.ToArray());

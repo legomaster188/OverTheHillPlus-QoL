@@ -818,9 +818,12 @@ internal static class Menu
             if (capInt != ModConfig.FpsCap.Value) ModConfig.FpsCap.Value = capInt;
             Small("Above the game's own options (it tops out lower). Setting a cap turns VSync off.");
             Switch(ModConfig.RunInBackground, "Keep running when alt-tabbed", "Stops the session freezing for everyone when the host alt-tabs", true);
+            if (Features.Public.AltTab.AltTabHandbrake.Enabled != null)
+                Switch(Features.Public.AltTab.AltTabHandbrake.Enabled, "No parking brake when alt-tabbed", "Your car isn't parked when the game window loses focus", true);
             float bg = RawSlider("Background frame cap", ModConfig.BackgroundFpsCap.Value, 0f, 120f,
                 ModConfig.BackgroundFpsCap.Value <= 0 ? "off" : $"{ModConfig.BackgroundFpsCap.Value} fps", true);
             int bgInt = bg < 10f ? 0 : Mathf.RoundToInt(bg / 5f) * 5;
+            if (ModConfig.BackgroundFpsCap.Value <= 0 && bg > 0f && bg < 10f) bgInt = 10; // a key step up from "off"
             if (bgInt != ModConfig.BackgroundFpsCap.Value) ModConfig.BackgroundFpsCap.Value = bgInt;
         });
         Card("Camera", null, () =>
@@ -828,6 +831,7 @@ internal static class Menu
             float fov = RawSlider("Field of view", ModConfig.FovOverride.Value, 0f, 110f,
                 ModConfig.FovOverride.Value <= 0f ? "game setting" : $"{ModConfig.FovOverride.Value:0}°", true);
             float fovRounded = fov < 30f ? 0f : Mathf.Round(fov);
+            if (ModConfig.FovOverride.Value <= 0f && fov > 0f && fov < 30f) fovRounded = 30f; // a key step up from "game setting"
             if (Math.Abs(fovRounded - ModConfig.FovOverride.Value) > 0.01f) ModConfig.FovOverride.Value = fovRounded;
             Switch(ModConfig.ShowHud, $"Driving HUD ({ModConfig.HudKey.Value})", "Speed, RPM, gear, power, torque, slip", true);
         });
@@ -859,7 +863,7 @@ internal static class Menu
             Label(new Rect(Inset + 290f, _y, IW - 290f, 28f), wanted >= 2 ? $"hosting uses {wanted} (max {RoomNames.MaxCustomPlayers}{(wanted > 32 ? ", untested above 32" : "")})" : "empty = Create Server choice", Theme.Small);
             _y += 34f;
             float v = RawSlider("Preselected size", ModConfig.DefaultMaxPlayers.Value, 2f, LobbyRules.MaxPlayers,
-                LobbyRules.OptionLabel(ModConfig.DefaultMaxPlayers.Value), ModConfig.ExpandLobbySize.Value);
+                LobbyRules.OptionLabel(ModConfig.DefaultMaxPlayers.Value), ModConfig.ExpandLobbySize.Value, keyStep: 1f);
             int n = Mathf.RoundToInt(v);
             if (n != ModConfig.DefaultMaxPlayers.Value) ModConfig.DefaultMaxPlayers.Value = n;
             KeyValue("Network capacity", ModConfig.MeasuredCapacity.Value > 0
@@ -1241,10 +1245,13 @@ internal static class Menu
 
     private static GUIStyle _thumbHit;
 
-    internal static float RawSlider(string label, float value, float min, float max, string shown, bool enabled, string tooltip = null, string searchText = null)
+    /// <param name="keyStep">Smallest change the caller keeps (1 for whole numbers): keyboard / gamepad steps are at
+    /// least this big, or the caller's rounding would undo them and the slider couldn't move without a mouse.</param>
+    internal static float RawSlider(string label, float value, float min, float max, string shown, bool enabled, string tooltip = null, string searchText = null,
+        float keyStep = 0f)
     {
         bool hit = MenuUx.Note(label, searchText);
-        if (_native) return NativeSlider(label, value, min, max, shown, enabled, tooltip, hit);
+        if (_native) return NativeSlider(label, value, min, max, shown, enabled, tooltip, hit, keyStep);
         if (hit) MenuUx.Highlight(new Rect(Inset - 6f, _y - 1f, IW + 12f, 30f));
         var prev = GUI.color;
         if (!enabled) GUI.color = new Color(1f, 1f, 1f, 0.45f);
@@ -1262,7 +1269,7 @@ internal static class Menu
         return enabled ? v : value;
     }
 
-    private static float NativeSlider(string label, float value, float min, float max, string shown, bool enabled, string tooltip, bool hit)
+    private static float NativeSlider(string label, float value, float min, float max, string shown, bool enabled, string tooltip, bool hit, float keyStep)
     {
         var row = new Rect(Inset - 6f, _y - 1f, IW + 12f, 30f);
         var prev = GUI.color;
@@ -1290,6 +1297,7 @@ internal static class Menu
         if (side != 0 && enabled)
         {
             float step = (max - min) / (ShiftHeld() ? 100f : 20f);
+            if (keyStep > 0f) step = ShiftHeld() ? keyStep : Mathf.Max(keyStep, Mathf.Round(step / keyStep) * keyStep);
             v = Mathf.Clamp(value + side * step, min, max);
             NativeLook.PlaySlider();
         }

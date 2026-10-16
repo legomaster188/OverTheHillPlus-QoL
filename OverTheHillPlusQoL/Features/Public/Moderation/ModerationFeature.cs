@@ -65,7 +65,9 @@ internal sealed class ModerationFeature : IFeature
     {
         try { ModerationCore.Tick(); } catch (Exception e) { ModerationCore.LogOnce("core", "[Moderation] " + e.Message); }
         try { JoinRules.Tick(); } catch (Exception e) { ModerationCore.LogOnce("join", "[Moderation] Join rules: " + e); }
-        AfkWatch.Tick();
+        // Wrapped like the others: the registry switches off a tick hook for good after its first exception, and this
+        // hook also runs the join rules (the block list would stop while the menu still shows it on).
+        try { AfkWatch.Tick(); } catch (Exception e) { ModerationCore.LogOnce("afk", "[Moderation] AFK watch: " + e); }
     }
 
     // ---------------------------------------------------------------- join / leave
@@ -118,7 +120,7 @@ internal sealed class ModerationFeature : IFeature
 
     private static void IntSlider(ConfigEntry<int> e, string label, int min, int max, Func<int, string> shown, bool enabled)
     {
-        int v = Mathf.RoundToInt(Menu.RawSlider(label, e.Value, min, max, shown(e.Value), enabled));
+        int v = Mathf.RoundToInt(Menu.RawSlider(label, e.Value, min, max, shown(e.Value), enabled, keyStep: 1f));
         if (v != e.Value) e.Value = Mathf.Clamp(v, min, max);
     }
 

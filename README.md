@@ -16,9 +16,11 @@ button.
 **QoL**
 - Frame-rate cap above the game's own options, and a lower cap while the game is in the background.
 - **Unstuck** (button, optional hotkey): puts your car back on its wheels a little above the ground under it, in the
-  same spot (10 s cooldown). Solo or hosting it's instant; as a guest it asks the host, which works only when the host
-  runs this mod with the mod network on and accepts requests (hosts can switch that off).
-- Keep running when alt-tabbed, so a host who switches windows doesn't freeze the session for everyone.
+  same spot (10 s cooldown). It only works when the car really is stuck (on its side or roof, or barely moving), so it
+  can't be used to cancel a jump or a fall. Solo or hosting it's instant; as a guest it asks the host, which works
+  only when the host runs this mod with the mod network on and accepts requests (hosts can switch that off).
+- Keep running when alt-tabbed, so a host who switches windows doesn't freeze the session for everyone, and no
+  parking brake on your car when you alt-tab.
 - Field-of-view slider for the driving camera.
 - Driving HUD (**F8**): speed, RPM, gear, power, torque and wheel slip.
 - Longer compass range, automatic headlights at night.
@@ -29,6 +31,8 @@ button.
 - **Share settings**: copy all your settings as one code and paste it into a friend's game (or save them to a file).
   You see every change before it is applied, and the last import can be undone. Your server name and join message
   are left out unless you choose to include them.
+- **Reset all settings** (QoL tab): puts every setting back to its default, after a second press to confirm, and can
+  be undone. Your server name, join message, favourites and block, allow and mute lists are kept.
 
 **Lobby**
 - Lobbies of up to 16 players in the Create Server screen, or type an exact size (bigger sizes are marked
@@ -56,7 +60,9 @@ button.
   sort (and, if you want, your search text).
 - **All regions**: pick "All regions" at the bottom of the game's region list to see the servers of every region in
   one list, each tagged with its region. The browser visits the regions one after another (a few seconds each), and
-  joining a server in another region switches there first. Your own region is kept for hosting. Off by default.
+  joining a server in another region switches there first. Your own region is kept for hosting and joining by code,
+  and the browser goes back to it when you leave. It pauses while the game is in the background or you're away from
+  the keyboard for 3 minutes. Off by default.
 - **Steam friends**: servers where a Steam friend is playing are highlighted, tagged with their name and listed
   right after your favourites, or show only those servers. Your friends list is read from Steam on your own PC and
   is never sent to anyone.
@@ -133,7 +139,9 @@ Settings are saved in `BepInEx/config/` and can also be changed from the in-game
 
 ## Big lobbies: good to know
 
-- Everyone in a lobby above 4 players should run this mod. Lobbies of 4 or fewer work with anyone.
+- Lobbies above 4 players work best when everyone runs this mod. Players without it can still join: the host keeps
+  them from getting stuck on the loading screen, and when all 4 of the game's player slots are taken, a guest who
+  runs this mod lends theirs to someone who is loading in. Lobbies of 4 or fewer work with anyone.
 - The game was built for 4 players. With this mod, players 5 and up also show in the pre-game lobby, the pause menu
   player list, on the map, on the HUD and as name labels above cars. Players without the mod still see only the
   first 4 there.

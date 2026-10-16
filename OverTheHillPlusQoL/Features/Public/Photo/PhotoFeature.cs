@@ -68,7 +68,7 @@ internal sealed class PhotoFeature : IFeature
             if (Menu.ChipButton(Menu.NextRow(32f), label, !PhotoCapture.Busy)) PhotoCapture.Request();
 
             float size = Menu.RawSlider("Resolution", Mathf.Clamp(PhotoConfig.SuperSize.Value, 1, PhotoCapture.MaxFactor), 1f, PhotoCapture.MaxFactor,
-                $"{Mathf.Clamp(PhotoConfig.SuperSize.Value, 1, PhotoCapture.MaxFactor)}x", true);
+                $"{Mathf.Clamp(PhotoConfig.SuperSize.Value, 1, PhotoCapture.MaxFactor)}x", true, keyStep: 1f);
             int sizeInt = Mathf.Clamp(Mathf.RoundToInt(size), 1, PhotoCapture.MaxFactor);
             if (sizeInt != PhotoConfig.SuperSize.Value) PhotoConfig.SuperSize.Value = sizeInt;
             string res = $"Output {PhotoCapture.ResolutionText(n)}";

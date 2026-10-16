@@ -693,7 +693,8 @@ internal static class ModNet
             byte v = rd.Byte();
             if (rd.Ok && ch != Channels.Control && v > 0) into[ch] = v;
         }
-        return string.IsNullOrEmpty(version) ? "?" : version;
+        // Sent by another player's game and shown in rich-text menu labels: no markup.
+        return string.IsNullOrEmpty(version) ? "?" : Features.Public.Chat.ChatNet.NoTags(version);
     }
 
     private static void HandleControl(NetworkRunner r, bool server, PlayerRef from, byte type, byte[] bytes)

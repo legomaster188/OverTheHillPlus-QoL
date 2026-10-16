@@ -435,7 +435,8 @@ internal static class GovernorRuntime
         else _renderStatus = _shadowStatus = "";
 
         Lod.Apply(on && C.ScaleLod.Value, LodF[l]);
-        Fps.Apply(on && C.FpsCap.Value > 0, C.FpsCap.Value);
+        // At least 30: the host's frames drive the session, so a lower cap would lag every guest, not just this PC.
+        Fps.Apply(on && C.FpsCap.Value > 0, Math.Max(C.MinFpsCap, C.FpsCap.Value));
     }
 
     // ---------------------------------------------------------------- process priority

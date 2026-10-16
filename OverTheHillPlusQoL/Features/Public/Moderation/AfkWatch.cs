@@ -233,8 +233,11 @@ internal static class AfkWatch
             {
                 if (fp == null || fp.Object == null) continue;
                 if (!ByRaw.TryGetValue(fp.Object.InputAuthority.RawEncoded, out e)) continue;
+                // No vehicle = garage, car select or respawning: that time doesn't count (the player object alone would
+                // read as "has a car" and stand still).
                 var car = fp.vehicleBase;
-                t = car != null ? (car.cachedTransform != null ? car.cachedTransform : car.transform) : fp.transform;
+                if (car == null) continue;
+                t = car.cachedTransform != null ? car.cachedTransform : car.transform;
                 if (t == null) continue;
             }
             catch { continue; }

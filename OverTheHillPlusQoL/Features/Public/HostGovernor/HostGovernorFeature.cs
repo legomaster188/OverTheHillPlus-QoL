@@ -25,6 +25,8 @@ internal sealed class HostGovernorFeature : IFeature
     internal static ConfigEntry<bool> Enabled, ScaleRender, ScaleShadows, ScaleLod, Preempt, Priority;
     internal static ConfigEntry<float> TargetFps;
     internal static ConfigEntry<int> MinPlayers, MaxLevel, FpsCap;
+    /// <summary>Lowest host FPS cap actually applied (lower values are raised to this).</summary>
+    internal const int MinFpsCap = 30;
     internal static ConfigEntry<string> PriorityLevel;
 
     public void Register()
@@ -61,7 +63,7 @@ internal sealed class HostGovernorFeature : IFeature
 
     private static void IntSlider(ConfigEntry<int> e, string label, int min, int max, Func<int, string> shown, bool enabled)
     {
-        int v = Mathf.RoundToInt(Menu.RawSlider(label, e.Value, min, max, shown(e.Value), enabled));
+        int v = Mathf.RoundToInt(Menu.RawSlider(label, e.Value, min, max, shown(e.Value), enabled, keyStep: 1f));
         if (v != e.Value) e.Value = Mathf.Clamp(v, min, max);
     }
 
@@ -99,7 +101,7 @@ internal sealed class HostGovernorFeature : IFeature
             Menu.Switch(ScaleRender, "Render scale", "Biggest win on GPU-bound PCs", on);
             Menu.Switch(ScaleShadows, "Shadow distance", "Fewer shadow casters to draw", on);
             Menu.Switch(ScaleLod, "LOD bias", "Simpler models sooner", on);
-            IntSlider(FpsCap, "Host FPS cap", 0, 240, v => v <= 0 ? "off" : v + " fps", on);
+            IntSlider(FpsCap, "Host FPS cap", 0, 240, v => v <= 0 ? "off" : Math.Max(MinFpsCap, v) + " fps", on);
             if (on)
             {
                 foreach (var (name, status) in g.Knobs)
