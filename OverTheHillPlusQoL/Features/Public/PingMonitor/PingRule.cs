@@ -175,7 +175,9 @@ internal static class PingRule
                 e.HalfWarned = true;
                 Notify(e, NoticeWarning, ms, limit, Mathf.CeilToInt(need - e.AboveFor), kick);
             }
-            if (e.AboveFor >= need) Act(e, ms, limit, kick, now);
+            // With a single measured guest there's nothing to compare against: a bad connection on the host's side reads
+            // as that guest's high ping, so only warn them.
+            if (e.AboveFor >= need) Act(e, ms, limit, kick && measured >= 2, now);
         }
     }
 

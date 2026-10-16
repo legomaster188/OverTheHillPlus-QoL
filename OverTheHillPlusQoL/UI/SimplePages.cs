@@ -55,6 +55,8 @@ internal static class SimplePages
         SimpleMenu.Toggle(ModConfig.ShowHud, "Driving HUD", $"Speed, RPM and gear on screen. {KeyName(ModConfig.HudKey.Value)} shows or hides it.");
         SimpleMenu.Toggle(ModConfig.AutoHeadlights, "Auto headlights", "Headlights on from 19:00 to 07:00, off in daylight.");
         SimpleMenu.Toggle(ModConfig.RunInBackground, "Keep running when alt-tabbed", "An alt-tabbed host otherwise freezes the session for everyone.");
+        if (Features.Public.AltTab.AltTabHandbrake.Enabled != null)
+            SimpleMenu.Toggle(Features.Public.AltTab.AltTabHandbrake.Enabled, "No parking brake when alt-tabbed", "Your car isn't parked when you switch to another window.");
         SimpleMenu.Toggle(ModConfig.SkipSplash, "Skip logo screens", "Straight to the main menu when the game starts.");
         SimpleMenu.Toggle(ModConfig.HideTutorialHints, "Hide tutorial hints", "No more reminder pop-ups.");
 

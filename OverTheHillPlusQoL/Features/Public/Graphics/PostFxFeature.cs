@@ -81,7 +81,7 @@ internal sealed class PostFxFeature : IFeature
             Menu.Switch(PostFxSettings.TonemapOn, "Tonemapping", "How bright colours are squeezed into the screen range", On);
             bool t = On && PostFxSettings.TonemapOn.Value;
             int mode = Mathf.Clamp(PostFxSettings.TonemapMode.Value, 0, 3);
-            float m = Menu.RawSlider("Mode", mode, 0f, 3f, PostFxSettings.TonemapNames[mode], t);
+            float m = Menu.RawSlider("Mode", mode, 0f, 3f, PostFxSettings.TonemapNames[mode], t, keyStep: 1f);
             int nm = Mathf.Clamp(Mathf.RoundToInt(m), 0, 3);
             if (nm != mode) PostFxSettings.TonemapMode.Value = nm;
             Menu.SliderRow(PostFxSettings.TonemapExposure, "Exposure (pre)", 0.2f, 3f, "0.00", "x", t);

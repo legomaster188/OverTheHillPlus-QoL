@@ -92,7 +92,7 @@ internal sealed class RejoinFeature : IFeature
             Menu.SliderRow(CountdownSeconds, "Countdown", 0f, 30f, "0", " s", AutoRejoin.Value);
             Menu.SliderRow(KeepTryingSeconds, "Keep looking for", 15f, 300f, "0", " s", true);
             float tries = Menu.RawSlider("Attempts", MaxAttempts.Value, 1f, 5f, MaxAttempts.Value.ToString(), AutoRejoin.Value,
-                "Automatic join attempts before giving up", MaxAttempts.Description?.Description);
+                "Automatic join attempts before giving up", MaxAttempts.Description?.Description, keyStep: 1f);
             int rounded = Mathf.Clamp(Mathf.RoundToInt(tries), 1, 5);
             if (rounded != MaxAttempts.Value) MaxAttempts.Value = rounded;
             Menu.Switch(MainMenuButton, "REJOIN button on the main menu", "Next to PLUS, once a server is remembered", true);

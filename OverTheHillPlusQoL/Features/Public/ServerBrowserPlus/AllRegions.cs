@@ -475,6 +475,19 @@ internal static class AllRegions
     {
         try
         {
+            if (joiningByCode && Enabled != null && Enabled.Value)
+            {
+                // A room code only works in the region the room is in; before All regions that was always the player's
+                // own region, so go back there first instead of joining in whichever region the list visited last.
+                string home = HomeRegion.Value;
+                string at = LobbyRegion.Connected;
+                if (!string.IsNullOrEmpty(home) && (LobbyRegion.Switching || (at != null && !LobbyRegion.Same(at, home))))
+                {
+                    if (!LobbyRegion.Switching && LobbyRegion.InLobby) LobbyRegion.Switch(home, "[Browser+]");
+                    Menu.SetStatus($"Going back to your region ({home.ToUpperInvariant()}) to join by code: press Join again in a moment");
+                    return false;
+                }
+            }
             if (Enabled == null || !Enabled.Value || joiningByCode || info == null) { Hold(); return true; }
             string name = info.FusionSessionInfo?.Name;
             string region = RegionOf(name);
@@ -582,6 +595,7 @@ internal static class AllRegions
         if (Enabled == null) return;
         SwapOut(); // only ever swapped for the length of ApplyFilters
         float now = Time.unscaledTime;
+        if (UserActive()) _lastActivity = now;
         if (now < _nextStep) return;
         _nextStep = now + 0.25f;
         try { Step(now); }
@@ -597,11 +611,23 @@ internal static class AllRegions
     {
         if (!BrowserPlus.BrowserAlive)
         {
+            // Leaving the browser: go back to the home region, so the region the game saves (and uses next time, for
+            // hosting and room codes) is the player's own, not wherever the list happened to be.
+            if (_hopRegion != null && Enabled.Value && !string.IsNullOrEmpty(HomeRegion.Value))
+            {
+                _restoreHome = true;
+                _restoreTries = 0;
+                _restoreNextSwitch = 0f;
+            }
             _hopPending = false;
             _hopRegion = null;
             _pausedWhy = null;
+            _wasOpen = false;
+            // Never while a join is starting: switching would pull the runner away from it.
+            if (now >= _holdUntil && _joinName == null) StepRestore(now);
             return;
         }
+        if (!_wasOpen) { _wasOpen = true; _lastActivity = now; } // opening the browser counts as activity
 
         if (_deferredPick != null)
         {
@@ -629,6 +655,12 @@ internal static class AllRegions
         {
             StepHome();
             _pausedWhy = "the create tab is open";
+            return;
+        }
+        if (JoinByCodeTabShown())
+        {
+            StepHome();
+            _pausedWhy = "the join-by-code tab is open";
             return;
         }
         StepHop(now);
@@ -749,7 +781,42 @@ internal static class AllRegions
         else if (!TopIsBrowser()) why = "another screen is open";
         else if (!ListTabShown()) why = "the server list tab is not shown";
         else if (BrowserRefresh.Busy(out string busy)) why = busy;
+        // Every visit is a full lobby reconnect: none while the game is in the background or nobody is at the keyboard.
+        else if (!Application.isFocused) why = "the game is in the background";
+        else if (now - _lastActivity > IdleStop) why = "paused while idle (move the mouse to carry on)";
         return why == null;
+    }
+
+    private const float IdleStop = 180f;
+    private static float _lastActivity;
+    private static bool _wasOpen;
+
+    private static bool UserActive()
+    {
+        try
+        {
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null && kb.anyKey.wasPressedThisFrame) return true;
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse == null) return false;
+            if (mouse.leftButton.wasPressedThisFrame || mouse.rightButton.wasPressedThisFrame) return true;
+            if (mouse.scroll.ReadValue().sqrMagnitude > 0f) return true;
+            return mouse.delta.ReadValue().sqrMagnitude > 4f;
+        }
+        catch { return true; } // can't read input: never block the list on it
+    }
+
+    private static bool JoinByCodeTabShown()
+    {
+        try
+        {
+            var create = BrowserPlus.Browser?.ui?.ContextUICreateServer;
+            if (create == null) return false;
+            var menu = create.GetComponentInParent<ContextUIServerListMenu>(true);
+            var code = menu != null ? menu.ContextUIServerJoinByCode : null;
+            return code != null && code.gameObject.activeInHierarchy;
+        }
+        catch { return false; }
     }
 
     // ---------------------------------------------------------------- game state helpers

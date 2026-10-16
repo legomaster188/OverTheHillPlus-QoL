@@ -155,8 +155,9 @@ internal sealed class GraphicsLighting : IFeature
                 Menu.SliderRow(GodRayStrength, "Strength", 0f, 4f, "0.00", "x", true);
                 Menu.SliderRow(GodRayLength, "Ray length", 0.25f, 3f, "0.00", "x", true);
                 float s = Menu.RawSlider("Samples", GodRaySamples.Value, 0f, A.SamplesMax,
-                    GodRaySamples.Value <= 0 ? "game" : GodRaySamples.Value.ToString(), true);
+                    GodRaySamples.Value <= 0 ? "game" : GodRaySamples.Value.ToString(), true, keyStep: 1f);
                 int si = s < 4f ? 0 : Mathf.RoundToInt(s);
+                if (GodRaySamples.Value <= 0 && s > 0f && s < 4f) si = 4; // a key step up from "game"
                 if (si != GodRaySamples.Value) GodRaySamples.Value = si;
                 if (A.GodRaysZero)
                     Menu.Small("The game has scattering at zero right now (time of day / weather), so strength has nothing to multiply.");

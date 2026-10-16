@@ -72,7 +72,8 @@ internal sealed class PingMonitorFeature : IFeature
 
     private static void Tick()
     {
-        PingTracker.Tick();
+        // Each step on its own: the registry switches off a tick hook for good after its first exception.
+        try { PingTracker.Tick(); } catch (Exception e) { PingTracker.LogOnce("tracker", "[Ping] Tracker: " + e); }
         // The rule runs right after each new sample.
         if (PingTracker.InSession && PingTracker.Hosting && PingTracker.SampleCount != _lastEvaluated)
         {
@@ -80,8 +81,8 @@ internal sealed class PingMonitorFeature : IFeature
             try { PingRule.Evaluate(); }
             catch (Exception e) { PingTracker.LogOnce("rule", "[Ping] High-ping rule: " + e); }
         }
-        PingRule.Tick();
-        HotkeyTick();
+        try { PingRule.Tick(); } catch (Exception e) { PingTracker.LogOnce("ruletick", "[Ping] High-ping rule tick: " + e); }
+        try { HotkeyTick(); } catch (Exception e) { PingTracker.LogOnce("hotkey", "[Ping] Hotkey: " + e); }
     }
 
     private static void HotkeyTick()
@@ -132,7 +133,7 @@ internal sealed class PingMonitorFeature : IFeature
 
     private static void IntSlider(ConfigEntry<int> e, string label, int min, int max, Func<int, string> shown, bool enabled)
     {
-        int v = Mathf.RoundToInt(Menu.RawSlider(label, e.Value, min, max, shown(e.Value), enabled));
+        int v = Mathf.RoundToInt(Menu.RawSlider(label, e.Value, min, max, shown(e.Value), enabled, keyStep: 1f));
         if (v != e.Value) e.Value = Mathf.Clamp(v, min, max);
     }
 

@@ -87,6 +87,8 @@ internal static class MenuNav
             if (pad.leftTrigger.wasPressedThisFrame) _modeStep--;
             if (pad.rightTrigger.wasPressedThisFrame) _modeStep++;
             if (pad.selectButton.wasPressedThisFrame) _viewToggle = true;
+            // B / Start close the menu (Escape and F7 are keyboard only; the close button can't be reached with the pad).
+            if (pad.buttonEast.wasPressedThisFrame || pad.startButton.wasPressedThisFrame) OverTheHillPlus.Menu.CloseRequested = true;
         }
     }
 

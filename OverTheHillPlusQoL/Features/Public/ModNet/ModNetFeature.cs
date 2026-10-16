@@ -60,7 +60,7 @@ internal sealed class ModNetFeature : IFeature
                     string name;
                     try { name = PlayerListRoster.NameOf(sp, p.Ref); } catch { name = "Player " + p.Ref.PlayerId; }
                     string channels = p.Channels.Count == 0 ? "no features on" : string.Join(", ", p.Channels.Keys.Select(ModNet.ChannelName));
-                    Menu.KeyValue(Trim(name, 22), $"mod {p.ModVersion} · {channels}" + (p.Dropped > 0 ? $" · {p.Dropped} dropped" : ""));
+                    Menu.KeyValue(Trim(Features.Public.Chat.ChatNet.NoTags(name), 22), $"mod {p.ModVersion} · {channels}" + (p.Dropped > 0 ? $" · {p.Dropped} dropped" : ""));
                 }
             }
             int dropped = 0;

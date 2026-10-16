@@ -26,7 +26,7 @@ internal static class Unstuck
     private const float Lift = 1.2f;
     private const byte MsgRequest = 1, MsgReply = 2;
 
-    private enum Reply : byte { Done = 0, Disabled = 1, Cooldown = 2, NoCar = 3, Failed = 4 }
+    private enum Reply : byte { Done = 0, Disabled = 1, Cooldown = 2, NoCar = 3, Failed = 4, NotStuck = 5 }
 
     private static float _lastUse = -100f;
     private static float _pendingSince = -1f;
@@ -77,6 +77,7 @@ internal static class Unstuck
             if (!GameState.PhysicsAllowed) return "Blocked: your car is simulated elsewhere";
             var car = GameState.LocalCar;
             if (car == null) return "Failed: no car found (are you driving?)";
+            if (!IsStuck(car, out string notWhy)) return "Blocked: " + notWhy;
             if (!ResetCar(car, out string why)) return "Failed: " + why;
             _lastUse = Time.unscaledTime;
             return "Unstuck: your car is back on its wheels";
@@ -147,6 +148,7 @@ internal static class Unstuck
         {
             var car = CarOf(from);
             if (car == null) code = Reply.NoCar;
+            else if (!IsStuck(car, out _)) code = Reply.NotStuck;
             else if (ResetCar(car, out string why))
             {
                 code = Reply.Done;
@@ -173,6 +175,7 @@ internal static class Unstuck
         switch (code)
         {
             case Reply.Done: Report("Unstuck: the host put your car back on its wheels"); break;
+            case Reply.NotStuck: Report("Blocked: your car isn't stuck (unstuck works when it's on its side or roof, or barely moving)"); _lastUse = -100f; break;
             case Reply.Disabled: Report("Blocked: the host doesn't accept unstuck requests"); _lastUse = -100f; break;
             case Reply.Cooldown:
                 _lastUse = Time.unscaledTime - Cooldown + wait;
@@ -184,6 +187,29 @@ internal static class Unstuck
     }
 
     // ---------------------------------------------------------------- the reset
+
+    /// <summary>
+    /// Fair play: unstuck is for a car that is really stuck (on its side or roof, or barely moving and not falling),
+    /// never a way to cancel a jump, a fall or a crash. Only the player-facing paths check this; the convoy AI uses
+    /// ResetCar with its own rules.
+    /// </summary>
+    internal static bool IsStuck(VehicleBase car, out string why)
+    {
+        why = null;
+        try
+        {
+            var t = car.cachedTransform != null ? car.cachedTransform : car.transform;
+            if (t == null) return true;
+            if (t.up.y < 0.3f) return true; // on its side or roof
+            var rb = car.cachedRigidbody;
+            if (rb == null) return true;
+            var v = rb.linearVelocity;
+            if (v.y < -1.5f) { why = "your car is falling; wait until it lands"; return false; }
+            if (v.magnitude > 2f) { why = "your car is still moving (unstuck works when it's on its side or roof, or barely moving)"; return false; }
+            return true;
+        }
+        catch { return true; } // can't tell: don't block a player who may really be stuck
+    }
 
     /// <summary>The game's reset, with a ground raycast. Caller checks authority.</summary>
     internal static bool ResetCar(VehicleBase car, out string why)
