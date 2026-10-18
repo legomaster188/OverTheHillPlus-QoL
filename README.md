@@ -1,17 +1,51 @@
 # Over The Hill Plus QoL
 
 Quality-of-life mod for **over the hill** (Funselektor): a cleaner, smoother game with bigger lobbies, a better
-server browser and a few comfort options. Fair play: nothing in this mod gives you an advantage over other players,
+server browser and a few comfort options. Fair play: nothing in these mods gives you an advantage over other players,
 and your car drives exactly like the stock game.
 
-Open the menu with **F7** (or the **PLUS** button on the main menu). Every option can be switched off.
+It is a small **core** (the mod manager) plus separate **mods**. Install the core and any mods you like; each mod can
+be switched on or off, set up and updated from the **MODS** page in the game.
+
+Open it with **MODS** in the ESC menu, the **INSTALLED MODS** / **AVAILABLE MODS** buttons in the main menu's
+**MOD BROWSER**, or press **F7**. It uses the game's own settings rows, so mouse, keyboard and controller work as in the
+game's menus.
+
+## Mods
+
+| Mod | What it does |
+|---|---|
+| **Mod Manager** (core) | The MODS page, installing and updating mods, the mod network and the name filter |
+| Server Browser+ | Colour-coded rows, server age, favourites, filters, all regions, Steam friends, rejoin |
+| Server Creator+ | Server name styles and join message on the Create Server screen, players listed in the browser |
+| Big Lobbies | Lobbies of more than 4 players with colours, spots, names and cars for everyone |
+| Server Utils | Host governor, ping monitor, moderation, autosave, join smoothing, share settings |
+| Chat | Text chat with other players who run the mods |
+| Graphics+ | Graphics options past the game's own, with profiles |
+| Photo & Spectate | High-resolution screenshots, clean view, cinematic camera, spectating |
+| Map & HUD | Every player on the map and compass, pause menu list, name tags, driving HUD |
+| Driving QoL | Frame-rate cap, field of view, auto headlights, skip logos, Unstuck |
+| Tag & Hide and Seek | Server mod: host-run tag and hide and seek rounds with a timer, scores and "it" on the map |
+| Cargo Jobs | Server mod: pick-up and delivery jobs between points of interest for pebbles, checked by the host |
+| Waypoints+ | Named map pins per map, shared with the session, a dotted route to the pin you follow, host pushes a pin to everyone (everyone needs it) |
+| Race Mode | Checkpoint races with a countdown for everyone, sprints or laps, splits, a leaderboard per track and saved tracks (everyone needs it) |
+| Server Rules & MOTD | Welcome message and rules on join, timed announcements, vote kick (host only; guests may be vanilla) |
+| Discord Presence | Map, car and player count on your Discord profile (server name only if you allow it) |
+| Livery Packs | Livery packs from `BepInEx/config/oth.liveries/` in the garage's livery list, without mod.io |
+| Cosmetic Stacking | Shift + click a cosmetic in the garage to add it without removing the one already on; everyone sees the stack |
+| Vera Crossover | Server mod: a new car, a mid-size seven-seat crossover in the game's style, with colours, skins and the game's cosmetics (everyone needs it). Model based on "Hyundai ix55- Veracruz 2011" by Nieve5677 (Sketchfab), CC BY 4.0 |
+| Terrier 4WD Wagon | Server mod: a new car, a small early-80s four-wheel-drive wagon in the game's style, with period colours, skins and the game's cosmetics (everyone needs it) |
+| Hilo 89 | Server mod: a new car, a late-1980s compact 4x4 pickup in the game's style: light, sturdy, with period colours, black or chrome bumpers, skins and the game's cosmetics (everyone needs it). Model based on "Toyota Hilux 1989" by Plevako (Sketchfab), CC BY 4.0 |
+| Bastion 200 | Server mod: a new car, a 2000s full-size 4x4 SUV in the game's style: big, heavy and strong, with long suspension travel, period colours, chrome or black brightwork, skins and the game's cosmetics (everyone needs it). Model based on "Toyota Land Cruiser J200 2017" by David_Holiday (Sketchfab), CC BY 4.0 |
+| Carpați 24 | Server mod: a new car, a classic 1970s five-door 4x4 hardtop in the game's style: heavy, low-geared and tough, with period colours, chrome or black brightwork, skins and the game's cosmetics (everyone needs it) |
+| Trailers | Server mod: tow a utility trailer, a teardrop camper, a car hauler or a boat (everyone needs it) |
+
+Everything below lists what the mods do, grouped by topic.
 
 ## Features
 
-The menu opens in its **Simple** view: four short pages (Play, Servers, Hosting, Graphics) with the settings most
-players use. Switch to **Advanced** at the top for every option, grouped in tabs, with a search box that finds any
-option by name. Both views change the same settings. The menu's own settings are behind the button next to the close
-button.
+Every mod's page on the MODS page shows its everyday settings first, then an **Advanced** fold with every option, with
+cards named after the groups below. Every feature can be switched off.
 
 **QoL**
 - Frame-rate cap above the game's own options, and a lower cap while the game is in the background.
@@ -116,20 +150,34 @@ button.
 - A moderation log of everything the rules did, and a player list with idle times and a block button.
 
 **Menu**
-- Simple / Advanced view, menu size, hover tooltips, keybinds you can change, and the settings search box (Ctrl+F).
-- Menu style: **Native** (default) draws the menu like the game's own menus, with its fonts, panels, yellow
-  highlight bar and sounds, and adds keyboard / gamepad navigation (arrows or d-pad, Enter or A, Q / E for tabs).
-  **Classic** is the original dark panel. If the native look can't be built, the menu switches to Classic by itself.
+- The **MODS** page looks like the game's own menus: an INSTALLED tab (one row per mod with its version and an ON / OFF
+  switch; a switch takes effect after a restart) and an AVAILABLE tab. Open a mod for its settings: the everyday ones
+  first, then an **Advanced** fold with the rest.
+- Mouse, keyboard (arrows, Enter, Esc, Q / E for tabs) and gamepad (d-pad, A / B, bumpers). Hover tooltips, keybinds
+  you can change and a settings search box (Ctrl+F).
+- Menu style: **Native** (default) draws the pages like the game's own menus, with its fonts, panels and yellow
+  highlight bar. **Classic** is a plain dark panel. If the native look can't be built, it switches to Classic by itself.
 
 ## Install
 
 1. Install **BepInEx 6 for IL2CPP** (bleeding-edge build #788 or newer that supports Unity 6) into the game folder:
    the folder that contains `over the hill.exe`.
 2. Start the game once and quit, so BepInEx can set itself up.
-3. Put `OverTheHillPlusQoL.dll` in `BepInEx/plugins/OverTheHillPlusQoL/`.
-4. Start the game and press **F7**.
+3. Download `OTH.Core.dll` from the [latest release](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/latest)
+   and put it in `BepInEx/plugins/OverTheHillMods/`. Add any mods you want (`OTH.Chat.dll`, `OTH.Graphics.dll`, ...)
+   to the same folder. Every mod needs the core.
+4. Start the game, press **Esc** and choose **MODS** (or press **F7**).
 
-Settings are saved in `BepInEx/config/` and can also be changed from the in-game menu.
+After that you don't need to download anything by hand: open **AVAILABLE MODS** in the MOD BROWSER to install more
+mods, update the ones you have, or uninstall them. Downloads come only from this repository's releases, over HTTPS,
+and each file's SHA-256 and size are checked before it is put in place. Nothing about you is sent. Changes apply the next
+time the game starts.
+
+Settings are saved in `BepInEx/config/` (one file per mod, `oth.<id>.cfg`) and can also be changed on the MODS page.
+
+**Coming from the single-file version (`OverTheHillPlus`)?** Remove `BepInEx/plugins/OverTheHillPlus/` and install the
+core. On the first start your old settings are moved into the new files (the old file is kept as `.migrated`). While the
+old plugin is still installed the new mods stay off and the MODS page says so.
 
 ## Big lobbies: good to know
 
@@ -142,15 +190,25 @@ Settings are saved in `BepInEx/config/` and can also be changed from the in-game
 ## Build from source
 
 Needs the .NET 6 SDK (or newer) and the game with BepInEx installed and started once (it generates the reference
-assemblies the project builds against).
+assemblies the projects build against).
 
 ```
-dotnet build OverTheHillPlusQoL -c Release -p:GameDir="C:\path\to\over the hill"
+dotnet build src/OverTheHillMods.sln -c Release -p:GameDir="C:\path\to\over the hill"
 ```
 
-The build copies the plugin into the game's `BepInEx/plugins` folder; add `-p:NoDeploy=true` to only build it.
+The build copies each DLL into the game's `BepInEx/plugins/OverTheHillMods` folder; add `-p:NoDeploy=true` to only build
+(always do that while the game is running).
+
+## Make your own mod
+
+Mods by other creators can show up on the MODS page with their own settings page, switch and config file, and talk to
+other players over the mod network: see [docs/modding-api.md](docs/modding-api.md) and the example in `examples/HelloMod`.
+Plain BepInEx plugins are listed on the MODS page too, and can be switched off there.
 
 ## Notes
 
 This is a fan-made mod, not made or supported by Funselektor. Please report problems with the mod here, not to the
-game's developers. Include `BepInEx/LogOutput.log` when you report a problem.
+game's developers. Include `BepInEx/LogOutput.log` when you report a problem, and the newest file of
+`BepInEx/oth-debug/` (the mods' debug log: hangs, slow frames and each error once, with the mod it belongs to). After a
+crash or a freeze, the next start writes `BepInEx/oth-reports/crash-<time>.txt`: include that too. For more detail,
+set `Level = Verbose` under `[Debug]` in `BepInEx/config/oth.core.cfg` and play until it happens again.
