@@ -232,6 +232,7 @@ internal static class SessionThrottleResetPatches
     private static void OnRegionChanged() => SessionThrottle.Reset();
 }
 
+
 /// <summary>Logs the server browser's region choice and searches (diagnostics for servers missing from the list).</summary>
 [HarmonyPatch(typeof(ContextUIServerList), nameof(ContextUIServerList.ServerRegionOnChanged))]
 internal static class BrowserRegionLogPatch
@@ -240,6 +241,7 @@ internal static class BrowserRegionLogPatch
     {
         try
         {
+
 
             ServerBrowserPlugin.Logger.LogInfo($"[Browser+] region picked in the browser: option {optionIndex}");
         }
