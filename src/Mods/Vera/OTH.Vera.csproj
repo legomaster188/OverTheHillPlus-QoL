@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Vera</AssemblyName>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model (vera.mesh) and its textures, read with VeraAssets. The repo ships stand-ins made by
+         tools/vera_placeholder.py; the Blender export (Liveries/vera/) replaces them. -->
+    <EmbeddedResource Include="Assets\*.mesh;Assets\*.png" Exclude="Assets\card.png" LogicalName="vera/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
