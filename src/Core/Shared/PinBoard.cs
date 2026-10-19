@@ -297,11 +297,6 @@ internal readonly struct NamedPoint
     public bool HasColor => Color != NoColor;
 }
 
-/// <summary>
-/// Spots mods share with each other through core, so mods never reference each other: Waypoints+ publishes its saved
-/// and session pins here (and the spot its route leads to, <see cref="SetTarget"/>); Race Mode offers them as
-/// checkpoints and the Minimap draws them and the route. Main thread only.
-/// </summary>
 internal static class PinSources
 {
     private static readonly Dictionary<string, NamedPoint[]> ByOwner = new(StringComparer.Ordinal);

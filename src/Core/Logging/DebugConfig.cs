@@ -15,6 +15,7 @@ internal static class DebugConfig
     public static ConfigEntry<int> KeepFiles;
     public static ConfigEntry<Key> SnapshotKey;
     public static ConfigEntry<bool> SnapshotCtrlShift;
+    public static ConfigEntry<bool> CarPhysicsLog;
 
     public static void Bind(ConfigFile cfg)
     {
@@ -41,6 +42,11 @@ internal static class DebugConfig
             "the MODS page has the same button.");
         SnapshotCtrlShift = cfg.Bind("Debug", "SnapshotCtrlShift", true,
             "The snapshot key only counts while Ctrl and Shift are held, so it is not hit by accident. Off: the key alone.");
+        CarPhysicsLog = cfg.Bind("Debug", "CarPhysicsLog", false,
+            "For a modded car, write to BepInEx/LogOutput.log once when it spawns: its rigidbody, brakes, converter, engine and " +
+            "wheels as the physics has them, every collider (with its size and place on the car) and every light, flare and " +
+            "smoke or dust emitter it carries; then, while it stands still, a line every 2 s of how much it moves (bounce, " +
+            "pitch and roll, wheel spin, engine rpm). Takes effect at once.");
     }
 
     /// <summary>The setting, or <paramref name="fallback"/> before the config is bound.</summary>

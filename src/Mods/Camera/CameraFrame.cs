@@ -15,6 +15,7 @@ internal static class CameraFrame
         CoreBehaviour.Hotkeys += Hotkeys;
         CoreBehaviour.AfterFeatureTicks += CameraRig.CheckHook;
         CoreBehaviour.AfterGuis += DrawName;
+        ExtraCameras.TurningOn += CameraRig.ExtraTurningOn;
     }
 
     private static void Hotkeys(Keyboard kb)
@@ -36,7 +37,7 @@ internal static class CameraFrame
         {
             Theme.Ensure();
             var screen = HudLayout.Begin();
-            string text = "CAMERA  ·  " + CameraMath.Name(CameraConfig.Mode.Value).ToUpperInvariant();
+            string text = "CAMERA  ·  " + (ExtraCameras.Active?.Name ?? CameraMath.Name(CameraConfig.Mode.Value)).ToUpperInvariant();
             var r = new Rect(screen.x * 0.5f - 130f, screen.y * 0.22f, 260f, 34f);
             float a = Mathf.Clamp01((NameFor - age) / 0.3f);
             var prev = GUI.color;

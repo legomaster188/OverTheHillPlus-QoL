@@ -77,8 +77,9 @@ internal sealed class GamePage
         rt.anchorMin = area.anchorMin;
         rt.anchorMax = area.anchorMax;
         rt.pivot = area.pivot;
-        rt.anchoredPosition = area.anchoredPosition;
-        rt.sizeDelta = area.sizeDelta;
+        var (pos, size) = Grown(area);
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = size;
         rt.localScale = area.localScale;
         rt.localRotation = area.localRotation;
         var le = root.AddComponent<LayoutElement>();
@@ -143,8 +144,19 @@ internal sealed class GamePage
         if (rt.anchorMin != area.anchorMin) rt.anchorMin = area.anchorMin;
         if (rt.anchorMax != area.anchorMax) rt.anchorMax = area.anchorMax;
         if (rt.pivot != area.pivot) rt.pivot = area.pivot;
-        if (rt.anchoredPosition != area.anchoredPosition) rt.anchoredPosition = area.anchoredPosition;
-        if (rt.sizeDelta != area.sizeDelta) rt.sizeDelta = area.sizeDelta;
+        var (pos, size) = Grown(area);
+        if (rt.anchoredPosition != pos) rt.anchoredPosition = pos;
+        if (rt.sizeDelta != size) rt.sizeDelta = size;
+    }
+
+    /// <summary>The page's anchored position and size: the area's, reaching <see cref="PageRect.GrowTop"/> higher (over
+    /// the liveries' sort / filter line, hidden while the page is up).</summary>
+    private static (Vector2 pos, Vector2 size) Grown(RectTransform area)
+    {
+        var p = area.anchoredPosition;
+        var s = area.sizeDelta;
+        var g = PageRect.Grow(p.x, p.y, s.x, s.y, area.pivot.x, area.pivot.y, 0f, 0f, PageRect.GrowTop, 0f);
+        return (new Vector2(g.x, g.y), new Vector2(g.w, g.h));
     }
 
     public void SetVisible(bool on)
@@ -266,7 +278,7 @@ internal sealed class GamePage
         grid.startAxis = GridLayoutGroup.Axis.Horizontal;
         grid.childAlignment = TextAnchor.UpperLeft;
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        grid.constraintCount = GamePrefabs.GridColumns;
+        grid.constraintCount = Columns;
         var sp = GamePrefabs.CellSpacing;
         grid.spacing = sp.x > 0f || sp.y > 0f ? sp : new Vector2(16f, 16f);
         grid.padding = new RectOffset(0, 0, 4, 4);
@@ -275,8 +287,16 @@ internal sealed class GamePage
     }
 
     private float _cellW = -1f;
+    private int _columns = -1;
 
-    /// <summary>The cards' size: the browser's cell when its columns fit the page's width, else shrunk to fit.</summary>
+    /// <summary>The cards' grid columns (ours from the page's width, else the browser's).</summary>
+    private int Columns => _columns > 0 ? _columns : GamePrefabs.GridColumns;
+
+    /// <summary>
+    /// The cards' size. Cards laid out by us (badges in a strip under the picture): as wide as the page allows with
+    /// cards of at least <see cref="CardLayout.MinCellWidth"/> (two columns on the browser's panel), the picture 16:9.
+    /// Else the browser's cell when its columns fit the page's width, shrunk to fit when not.
+    /// </summary>
     private void SizeCells()
     {
         if (_grids.Count == 0 || _content == null) return;
@@ -284,15 +304,37 @@ internal sealed class GamePage
         float width = _content.rect.width - (vlg != null ? vlg.padding.left + vlg.padding.right : 0);
         if (width < 1f) return;
         var grid0 = _grids[0];
-        var size = CardGrid.CellSize(width, GamePrefabs.GridColumns, grid0.spacing.x, 0f, GamePrefabs.CellSize.x, GamePrefabs.CellSize.y);
-        if (Mathf.Abs(size.w - _cellW) < 0.5f) return;
-        _cellW = size.w;
-        foreach (var g in _grids) g.cellSize = new Vector2(size.w, size.h);
+        bool ours = true;
+        foreach (var r in _rows)
+            if (r.Kind == WidgetKind.Card && !r.Stripped) { ours = false; break; }
+        int columns;
+        float w, h;
+        if (ours)
+            (columns, w, h) = CardLayout.Cell(width, grid0.spacing.x);
+        else
+        {
+            columns = GamePrefabs.GridColumns;
+            (w, h) = CardGrid.CellSize(width, columns, grid0.spacing.x, 0f, GamePrefabs.CellSize.x, GamePrefabs.CellSize.y);
+        }
+        if (Mathf.Abs(w - _cellW) < 0.5f && columns == _columns) return;
+        _cellW = w;
+        foreach (var g in _grids)
+        {
+            g.cellSize = new Vector2(w, h);
+            if (g.constraintCount != columns) g.constraintCount = columns;
+        }
+        foreach (var r in _rows)
+            if (r.Kind == WidgetKind.Card) r.SizeCard(w);
+        if (columns != _columns)
+        {
+            _columns = columns;
+            LinkNavigation(); // up / down go a row of cards: the row length changed
+        }
     }
 
     private void LinkNavigation()
     {
-        var nav = CardGrid.Nav(_kinds, GamePrefabs.GridColumns);
+        var nav = CardGrid.Nav(_kinds, Columns);
         for (int i = 0; i < _rows.Count; i++)
         {
             var s = _rows[i].Selectable;

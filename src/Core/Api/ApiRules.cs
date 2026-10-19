@@ -55,12 +55,13 @@ internal static partial class ApiRules
             {
                 "core",
                 // Released mods.
-                "biglobbies", "chat", "drivingqol", "graphics", "maphud", "photo", "serverbrowser", "servercreator",
+                "biglobbies", "chat", "drivingqol", "graphics", "photo", "serverbrowser", "servercreator",
                 "serverutils",
                 // Round 5.
-                "vera", "waypoints", "race", "tag", "ghosts", "stats", "camera", "radio", "horns", "rules", "discord",
-                "minimap", "hudplus", "autoshot", "cargo", "liverypacks", "tercel", "trailers", "stacking", "aro", "hilo",
-                "bastion",
+                "vera", "camera", "rules", "discord",
+                "realnights", "cockpit", 
+                // Round 6.
+                
             };
             AddPrivate(ids);
             return _reserved = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);

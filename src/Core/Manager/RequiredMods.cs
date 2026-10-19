@@ -142,11 +142,24 @@ internal sealed class JoinPlan
 /// first, then ours, then other creators' (<see cref="AdvertisedMods"/>), and a mod that doesn't fit doesn't stop
 /// smaller ones after it. Readers of the first format ("id@major.minor" only) read this one too: they skip the np
 /// token (no '@') and read "id@1" as 1.0. Vanilla clients ignore the key.
+/// <para>Compact token: "|k1&lt;entries&gt;", four characters per mod of ours: a two-character code (the mod's place
+/// in <see cref="CodeTable"/> in base 36; the table only ever grows at its end, so a code never changes meaning), the major
+/// version and the minor version, each one base-36 character (the minor is '_' when only the major is sent, as for mods
+/// without network prefabs). Example: "r1|np1:0123456789abcdef|k100110041_|someone.weather@0". A mod not in the table, or
+/// with a version part above 35, is sent as "id@version" as before. Older clients read only "id@version" tokens and the np
+/// token: they skip the k token (no '@') and so see the other creators' mods only, which degrades to "no requirements
+/// known" for ours instead of failing; the np token still tells them the prefab mods. A later token version ("k3...") is
+/// skipped by this reader, and codes it doesn't know count as "more mods".</para>
+/// <para>Mask token: "|k2&lt;mask&gt;[.&lt;entries&gt;]" replaces "k1" once the "k1" token is longer than
+/// <c>MaskMinK1Chars</c> and "k2" is shorter: bit i of the mask (base64url, six bits per character, lowest bit first) is
+/// <see cref="CodeTable"/> mod i at major 1 (and minor 0 for a prefab mod), and mods at another version follow the dot as
+/// "k1" entries. Clients that only know "k1" skip it (no '@') and see the other creators' mods only, as they did before
+/// "k1" existed.</para>
 /// <para>Budget: othp.req and the player names (othp.pl) share the 300 value bytes the names property was given
 /// (PlayerNamesProperty.MaxValueBytes; the names publisher gives up what othp.req takes, see RequiredModsSession.BytesIn).
 /// Every Server mod should be listed (a guest runs only the listed ones), so othp.req may take up to
-/// <see cref="MaxValueBytes"/> of them; the names keep the rest. All our public Server mods take about 120 bytes, so
-/// there is room for several mods of other creators. One property, not two: a second key would use a property slot and
+/// <see cref="MaxValueBytes"/> of them; the names keep the rest. Our own mods go into one compact token (below), so all
+/// our public Server mods take about 80 bytes and there is room for several mods of other creators. One property, not two: a second key would use a property slot and
 /// its own overhead from the same 500 bytes, and older guests read only this one.</para>
 /// </summary>
 internal static class RequiredMods
@@ -162,6 +175,34 @@ internal static class RequiredMods
     /// <summary>What the player names keep at the least (key, overhead and <see cref="MaxValueBytes"/> taken off).</summary>
     public const int NamesKeepBytes = SharedBytes - MaxValueBytes - 12;
     private const string PrefabPrefix = "np";
+    private const string CompactPrefix = "k1";
+    private const string MaskPrefix = "k2";
+    private const int CompactEntryChars = 4;
+    /// <summary>The "k1" token switches to "k2" once it is longer than this (about 20 mods): short lists stay readable by
+    /// clients that only know "k1".</summary>
+    private const int MaskMinK1Chars = 80;
+    private const string Base64Url = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    private const int CompactMaxPart = 35;
+    private const string Base36 = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+    /// <summary>Our Server mods' ids, by code (the index in base 36, two characters). Append only: never reorder or remove
+    /// an entry, a released client reads the codes by position. A test pins the start of it and that every public Server
+    /// mod is in it.</summary>
+    public static readonly IReadOnlyList<string> CodeTable = new[]
+    {
+        "vera", "-", "-", "-", "chat", "-", "-", "biglobbies", "-", "-",
+        "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
+        "-", "-", "-",
+    };
+
+    private static int CodeOf(string id)
+    {
+        for (int i = 0; i < CodeTable.Count; i++)
+            if (string.Equals(CodeTable[i], id, StringComparison.OrdinalIgnoreCase)) return i;
+        return -1;
+    }
+
+    private static int FromBase36(char c) => c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'z' ? c - 'a' + 10 : -1;
     public const int MaxIdChars = 40;
     public const int MaxMods = 32;
     private const int MaxVersionPart = 9999;
@@ -259,22 +300,80 @@ internal static class RequiredMods
             bytes += 1 + prefabToken.Length;
         }
         else prefabToken = null;
+        var entries = new List<CompactEntry>();
+        var texts = new StringBuilder();
         foreach (var m in mods)
         {
             string id = m.Id;
             if (!IsValidId(id) || !seen.Add(id)) continue;
             if (written >= MaxMods) { leftOut.Add(id); continue; }
-            string ver = m.Prefab ? ShortVersion(m.Version) ?? "0.0" : MajorVersion(m.Version) ?? "0";
-            string token = "|" + id + "@" + ver;
-            int tb = Encoding.UTF8.GetByteCount(token);
+            TryParseVersion(m.Version, out int major, out int minor);
+            int code = CodeOf(id);
+            bool packed = code >= 0 && code < 36 * 36 && major <= CompactMaxPart && (!m.Prefab || minor <= CompactMaxPart);
+            var entry = new CompactEntry { Code = code, Major = major, Minor = m.Prefab ? minor : 0, MinorKnown = m.Prefab };
+            string token = null;
+            int tb;
+            if (packed)
+            {
+                int before = CompactToken(entries).Length;
+                entries.Add(entry);
+                tb = CompactToken(entries).Length - before;
+                entries.RemoveAt(entries.Count - 1);
+            }
+            else
+            {
+                string ver = m.Prefab ? ShortVersion(m.Version) ?? "0.0" : MajorVersion(m.Version) ?? "0";
+                token = "|" + id + "@" + ver;
+                tb = Encoding.UTF8.GetByteCount(token);
+            }
             if (bytes + tb > maxBytes - reserve) { leftOut.Add(id); continue; }
-            sb.Append(token);
+            if (packed) entries.Add(entry);
+            else texts.Append(token);
             bytes += tb;
             written++;
         }
+        sb.Append(CompactToken(entries));
+        sb.Append(texts);
         if (written == 0 && leftOut.Count == 0) return prefabToken == null ? null : sb.ToString();
         if (leftOut.Count > 0) sb.Append("|+").Append(Math.Min(leftOut.Count, 99).ToString(CultureInfo.InvariantCulture));
         return sb.ToString();
+    }
+
+    private struct CompactEntry
+    {
+        public int Code, Major, Minor;
+        public bool MinorKnown;
+    }
+
+    /// <summary>What a set bit in a "k2" mask stands for: major 1, and minor 0 for a prefab mod (no minor otherwise).
+    /// Fixed forever: a client reads old values by it.</summary>
+    private static bool IsMaskDefault(CompactEntry e) =>
+        e.Major == 1 && e.MinorKnown == OverTheHillPlus.Core.Shared.NetPrefabPlan.IsOwnerMod(CodeTable[e.Code]) && (!e.MinorKnown || e.Minor == 0);
+
+    private static string EntryText(CompactEntry e) =>
+        new string(new[] { Base36[e.Code / 36], Base36[e.Code % 36], Base36[e.Major], e.MinorKnown ? Base36[e.Minor] : '_' });
+
+    /// <summary>The compact token ("|k1..." or "|k2...") for these entries, "" when there are none. "k2" once "k1" is long
+    /// and "k2" is the shorter one.</summary>
+    private static string CompactToken(List<CompactEntry> entries)
+    {
+        if (entries.Count == 0) return "";
+        var k1 = new StringBuilder("|" + CompactPrefix);
+        foreach (var e in entries) k1.Append(EntryText(e));
+        if (k1.Length <= MaskMinK1Chars) return k1.ToString();
+        int high = -1;
+        foreach (var e in entries) if (IsMaskDefault(e)) high = Math.Max(high, e.Code);
+        var chars = new int[high < 0 ? 0 : high / 6 + 1];
+        var extra = new StringBuilder();
+        foreach (var e in entries)
+        {
+            if (IsMaskDefault(e)) chars[e.Code / 6] |= 1 << (e.Code % 6);
+            else extra.Append(EntryText(e));
+        }
+        var k2 = new StringBuilder("|" + MaskPrefix);
+        foreach (int c in chars) k2.Append(Base64Url[c]);
+        if (extra.Length > 0) k2.Append('.').Append(extra);
+        return k2.Length < k1.Length ? k2.ToString() : k1.ToString();
     }
 
     /// <summary>Parses a received value (another host's mod may send anything). Null when it isn't this format.</summary>
@@ -297,7 +396,9 @@ internal static class RequiredMods
             int at = p.IndexOf('@');
             if (at < 0)
             {
-                if (!list.HasPrefabInfo) ReadPrefabToken(p, list);
+                if (p.StartsWith(CompactPrefix, StringComparison.Ordinal)) ReadCompact(p, CompactPrefix.Length, list);
+                else if (p.StartsWith(MaskPrefix, StringComparison.Ordinal)) ReadMask(p, list);
+                else if (!list.HasPrefabInfo) ReadPrefabToken(p, list);
                 continue;
             }
             if (at == 0) continue;
@@ -310,6 +411,68 @@ internal static class RequiredMods
             list.Mods.Add(new RequiredMod { Id = id, Major = major, Minor = minor, MinorKnown = ver.IndexOf('.') >= 0 });
         }
         return list;
+    }
+
+    /// <summary>"k1" and four characters per mod (see the class remarks); a damaged token is skipped as a whole.</summary>
+    private static void ReadCompact(string p, int start, RequiredList list)
+    {
+        int n = p.Length - start;
+        if (n <= 0 || n % CompactEntryChars != 0) return;
+        for (int i = start; i < p.Length; i += CompactEntryChars)
+        {
+            int code = FromBase36(p[i]) * 36 + FromBase36(p[i + 1]);
+            int major = FromBase36(p[i + 2]);
+            int minor = p[i + 3] == '_' ? 0 : FromBase36(p[i + 3]);
+            if (FromBase36(p[i]) < 0 || FromBase36(p[i + 1]) < 0 || major < 0 || minor < 0) continue;
+            if (code >= CodeTable.Count) { list.More++; continue; } // a mod newer than this client's table
+            string id = CodeTable[code];
+            if (list.Find(id) != null) continue;
+            if (list.Mods.Count >= MaxMods) { list.More++; continue; }
+            list.Mods.Add(new RequiredMod { Id = id, Major = major, Minor = minor, MinorKnown = p[i + 3] != '_' });
+        }
+    }
+
+    /// <summary>"k2", a base64url bit mask over <see cref="CodeTable"/> (bit i: mod i at its default version, see
+    /// <see cref="IsMaskDefault"/>), then optionally "." and four-character entries as in "k1" for the other versions. The
+    /// mods come out prefab mods first (NetPrefabPlan order), then the rest by code. A damaged token is skipped as a
+    /// whole; bits past this client's table count as "more mods".</summary>
+    private static void ReadMask(string p, RequiredList list)
+    {
+        string rest = p.Substring(MaskPrefix.Length);
+        string maskText = rest, extra = "";
+        int dot = rest.IndexOf('.');
+        if (dot >= 0) { maskText = rest.Substring(0, dot); extra = rest.Substring(dot + 1); }
+        if (maskText.Length == 0 && extra.Length == 0) return;
+        if (extra.Length % CompactEntryChars != 0) return;
+        var bits = new List<int>();
+        for (int c = 0; c < maskText.Length; c++)
+        {
+            int v = Base64Url.IndexOf(maskText[c]);
+            if (v < 0) return;
+            for (int b = 0; b < 6; b++)
+                if ((v >> b & 1) != 0) bits.Add(c * 6 + b);
+        }
+        var found = new RequiredList();
+        foreach (int code in bits)
+        {
+            if (code >= CodeTable.Count) { found.More++; continue; }
+            string id = CodeTable[code];
+            found.Mods.Add(new RequiredMod { Id = id, Major = 1, Minor = 0, MinorKnown = OverTheHillPlus.Core.Shared.NetPrefabPlan.IsOwnerMod(id) });
+        }
+        if (extra.Length > 0) ReadCompact(CompactPrefix + extra, CompactPrefix.Length, found);
+        found.Mods.Sort((a, b) =>
+        {
+            int oa = OverTheHillPlus.Core.Shared.NetPrefabPlan.OwnerIndex(a.Id), ob = OverTheHillPlus.Core.Shared.NetPrefabPlan.OwnerIndex(b.Id);
+            if ((oa >= 0) != (ob >= 0)) return oa >= 0 ? -1 : 1;
+            return oa >= 0 ? oa.CompareTo(ob) : CodeOf(a.Id).CompareTo(CodeOf(b.Id));
+        });
+        list.More += found.More;
+        foreach (var m in found.Mods)
+        {
+            if (list.Find(m.Id) != null) continue;
+            if (list.Mods.Count >= MaxMods) { list.More++; continue; }
+            list.Mods.Add(m);
+        }
     }
 
     /// <summary>"np&lt;hex mask&gt;" or "np&lt;hex mask&gt;:&lt;16 hex&gt;"; anything else is ignored.</summary>
@@ -624,10 +787,6 @@ internal static class RequiredMods
         _ => $"you have v{i.Installed}, the server needs v{i.Required}: you can't join until they match",
     };
 
-    /// <summary>
-    /// The specific reason a server's prefab check would refuse this game ("The server runs Trailers, you don't; you
-    /// run the Terrier 4WD Wagon, the server doesn't."), or null when no prefab issue is in the list.
-    /// </summary>
     public static string PrefabSummary(IReadOnlyList<RequiredModIssue> issues, Func<string, string> nameOf)
     {
         if (issues == null) return null;

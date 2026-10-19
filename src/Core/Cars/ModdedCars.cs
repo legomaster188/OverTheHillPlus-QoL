@@ -99,10 +99,13 @@ internal static class ModdedCars
                 ApplySkin = key => car.Config.Skin.Value = key ?? "",
             }))
             return "its skins could not be registered (see the [Api] line in the log)";
+        // Its bundled liveries are skins too (the MODS page lists them, for when the garage's Liveries tab can't be used).
+        Api.Cars.SetBundled(def.Id, car.Liveries.AsSkins());
         // The car's network prefab, registered by core in its fixed order (core also runs the join gate).
         why = car.Declare();
         if (why != null)
         {
+            Api.Cars.SetBundled(def.Id, null);
             Api.Cars.Unregister(def.Id);
             return why;
         }
@@ -136,11 +139,24 @@ internal static class ModdedCars
     private static void SharedTick()
     {
         if (!AnyReady()) return;
+        Api.Cars.RefreshIfChanged();
         CarLooks.Tick();
         CarLookNet.Tick();
+        CarTandemWheels.Tick();
+        CarPhysicsProbe.Tick();
     }
 
     // ---------------------------------------------------------------- lookups
+
+    internal static void ReleaseGears(VehiclePhysics.VPVehicleController car)
+    {
+        if (car == null) return;
+        foreach (var c in Cars)
+        {
+            try { c.Tuning.ReleaseGears(car); }
+            catch (Exception ex) { DebugLog.Error("core", ex, "ModdedCars.ReleaseGears"); }
+        }
+    }
 
     internal static bool AnyReady()
     {
@@ -232,6 +248,18 @@ internal static class ModdedCars
             (typeof(PropertyBlockSetter), nameof(PropertyBlockSetter.SetLiveryTexture), null, nameof(LiveryGuardPostfix)),
             (typeof(ModLiveryEquipper), nameof(ModLiveryEquipper.Unequip), null, nameof(LiveryUnequipPostfix)),
             (typeof(ModLiveryEquipper), nameof(ModLiveryEquipper.Equip), null, nameof(LiveryEquipPostfix)),
+            // mod.io liveries for a modded car's name are its skins: listed again when the game's list changes
+            (typeof(ModLiveryService), nameof(ModLiveryService.TryRegisterMod), null, nameof(ModLiveriesChangedPostfix)),
+            (typeof(ModLiveryService), nameof(ModLiveryService.RegisterLocalLiveries), null, nameof(ModLiveriesChangedPostfix)),
+            // the garage's Liveries tab: the livery you look at shows on the garage's model
+            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.OnLiveryButtonSelected), null, nameof(LiveryPreviewPostfix)),
+            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializeLiveriesScreen), nameof(PreviewClearPrefix), null),
+            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializeLiveriesModScreen), nameof(PreviewClearPrefix), null),
+            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializeCosmeticUpgradesScreen), nameof(PreviewClearPrefix), null),
+            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializePerformanceUpgradesScreen), nameof(PreviewClearPrefix), null),
+            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializeToolsScreen), nameof(PreviewClearPrefix), null),
+            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializeSelectVehicleScreen), nameof(PreviewClearPrefix), null),
+            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.Close), nameof(PreviewClearPrefix), null),
         };
         int failed = 0;
         foreach (var o in optional)
@@ -418,8 +446,41 @@ internal static class ModdedCars
     /// <summary>The garage shows a car: remembered, so a modded car's garage model gets your look.</summary>
     private static void GarageDummyPostfix(StateMerchantMenu __instance)
     {
+        GaragePreview.Clear(); // another car: its own mounted livery
         try { CarLooks.MerchantDummy(__instance); } catch (Exception ex) { DebugLog.Error("core", ex, "ModdedCars.GarageDummyPostfix"); }
     }
+
+    /// <summary>The garage's Liveries tab selected a livery: one of a modded car's shows on the garage's model.</summary>
+    private static void LiveryPreviewPostfix(StateMerchantMenu __instance, UIMerchantButtonSelector __0)
+    {
+        if (Cars.Count == 0) return;
+        try
+        {
+            var map = __instance?.buttonByInventoryItemSO;
+            if (map == null || __0 == null || !map.ContainsKey(__0)) return;
+            var livery = map[__0]?.TryCast<Livery>();
+            foreach (var c in Cars)
+                if (livery != null && c.Liveries.EntryOf(livery) >= 0)
+                {
+                    GaragePreview.Set(livery);
+                    CarLooks.MerchantDummy(__instance);
+                    return;
+                }
+            GaragePreview.Clear();
+        }
+        catch (Exception e) { DebugLog.Error("core", e, "ModdedCars.LiveryPreviewPostfix"); }
+    }
+
+    /// <summary>Another garage screen opened (or the garage closed): the garage's model shows the mounted livery again.</summary>
+    private static void PreviewClearPrefix(StateMerchantMenu __instance)
+    {
+        GaragePreview.Clear();
+        try { if (Cars.Count > 0 && __instance != null) CarLooks.MerchantDummy(__instance); }
+        catch (Exception ex) { DebugLog.Error("core", ex, "ModdedCars.PreviewClearPrefix"); }
+    }
+
+    /// <summary>The game's mod livery list changed: the modded cars' mod.io skins are listed again.</summary>
+    private static void ModLiveriesChangedPostfix() => Api.Cars.ModLiveriesChanged();
 
     /// <summary>Unequipping a modded car's mod livery in the garage's Livery Mods tab takes its skin off.</summary>
     private static void LiveryUnequipPostfix(string carName)

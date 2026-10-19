@@ -9,7 +9,7 @@ namespace OverTheHillPlus.Cars;
 /// <para>Why: the game registers a car's upgrade objects from its CarInfo's part list only
 /// (VehicleCustomizationController.InitVehicleUpgrades, LocalVehicleCustomizationController.InitParts) and only ever
 /// switches registered objects on or off. A modded car's list is the donor's minus what CarCatalog leaves out
-/// (liveries, protection and inventory upgrades, bed cosmetics, ...), so the objects of the parts left out were never
+/// (liveries, bed cosmetics, cosmetics with no place on the body, ...), so the objects of the parts left out were never
 /// registered and kept the state they have in the donor's prefab: on. They showed on the car whatever was mounted,
 /// and nothing in the garage could take them off.</para>
 /// </summary>
@@ -40,5 +40,30 @@ public static class CarPartObjects
             if (dropped && !kept) hide.Add(i);
         }
         return hide;
+    }
+
+    /// <summary>
+    /// The parts that have nowhere to show on the car: every upgrade object pointing at them is
+    /// <paramref name="objectHidden"/> (in a slot the car hides, or an item it hides). The car's garage leaves the
+    /// cosmetic ones out rather than sell something invisible. Parts with no object at all (horns, mechanical upgrades)
+    /// are never in the result.
+    /// </summary>
+    public static HashSet<uint> Unplaceable(IReadOnlyList<uint[]> objectParts, IReadOnlyList<bool> objectHidden)
+    {
+        var shown = new HashSet<uint>();
+        var hidden = new HashSet<uint>();
+        if (objectParts == null || objectHidden == null) return hidden;
+        for (int i = 0; i < objectParts.Count && i < objectHidden.Count; i++)
+        {
+            var parts = objectParts[i];
+            if (parts == null) continue;
+            foreach (uint id in parts)
+            {
+                if (id == 0) continue;
+                (objectHidden[i] ? hidden : shown).Add(id);
+            }
+        }
+        hidden.ExceptWith(shown);
+        return hidden;
     }
 }

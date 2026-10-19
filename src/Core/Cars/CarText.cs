@@ -45,6 +45,20 @@ internal sealed class CarText
         return new LocalizedString(_descTable, (TableEntryReference)_descriptionKey);
     }
 
+    private readonly System.Collections.Generic.List<(TableReference table, string key, string text)> _extra = new();
+
+    /// <summary>A LocalizedString for any other text of the car (its liveries' names and descriptions): key
+    /// <paramref name="key"/> in <paramref name="like"/>'s table, with <paramref name="text"/> added the same way as the
+    /// car's name. Null when <paramref name="like"/> is.</summary>
+    public LocalizedString Extra(LocalizedString like, string key, string text)
+    {
+        if (like == null) return null;
+        var table = like.TableReference;
+        _extra.Add((table, key, text ?? ""));
+        Ensure(force: true);
+        return new LocalizedString(table, (TableEntryReference)key);
+    }
+
     /// <summary>Every two seconds: adds the entries to the selected language's tables when they are missing.</summary>
     public void Tick()
     {
@@ -55,7 +69,7 @@ internal sealed class CarText
 
     private void Ensure(bool force)
     {
-        if (!_hasNameTable && !_hasDescTable) return;
+        if (!_hasNameTable && !_hasDescTable && _extra.Count == 0) return;
         try
         {
             var db = LocalizationSettings.StringDatabase;
@@ -63,6 +77,7 @@ internal sealed class CarText
             var locale = LocalizationSettings.SelectedLocale;
             if (_hasNameTable) Add(db, _nameTable, locale, _nameKey, _car.Def.DisplayName);
             if (_hasDescTable) Add(db, _descTable, locale, _descriptionKey, _car.Def.Description);
+            foreach (var (table, key, text) in _extra) Add(db, table, locale, key, text);
         }
         catch (Exception e)
         {

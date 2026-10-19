@@ -19,7 +19,7 @@ public class ServerBrowserPlugin : BasePlugin
 {
     public const string Guid = "com.oth.serverbrowser";
     public const string Name = "Server Browser+";
-    public const string Version = "1.0.0";
+    public const string Version = "1.2.0";
 
     /// <summary>Mod id: names the config file (oth.serverbrowser.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "serverbrowser";

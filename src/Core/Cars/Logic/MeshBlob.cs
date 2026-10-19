@@ -164,6 +164,9 @@ public sealed class MeshBlob
     }
 
     public const string BodyName = "body", WheelName = "wheel", TyreName = "tyre", ColliderName = "collider";
+    /// <summary>Optional: a rim and a tyre of their own for the rear wheels (a dual wheel), see <see cref="CarTandem"/>. The
+    /// steer wheels keep <see cref="WheelName"/> and <see cref="TyreName"/>.</summary>
+    public const string RearWheelName = "wheel_rear", RearTyreName = "tyre_rear";
 
     /// <summary>The name of the body part for the donor's body LOD <paramref name="lod"/> (1..3 in the real model).</summary>
     public static string BodyLodName(int lod) => "body_lod" + lod;

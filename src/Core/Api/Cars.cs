@@ -54,6 +54,50 @@ public static class Cars
         public long Bytes { get; internal set; }
         /// <summary>The pack's folder (what the texture must stay inside).</summary>
         internal string PackDir { get; set; }
+        /// <summary>Where it comes from: a livery pack folder, the car mod itself (bundled), or an installed mod.io mod.</summary>
+        public SkinSource Source { get; internal set; }
+        /// <summary>The mod.io mod id of a mod.io skin (0 otherwise).</summary>
+        public long ModId { get; internal set; }
+        /// <summary>A bundled skin's bytes (instead of a file).</summary>
+        internal Func<byte[]> Embedded { get; set; }
+
+        /// <summary>Where it comes from, for menus: the pack's folder, "built in" or "mod.io".</summary>
+        public string From => Source switch { SkinSource.Bundled => "built in", SkinSource.ModIo => "mod.io", _ => Pack };
+    }
+
+    public enum SkinSource
+    {
+        /// <summary>A livery pack in the game's LocalLiveries folder or BepInEx/config/oth.liveries/.</summary>
+        Pack,
+        /// <summary>A livery the car's mod bundles (it is also in the garage's Liveries tab).</summary>
+        Bundled,
+        /// <summary>An installed mod.io livery whose manifest names the car (the garage's Livery Mods tab lists it).</summary>
+        ModIo,
+    }
+
+    private static readonly Dictionary<string, List<(string name, Func<byte[]> read)>> Bundled = new(StringComparer.OrdinalIgnoreCase);
+    private static bool _modIoChanged;
+
+    /// <summary>A modded car's bundled liveries, listed as its skins too (core's car framework, at start).</summary>
+    internal static void SetBundled(string carId, List<(string name, Func<byte[]> read)> liveries)
+    {
+        if (string.IsNullOrEmpty(carId)) return;
+        if (liveries == null || liveries.Count == 0) Bundled.Remove(carId);
+        else Bundled[carId] = liveries;
+        SkinCache.Remove(carId);
+    }
+
+    /// <summary>The game's mod livery list changed (a mod.io livery installed or removed, a refresh): the skins are
+    /// listed again on the next tick (<see cref="RefreshIfChanged"/>).</summary>
+    internal static void ModLiveriesChanged() => _modIoChanged = true;
+
+    /// <summary>Once a tick (core's car framework): lists the skins again after the game's mod livery list changed.</summary>
+    internal static void RefreshIfChanged()
+    {
+        if (!_modIoChanged) return;
+        _modIoChanged = false;
+        SkinCache.Clear();
+        RaiseRescanned();
     }
 
     private static readonly CarRegistry Registry = new();
@@ -102,7 +146,8 @@ public static class Cars
         }
     }
 
-    /// <summary>The skins found for a registered car (empty for an unknown id), sorted by pack then name.</summary>
+    /// <summary>The skins found for a registered car (empty for an unknown id): its bundled liveries first (in their
+    /// order), then the packs' sorted by pack then name, then installed mod.io liveries for its car name.</summary>
     public static IReadOnlyList<Skin> SkinsFor(string carId)
     {
         var car = Registry.Find(carId);
@@ -117,8 +162,69 @@ public static class Cars
             int c = string.Compare(a.Pack, b.Pack, StringComparison.OrdinalIgnoreCase);
             return c != 0 ? c : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in list) keys.Add(s.Key);
+        if (Bundled.TryGetValue(car.Id, out var bundled))
+        {
+            var own = new List<Skin>();
+            foreach (var (name, read) in bundled)
+            {
+                string key = OverTheHillPlus.Cars.CarLiveries.SkinKey(car.Id, name);
+                if (!CarSkinKey.IsValid(key) || !keys.Add(key)) continue;
+                own.Add(new Skin
+                {
+                    Key = key, Name = name.Trim(), Pack = "*" + car.Id, TexturePath = "embedded:" + key, Side = 2048, Source = SkinSource.Bundled,
+                    Embedded = read,
+                });
+            }
+            list.InsertRange(0, own);
+        }
+        AddModIo(car, list, keys);
         SkinCache[car.Id] = list;
         return list;
+    }
+
+    /// <summary>
+    /// Installed mod.io liveries whose manifest names this car (the game keeps them by car name, so the garage's Livery
+    /// Mods tab lists them for it): each is a skin with key "*mod.io &lt;mod id&gt;/&lt;name&gt;", its texture checked
+    /// like a pack's (a square PNG of an allowed size, inside its folder). Local liveries are left out: those are the
+    /// packs' (scanned above). Players who have the same mod.io livery installed see it on your car.
+    /// </summary>
+    private static void AddModIo(CarRegistry.Entry car, List<Skin> list, HashSet<string> keys)
+    {
+        try
+        {
+            var service = global::ModManager.Instance?.Liveries;
+            if (service == null) return;
+            var found = service.GetLiveriesForCar(car.LiveryCar);
+            if (found == null) return;
+            // The interop interface has the indexer but not Count (that is IReadOnlyCollection's).
+            var asList = found.TryCast<Il2CppSystem.Collections.Generic.List<ModLivery>>();
+            int n = asList != null ? asList.Count : new Il2CppSystem.Collections.Generic.IReadOnlyCollection<ModLivery>(found.Pointer).Count;
+            for (int i = 0; i < n; i++)
+            {
+                var l = found[i];
+                if (l == null || l.IsLocal) continue;
+                string path = l.TexturePath;
+                if (string.IsNullOrEmpty(path)) continue;
+                string name = string.IsNullOrWhiteSpace(l.DisplayName) ? Path.GetFileNameWithoutExtension(path) : l.DisplayName.Trim();
+                string key = CarSkinKey.Make("*mod.io " + l.ModId, name);
+                if (key == null || !keys.Add(key)) continue;
+                string dir = Path.GetDirectoryName(path);
+                string problem = CarSkinScan.CheckFile(dir, path, out long bytes, out int side);
+                if (problem != null)
+                {
+                    if (Logged.Add("modio|" + key)) Core.CorePlugin.Logger?.LogInfo($"[Cars] skipped mod.io livery '{name}' for {car.LiveryCar}: {problem}");
+                    continue;
+                }
+                list.Add(new Skin
+                {
+                    Key = key, Name = name, Pack = "*mod.io " + l.ModId, TexturePath = path, PackDir = dir, Side = side, Bytes = bytes,
+                    Source = SkinSource.ModIo, ModId = l.ModId,
+                });
+            }
+        }
+        catch (Exception e) { DebugLog.Error("core", e, "Cars.AddModIo"); }
     }
 
     /// <summary>The skin with this key for a registered car, or null.</summary>
@@ -136,6 +242,11 @@ public static class Cars
         _scan = null;
         SkinCache.Clear();
         Scan();
+        RaiseRescanned();
+    }
+
+    private static void RaiseRescanned()
+    {
         var hooks = Rescanned;
         if (hooks == null) return;
         foreach (Action h in hooks.GetInvocationList())
@@ -192,7 +303,7 @@ public static class Cars
     /// the save filter, the join rules, the tuning, the colours, skins and engine sound and their sync. Call it once from
     /// your Load, after <see cref="Mods.Register"/> (with <c>Side = ModSide.Server</c>) and <see cref="Mods.IsEnabled"/>.
     /// <paramref name="assets"/> holds the model as embedded resources "&lt;AssetName&gt;/&lt;AssetName&gt;.mesh",
-    /// "..._albedo_base.png", "_ao.png", "_lights.png", "_mask.png" (and the optional "_zones.png", "_icon.png").
+    /// "..._albedo_base.png", "_ao.png", "_lights.png", "_mask.png" (and the optional "_zones.png", "_icon.png", "_picture.png": the picture in the garage and car lists, 512 x 512, shaded side view, front to the right).
     /// Null when the car starts, otherwise why not (logged, and your mod is marked failed with it).
     /// <para>Every car needs a key in the Mod Manager's fixed network prefab order (every player's game must add the
     /// same cars in the same order), and that list ships with the Mod Manager: a definition whose RegistryKey isn't in

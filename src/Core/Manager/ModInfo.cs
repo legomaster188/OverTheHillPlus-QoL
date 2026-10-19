@@ -26,6 +26,9 @@ public sealed class ModInfo
     public bool Private;
     /// <summary>Who needs it installed (default <see cref="ModSide.Client"/>).</summary>
     public ModSide Side;
+    /// <summary>How finished it is: "Stable", "Beta" or "Rough" (shown on its card and in the release list). Empty: the
+    /// Mod Manager's table decides (<see cref="ModMaturity"/>: Beta for a mod of ours it doesn't list).</summary>
+    public string Maturity;
     /// <summary>Draws the mod's everyday settings (SimpleMenu rows), first on its MODS page; null when it has none.</summary>
     public Action DrawSimple;
     /// <summary>Draws the mod's advanced settings at the top of its page's Advanced fold, above the cards its features

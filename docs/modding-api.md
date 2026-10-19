@@ -257,7 +257,7 @@ you use them.
 
 ### Cars (skins for modded cars)
 
-For mods that add a car the game doesn't have (like the Mod Manager's Vera Crossover, Terrier 4WD Wagon, Carpați 24, Hilo 89 and Bastion 200, which register here through the car framework below). The game's own livery system
+For mods that add a car the game doesn't have (like the Mod Manager's own cars, which register here through the car framework below). The game's own livery system
 only knows its stock cars, so a modded car loads its skins itself; `Cars` finds them and lets the Livery Packs page
 (and any other mod) list and switch them without referencing your mod.
 
@@ -270,6 +270,12 @@ textures named by plain file names inside the pack. A skin's texture must also b
 pixels a side, at most 16 MB. Packs and skins that break a rule are left out with one log line (`[Cars] skipped ...`).
 A skin's key is `<pack folder>/<entry name>` (at most 96 bytes of UTF-8, one `/`, no `..`): save it as the player's
 choice, and send it (never a path) when other players should see the same skin.
+
+Two more kinds of skin are listed for a car (their keys start with `*`, which no pack folder can): the liveries a car
+made with the car framework bundles (`*<car id>/<name>`, `Source = Bundled`, first in the list), and installed mod.io
+liveries whose manifest names the car (`*mod.io <mod id>/<name>`, `Source = ModIo`, last; the game keeps mod liveries
+by car name, so its Livery Mods tab lists them for the car too). A skin with transparent pixels is laid over the car's
+paint; an opaque one replaces it, like the game's own liveries.
 
 | Member | What it does |
 |---|---|
@@ -288,8 +294,10 @@ choice, and send it (never a path) when other players should see the same skin.
 `ModdedCar`: `Id` (2 to 40 characters from `a-z`, `0-9`, `_`, `.`, `-`; usually your mod id), `DisplayName`,
 `LiveryCar` (letters, digits and `_`, e.g. `Vera`), `CurrentSkin` (`Func<string>`) and `ApplySkin`
 (`Action<string>`: wear this skin, or your own paint for null; save the choice yourself).
-`Skin`: `Key`, `Name`, `Pack`, `TexturePath`, `Side`, `Bytes`. Check the file again right before you read it (it can
-change after the scan), load it yourself (for example `ImageConversion.LoadImage`) and put it on your car.
+`Skin`: `Key`, `Name`, `Pack`, `TexturePath`, `Side`, `Bytes`, `Source` (`Pack`, `Bundled` or `ModIo`), `ModId`
+(mod.io skins) and `From` (for menus). Check the file again right before you read it (it can change after the scan),
+load it yourself (for example `ImageConversion.LoadImage`) and put it on your car. A bundled skin has no file
+(`TexturePath` starts with `embedded:`): the car framework shows those itself.
 
 ```csharp
 Cars.Register(new Cars.ModdedCar
@@ -302,7 +310,7 @@ Cars.Register(new Cars.ModdedCar
 
 ### Adding a car (CarDefinition)
 
-The Mod Manager's own cars (the Vera Crossover, the Terrier 4WD Wagon, the Carpați 24, the Hilo 89 and the Bastion 200) are built by its car framework from a
+The Mod Manager's own cars (such as the Vera Crossover) are built by its car framework from a
 `CarDefinition` (namespace `OverTheHillPlus.Cars`) and a model in the Vera's mesh format. `Cars.AddCar` gives you the
 same framework.
 
@@ -310,19 +318,20 @@ same framework.
 and physics skeleton, with your model, wheels, collider, lights and cosmetic slots), a free garage entry copied from a
 stock base car (class, upgrades without liveries), saves that never name it (a sidecar file brings it back), guests
 joining in their own car where the session doesn't run it, tuning as multipliers on the donor, the model's tyre size on
-the donor's suspension, paint and trim presets plus custom colours, skins from livery packs, a stock engine sound per
-player, all of it synced to other players, and the rows for your page (`Cars.DrawCarRows`).
+the donor's suspension, paint and trim presets plus custom colours, your own liveries in the garage's Liveries tab
+(`Liveries`, below), skins from livery packs and mod.io, a stock engine sound per player, all of it synced to other
+players, and the rows for your page (`Cars.DrawCarRows`).
 
 **What is not supported** (be honest with your players):
 
 - **A network prefab key.** Every player's game must add the same cars in the same order, so the order is a fixed,
   append-only list that ships inside the Mod Manager (`NetPrefabPlan.Order`). `AddCar` refuses a `RegistryKey` that
   isn't in it. Today it holds only the Mod Manager's own keys, and each key belongs to one mod id (`vera`, `trailers`,
-  `tercel`, `aro`, `hilo`, `bastion`): **a car from another creator needs a key added for its mod id in a Mod Manager release first** (ask for
+  and so on): **a car from another creator needs a key added for its mod id in a Mod Manager release first** (ask for
   one). Until then, `AddCar` returns why and your mod is marked failed.
 - Your own engine sounds (only the game's stock labels, `CarAudioManager.VehicleType`), your own physics beyond the
   multipliers of `CarTuningProfile`, a different number of wheels, a load bed's own cosmetics (`HasBed` only keeps the
-  base car's), your own liveries in the game's livery parts (use skins), and cosmetics the base car doesn't have.
+  base car's), and cosmetics the base car doesn't have.
 - Every player in a session needs your mod, the same version and the same donor / garage base settings; anyone else is
   refused at connect (that is the join gate, not a bug).
 
@@ -330,15 +339,30 @@ player, all of it synced to other players, and the rows for your page (`Cars.Dra
 with optional `body_lod1..3`, `glass`, one `wheel` and one `tyre` (left side, hub at the origin), `collider`; anchors
 `wheel_FL/FR/RL/RR`, `headlight_L/R`, `tail_L/R`, `reverse` and the `cosm_*` cosmetic anchors), `_albedo_base.png`,
 `_ao.png`, `_lights.png`, `_mask.png` (mask R wipers, G glass and lenses, B what takes snow, mud and damage), and the
-optional `_zones.png` (R paint, G trim; without it the colour rows are off) and `_icon.png` (the garage icon). The
+optional `_zones.png` (R paint, G trim; without it the colour rows are off), `_picture.png` (the car's picture in the
+garage and car lists: 512 x 512, a side view in the default paint, front to the right, the car across the full width,
+centred, on transparency; `Liveries/tools/vera/render_picture.py` makes ours) and `_icon.png` (a white line drawing,
+used as the picture when there is no `_picture.png`). The
 model stands on the ground (y = 0) in Unity axes, front towards +z.
 
 **Cosmetics:** the game's cosmetic slots move to your `cosm_*` anchors: `cosm_Front`, `cosm_Rear`, `cosm_Front_Bumper`,
 `cosm_Rear_Bumper`, `cosm_Hood`, `cosm_Roof`, `cosm_Roof_Bar`, `cosm_Side`, `cosm_Side_Step`, `cosm_Antenna`,
 `cosm_Winch` (slots), and the item anchors `cosm_Mudflap_FL/FR/RL/RR`, `cosm_Side_Left/Right`, `cosm_Snorkel` and the
-optional `cosm_Plate_Rear` (rear licence plates). A slot whose required anchors are missing is hidden; the rollcage
+optional `cosm_Plate_Front`, `cosm_Plate_Rear` (licence plates), `cosm_WhipLights` (the rear light poles),
+`cosm_Ladder` and `cosm_Bushcables` (without them those items stay with their slot). A slot whose required anchors are missing is hidden; the rollcage
 always is. Add item anchors as data with `ItemAnchors` (`new CosmeticItemAnchor("cosm_X", "Visual/Roof/Kayak",
-optional: true)`), hide slots with `HiddenSlots`, nudge anchors with `CosmeticTweaks` (metres, at most 1).
+optional: true)`), hide slots with `HiddenSlots` and single items with `HiddenItems` (`"Visual/Roof/Christmas"`),
+nudge anchors with `CosmeticTweaks` (metres, at most 1) and single items with `ItemOffsets`
+(`["Visual/Rear_Bumper/TowBar"] = new MeshVec3(0f, 0.15f, 0f)`: car-root metres, Unity axes, added after the item's
+slot is placed; no model change). Hiding a slot or an item changes the car's garage list: bump its `Protocol`. A model anchor `cosmscale_<name>` scales what `cosm_<name>`
+places (its position is the scale per axis, 0.5 to 1.5), e.g. a roof rack made 10 % narrower for a slimmer roof.
+Cosmetics with nowhere to show (every model in a hidden slot or item) are left out of the car's garage.
+`Liveries/tools/vera/cosm_fitcheck.py` measures every item against your body and its donor and can search the anchors
+(`--autofit`); `render_cosm_qa.py --close 0.5` renders close-ups to check the result.
+
+The donor's mechanical upgrades all carry over: engine stages, tyres, suspension lift (it adds to your car's own
+`SuspensionTravel`), snorkel (the intake probes move with your hood and snorkel anchors), winch, horns, tool slots and
+protection (the protection stages work; their rollcage model stays hidden).
 
 | `CarDefinition` field | |
 |---|---|
@@ -350,10 +374,21 @@ optional: true)`), hide slots with `HiddenSlots`, nudge anchors with `CosmeticTw
 | `RegistryKey`, `Protocol` | the key in the fixed order (see above); bump `Protocol` whenever the car's network layout or tuning changes |
 | `DefaultDonor`, `DefaultGarageBase` | e.g. `Car_Brick` and `Brick` (players can change them in your config) |
 | `AssetName` | the resources' prefix (a-z, 0-9, `_`) |
-| `Tuning` | `CarTuningProfile` multipliers on the donor (mass, torque, revs, gears, final drive, suspension travel / spring / damper, tyre grip, steering lock) and a centre-of-mass drop |
+| `Tuning` | `CarTuningProfile` multipliers on the donor (mass, torque, power cap, top speed, revs, gears, final drive, suspension travel / spring / damper, tyre grip, steering lock; each 0.1 to 4), a centre-of-mass drop and `TowKg`, the tow rating in kg (0: unrated; a trailer heavier than it takes power and top speed off the car) |
 | `Paints`, `Trims`, `PaintCustomDefault`, `TrimCustomDefault`, `TrimWhat`, `TrimHint` | presets (the first is the default; `TrimPreset.Body()` follows the body colour) |
 | `EngineSounds`, `DefaultEngine`, `EngineHint` | `new EngineSound("Brick", "Brick (small four)")`, ... |
-| `Cosmetics`, `ItemAnchors`, `HiddenSlots`, `CosmeticTweaks`, `HasBed` | see Cosmetics above |
+| `Cosmetics`, `ItemAnchors`, `HiddenSlots`, `HiddenItems`, `CosmeticTweaks`, `HasBed` | see Cosmetics above |
+| `Liveries` | `new LiveryPreset("sawmill", "Glasir Wood Sawmill", "One plain sentence.")`, ... (see Liveries below) |
+
+**Liveries:** each `LiveryPreset` (id: 1 to 24 of `a-z`, `0-9`, `_`) needs the embedded resources
+`<AssetName>/<AssetName>_livery_<id>.png` (2048 pixels square, on your car's UV layout) and `..._livery_<id>_icon.png`
+(the garage icon, square, up to 512), plus `<AssetName>_livery_paint_icon.png` for the "Paint" entry (your paint
+colours) the framework puts first. They become real livery parts of your car, after the base car's kept parts: the
+garage's Liveries tab lists, buys (free) and mounts them, the game syncs the mounted one, and saves never keep them (the
+sidecar does). An opaque PNG replaces the paint; transparent pixels show the player's paint and trim. The ids and their
+order are part of your car's network layout (players with another set are refused at connect), so only append.
+`Liveries/tools/modded_kit.py` (template, design, build, render) and `Liveries/LIVERIES_MODDED.md` show how they are
+made.
 
 `definition.Validate()` returns the first problem (null when it is fine); `AddCar` checks it too, refuses a mod that
 isn't registered with `Side = ModSide.Server`, and refuses the car when its skins can't be registered (a livery name

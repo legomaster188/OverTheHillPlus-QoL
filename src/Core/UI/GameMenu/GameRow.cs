@@ -33,6 +33,17 @@ internal sealed class GameRow
     private readonly GameObject _versionSlot, _sideSlot, _sizeSlot;
     private string _imageKey;
 
+    // A card's badge strip under its name (MakeStrip): the badges moved off the picture, a maturity badge of ours, and
+    // the badges' backgrounds (coloured by state). Null / false: the cell kept the browser's own layout.
+    private GameObject _statusBadge, _maturityBadge, _versionBadge, _sideBadge, _sizeBadge;
+    private TMP_Text _maturityLabel;
+    private Image _statusBack, _maturityBack;
+    private LayoutElement _pictureLe, _titleLe, _cellLe;
+    private float _titleSize = -1f, _sizedFor = -1f;
+
+    /// <summary>A card laid out by us (picture, name, then the badge strip), sized with <see cref="CardLayout"/>.</summary>
+    public bool Stripped { get; private set; }
+
     /// <summary>Our text boxes by native pointer (the browser's search-submit patch leaves them alone).</summary>
     internal static readonly HashSet<IntPtr> TextFields = new();
 
@@ -102,6 +113,8 @@ internal sealed class GameRow
                     // The cell's own subscribe button is about mod.io liveries: not on our cards.
                     var sub = _cell.SubscribeButton;
                     if (sub != null && sub.gameObject.Pointer != go.Pointer && (Selectable == null || sub.Pointer != Selectable.Pointer)) sub.gameObject.SetActive(false);
+                    try { MakeStrip(); }
+                    catch (Exception e) { Core.CorePlugin.Logger?.LogWarning("[Core] MODS cards: the badge strip could not be made, the cards keep the browser's layout: " + e.Message); }
                 }
                 break;
             case WidgetKind.TextField:
@@ -442,6 +455,137 @@ internal sealed class GameRow
         return p.gameObject;
     }
 
+    /// <summary>
+    /// Moves the cell's badges (status, version, side, size: on the picture's corners in the browser's cell) into a
+    /// strip under the name, adds a maturity badge (a copy of the size badge), and lets <see cref="SizeCard"/> size the
+    /// picture 16:9. Leaves the cell alone when its parts aren't where the browser's cell has them.
+    /// </summary>
+    private void MakeStrip()
+    {
+        var picture = _cell.Image;
+        var area = picture != null ? picture.transform.parent : null; // the cell's "Content": the picture and its badges
+        var title = _cell.NameLabel;
+        var column = Go.GetComponent<VerticalLayoutGroup>();
+        if (area == null || area.parent == null || area.parent.Pointer != Go.transform.Pointer || title == null || column == null) return;
+        if (title.transform.parent == null || title.transform.parent.Pointer != Go.transform.Pointer) return;
+
+        // a badge = the child of the picture's area that holds the label
+        GameObject BadgeOf(Component label)
+        {
+            if (label == null) return null;
+            var t = label.transform;
+            while (t != null && t.parent != null && t.parent.Pointer != area.Pointer) t = t.parent;
+            return t != null && t.parent != null ? t.gameObject : null;
+        }
+        var status = _cell.Status != null && _cell.Status.transform.parent != null && _cell.Status.transform.parent.Pointer == area.Pointer
+            ? _cell.Status : BadgeOf(_cell.StatusLabel);
+        var version = BadgeOf(_cell.DownloadsLabel);
+        var side = BadgeOf(_cell.LikesLabel);
+        var size = BadgeOf(_cell.SizeLabel);
+        if (status == null || version == null) return;
+
+        GameObject maturity = null;
+        var from = size ?? side;
+        if (from != null)
+        {
+            maturity = Object.Instantiate(from, area, false);
+            maturity.name = "OTH_Maturity";
+            foreach (var t in maturity.GetComponentsInChildren<TMP_Text>(true))
+            {
+                _maturityLabel ??= t;
+                t.richText = true;
+            }
+            foreach (var t in maturity.GetComponentsInChildren<FunTextTMP>(true)) FunTexts.Register(t);
+            // a copy of the side badge would bring its (likes) icon
+            foreach (var g in maturity.GetComponentsInChildren<Graphic>(true))
+                if (g != null && g.GetComponent<TMP_Text>() == null && g.transform.parent != null && g.transform.parent.Pointer != maturity.transform.Pointer)
+                    g.gameObject.SetActive(false);
+        }
+
+        var strip = new GameObject("OTH_Strip");
+        var srt = strip.AddComponent<RectTransform>();
+        srt.SetParent(Go.transform, false);
+        var row = strip.AddComponent<HorizontalLayoutGroup>();
+        row.spacing = 6f;
+        row.childAlignment = TextAnchor.MiddleLeft;
+        row.childControlWidth = true;
+        row.childControlHeight = true;
+        row.childForceExpandWidth = false;
+        row.childForceExpandHeight = false;
+        var le = strip.AddComponent<LayoutElement>();
+        le.preferredHeight = le.minHeight = CardLayout.StripHeight;
+        le.flexibleHeight = 0f;
+        strip.transform.SetSiblingIndex(title.transform.GetSiblingIndex() + 1);
+        foreach (var b in new[] { status, maturity, version, side, size })
+        {
+            if (b == null) continue;
+            var fit = b.GetComponent<ContentSizeFitter>(); // the strip sizes them
+            if (fit != null) Object.DestroyImmediate(fit);
+            b.transform.SetParent(strip.transform, false);
+        }
+
+        _statusBadge = status;
+        _maturityBadge = maturity;
+        _versionBadge = version;
+        _sideBadge = side;
+        _sizeBadge = size;
+        _statusBack = BackOf(status);
+        _maturityBack = BackOf(maturity);
+        _pictureLe = area.GetComponent<LayoutElement>() ?? area.gameObject.AddComponent<LayoutElement>();
+        _titleLe = title.GetComponent<LayoutElement>() ?? title.gameObject.AddComponent<LayoutElement>();
+        _cellLe = Go.GetComponent<LayoutElement>();
+        column.childForceExpandHeight = false; // the picture, the name and the strip keep their heights
+        column.spacing = CardLayout.Gap;
+        column.padding = new RectOffset((int)CardLayout.Padding, (int)CardLayout.Padding, (int)CardLayout.Padding, (int)CardLayout.Padding);
+        Stripped = true;
+    }
+
+    /// <summary>A badge's background (its "OpacityBackground", else its first image that holds no text).</summary>
+    private static Image BackOf(GameObject badge)
+    {
+        if (badge == null) return null;
+        var named = badge.transform.Find("OpacityBackground");
+        var img = named != null ? named.GetComponent<Image>() : null;
+        if (img != null) return img;
+        foreach (var i in badge.GetComponentsInChildren<Image>(true))
+            if (i != null && i.gameObject.activeSelf && i.GetComponentInChildren<TMP_Text>(true) == null) return i;
+        return null;
+    }
+
+    /// <summary>Sizes a <see cref="Stripped"/> card <paramref name="width"/> wide: the 16:9 picture, the name (its text
+    /// grows a little on wide cards) and the strip (<see cref="CardLayout"/>).</summary>
+    internal void SizeCard(float width)
+    {
+        if (!Stripped || Math.Abs(width - _sizedFor) < 0.5f) return;
+        _sizedFor = width;
+        float inner = width - 2f * CardLayout.Padding;
+        float pic = CardLayout.ImageHeight(width), name = CardLayout.TitleHeight(width);
+        _pictureLe.preferredWidth = inner;
+        _pictureLe.preferredHeight = _pictureLe.minHeight = pic;
+        _pictureLe.flexibleHeight = 0f;
+        _titleLe.preferredWidth = inner;
+        _titleLe.preferredHeight = _titleLe.minHeight = name;
+        if (_cellLe != null)
+        {
+            _cellLe.preferredWidth = width;
+            _cellLe.preferredHeight = CardLayout.CellHeight(width);
+        }
+        var t = _cell.NameLabel;
+        if (t == null) return;
+        if (_titleSize < 0f) _titleSize = t.enableAutoSizing ? t.fontSizeMax : t.fontSize;
+        float size = _titleSize * CardLayout.TextScale(width);
+        if (t.enableAutoSizing) t.fontSizeMax = size;
+        else t.fontSize = size;
+    }
+
+    private static void Tint(Image back, BadgeTone tone)
+    {
+        if (back == null) return;
+        var (r, g, b, a) = BadgeStyle.Colour(tone);
+        var c = new Color32(r, g, b, a);
+        if (back.color != (Color)c) back.color = c;
+    }
+
     private void BindCard(RowModel m)
     {
         if (_cell == null) return;
@@ -449,10 +593,19 @@ internal sealed class GameRow
         SetText(Text, m.Label);
         string status = c?.Status ?? "";
         if (_cell.StatusLabel != null) SetText(_cell.StatusLabel, status);
-        Show(_cell.Status, status.Length > 0);
-        Slot(_cell.DownloadsLabel, _versionSlot, ModCards.VersionText(c?.Version));
-        Slot(_cell.LikesLabel, _sideSlot, c?.Side);
-        Slot(_cell.SizeLabel, _sizeSlot, c?.Size);
+        Show(Stripped ? _statusBadge : _cell.Status, status.Length > 0);
+        if (Stripped)
+        {
+            // a clear coloured on / off (and the like) badge, the maturity badge beside it
+            Tint(_statusBack, BadgeStyle.Status(status));
+            string level = Core.Manager.ModMaturity.Badge(c?.Maturity ?? Core.Manager.MaturityLevel.Unknown);
+            if (_maturityLabel != null && level.Length > 0) SetText(_maturityLabel, level);
+            Show(_maturityBadge, level.Length > 0 && _maturityLabel != null);
+            Tint(_maturityBack, BadgeStyle.Maturity(c?.Maturity ?? Core.Manager.MaturityLevel.Unknown));
+        }
+        Slot(_cell.DownloadsLabel, Stripped ? _versionBadge : _versionSlot, ModCards.VersionText(c?.Version));
+        Slot(_cell.LikesLabel, Stripped ? _sideBadge : _sideSlot, c?.Side);
+        Slot(_cell.SizeLabel, Stripped ? _sizeBadge : _sizeSlot, c?.Size);
         string key = c?.ImageKey;
         if (key == _imageKey || _cell.Image == null) return;
         _imageKey = key;

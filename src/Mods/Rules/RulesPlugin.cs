@@ -20,7 +20,7 @@ public class RulesPlugin : BasePlugin
 {
     public const string Guid = "com.oth.rules";
     public const string Name = "Server Rules & MOTD";
-    public const string Version = "1.0.0";
+    public const string Version = "1.2.0";
 
     /// <summary>Mod id: names the config file (oth.rules.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "rules";

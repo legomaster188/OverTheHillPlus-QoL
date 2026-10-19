@@ -21,7 +21,7 @@ public static class VeraDefinition
     /// kept in the upgrade lists (the mounted-upgrade bits index those lists, so every peer needs the same ones). Core's
     /// car framework builds the very same template and layout, so it stays 3: a Vera-only game still plays with builds
     /// from before the framework.</summary>
-    public const int Protocol = 3;
+    public const int Protocol = 4;
 
     public static CarDefinition Create() => new()
     {
@@ -41,12 +41,17 @@ public static class VeraDefinition
         DefaultDonor = "Car_TrailBurner",
         DefaultGarageBase = "Car_TrailBurner",
         AssetName = "vera",
-        // A heavier, road-biased crossover: more weight, a lower centre of mass, firmer and shorter suspension, more road
-        // grip, a bit more torque, taller gears, less steering lock.
+        // The gearbox mod: the real car's gearbox and differentials (a 7-seat AWD crossover: a close 5-speed, open axles and a clutch-coupled centre).
+        GearSet = "close5",
+        Diffs = new byte[] { 1, 1, 2 },
+        // The real car's numbers on the TrailBurner's skeleton (scaled to the game: about a third of the real power per
+        // tonne): 1.9 t and 37 kW (about 19 kW/t, no more than the strongest stock wagon), 190 km/h real is the 9.6 m/s
+        // limiter, tall road gearing so that limit comes at 85 % of the revs, firm and short suspension, stock tyre grip, a low
+        // centre of mass, less steering lock than an off-roader. Tows 2 t (a 7-seat crossover's rating).
         Tuning = new CarTuningProfile
         {
-            Mass = 1.18f, CentreOfMassDrop = 0.06f, Torque = 1.12f, RevRange = 0.94f, GearRatios = 0.9f, FinalDrive = 0.95f,
-            SuspensionTravel = 0.82f, SpringRate = 1.2f, DamperRate = 1.15f, TyreGrip = 1.08f, SteeringLock = 0.88f,
+            Mass = 0.95f, CentreOfMassDrop = 0.06f, Torque = 1.9f, Power = 0.59f, TopSpeed = 1.2f, RevRange = 0.94f, GearRatios = 0.81f, FinalDrive = 1.0f,
+            SuspensionTravel = 0.82f, SpringRate = 1.1f, DamperRate = 1.1f, TyreGrip = 1.0f, SteeringLock = 0.88f, TowKg = 2000f,
         },
         Paints = new[]
         {
@@ -80,5 +85,12 @@ public static class VeraDefinition
         DefaultEngine = 0,
         EngineHint = "Which stock car's engine your Vera sounds like (the Roamer's smooth V6 fits it best). " +
                      "Other players with this mod hear your pick.",
+        // The garage's Liveries tab, after "Paint" (ids are part of the network layout: only append).
+        Liveries = new[]
+        {
+            new LiveryPreset("accent_stripe", "Charcoal Accent Stripe", "The thin shoulder and hood stripes of the 2011 appearance package, over your own paint."),
+            new LiveryPreset("malachite_lodge", "Malachite Lodge", "The guest shuttle of the lodge on Emerald Lake."),
+            new LiveryPreset("aures_rally", "Aures Rally", "A stock silver Vera after a week of a navigation rally in the Aures Mountains."),
+        },
     };
 }

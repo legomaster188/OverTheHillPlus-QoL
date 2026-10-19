@@ -240,12 +240,18 @@ internal static class RowMap
 
     private static float Clamp01(float t) => t < 0f ? 0f : t > 1f ? 1f : t;
 
+    /// <summary>
+    /// <paramref name="text"/> at the given alpha (two hex digits), then back to opaque. TextMeshPro has no
+    /// closing alpha tag (a literal "&lt;/alpha&gt;" is printed as text), so the alpha is reset with <alpha=#FF>.
+    /// </summary>
+    public static string Alpha(string hex, string text) => "<alpha=#" + hex + ">" + text + "<alpha=#FF>";
+
     /// <summary>The text of a button row: the label, then its value (dimmed) when it has one.</summary>
     public static string ButtonText(RowModel row)
     {
         string label = row.Label ?? "";
-        if (row.Kind == RowKind.Fold) return label + "   <alpha=#99>" + (row.On ? "HIDE" : "SHOW") + "</alpha>";
-        return string.IsNullOrEmpty(row.Value) ? label : label + "   <alpha=#99>" + row.Value + "</alpha>";
+        if (row.Kind == RowKind.Fold) return label + "   " + Alpha("99", row.On ? "HIDE" : "SHOW");
+        return string.IsNullOrEmpty(row.Value) ? label : label + "   " + Alpha("99", row.Value);
     }
 
     /// <summary>The label of a list row: the name, then its badge and detail small and dimmed.</summary>
@@ -253,12 +259,12 @@ internal static class RowMap
     {
         string label = row.Label ?? "";
         string small = Join(row.Badge, row.Detail);
-        return small.Length == 0 ? label : label + "  <size=70%><alpha=#AA>" + small + "</alpha></size>";
+        return small.Length == 0 ? label : label + "  <size=70%>" + Alpha("AA", small) + "</size>";
     }
 
     /// <summary>The text of a text line: key and value for KeyValue rows, the text otherwise.</summary>
     public static string LineText(RowModel row) => row.Kind == RowKind.KeyValue
-        ? (row.Label ?? "") + "   <alpha=#FF>" + (row.Value ?? "") + "</alpha>"
+        ? (row.Label ?? "") + "   " + Alpha("FF", row.Value ?? "")
         : row.Label ?? "";
 
     private static string Join(string a, string b)

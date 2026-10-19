@@ -6,6 +6,9 @@ using System.Text;
 
 namespace OverTheHillPlus.UI.GameMenu;
 
+// After the namespace line on purpose: the game has its own global ModManager (mod.io).
+using OverTheHillPlus.Core.Manager;
+
 /// <summary>
 /// What a mod's card in the MOD BROWSER shows (a list row of the MODS list that carries one becomes a copy of the
 /// browser's own mod cell, see <see cref="GameModsTab"/>): which mod's image, who made it, its version, side and
@@ -29,6 +32,8 @@ internal sealed class CardInfo
     public string Status { get; set; }
     /// <summary>The download size (AVAILABLE), or empty.</summary>
     public string Size { get; set; }
+    /// <summary>How finished the mod is (Unknown: no label, e.g. another creator's plugin).</summary>
+    public MaturityLevel Maturity { get; set; }
 
     /// <summary>The key the image is cached by.</summary>
     public string ImageKey => !string.IsNullOrEmpty(ModId) ? "mod:" + ModId.ToLowerInvariant() : "art:" + (Seed ?? "") + "|" + (Title ?? "");
@@ -65,13 +70,15 @@ internal static class ModCards
     /// <summary>"v1.2.0", or empty.</summary>
     public static string VersionText(string version) => string.IsNullOrEmpty(version) ? "" : version.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? version : "v" + version;
 
-    /// <summary>The details panel's line under the author: version, side and size, as there are.</summary>
+    /// <summary>The details panel's line under the author: version, maturity, side and size, as there are.</summary>
     public static string DetailLine(CardInfo c)
     {
         if (c == null) return "";
-        var parts = new List<string>(3);
+        var parts = new List<string>(4);
         string v = VersionText(c.Version);
         if (v.Length > 0) parts.Add(v);
+        string m = ModMaturity.Label(c.Maturity);
+        if (m.Length > 0) parts.Add(m);
         if (!string.IsNullOrEmpty(c.Side)) parts.Add(c.Side);
         if (!string.IsNullOrEmpty(c.Size)) parts.Add(c.Size);
         return string.Join("  ·  ", parts);
@@ -194,6 +201,139 @@ internal static class CardGrid
         for (int j = i + 1; j < kinds.Count; j++) if (RowMap.Selectable(kinds[j])) return j;
         return -1;
     }
+}
+
+/// <summary>
+/// Our cards' size and the grid's columns, from the width the page has (canvas units: the browser's canvas scales with
+/// the screen, 1920 × 1080 reference, so this scales with the resolution too). A card is the picture (16:9, as the
+/// mods' card.png), the name, and a strip under them with the on / off, maturity, version, side and size badges, so
+/// nothing covers the picture. Cards are at least <see cref="MinCellWidth"/> wide: the browser's 1090-wide panel gets
+/// two columns of about 519 (its own cells are 350 in three). Pure logic, unit tested.
+/// </summary>
+internal static class CardLayout
+{
+    /// <summary>A card is never narrower than this while it can have the width (fewer columns instead).</summary>
+    public const float MinCellWidth = 420f;
+    public const int MaxColumns = 4;
+    /// <summary>Inside the card: padding round its parts and the gap between them.</summary>
+    public const float Padding = 10f, Gap = 8f;
+    /// <summary>The badge strip under the name (the badges are 32 high).</summary>
+    public const float StripHeight = 34f;
+    /// <summary>The name's height at the browser's own card width (350); it grows with the text.</summary>
+    public const float BaseTitleHeight = 26f, BaseCellWidth = 350f;
+    public const float ImageAspect = 16f / 9f;
+
+    /// <summary>How many columns of at least <see cref="MinCellWidth"/> fit in <paramref name="width"/> (1 to <see cref="MaxColumns"/>).</summary>
+    public static int Columns(float width, float spacing)
+    {
+        if (width <= 0f) return 1;
+        int n = (int)Math.Floor((width + spacing) / (MinCellWidth + spacing));
+        return Math.Clamp(n, 1, MaxColumns);
+    }
+
+    /// <summary>The width of each of <paramref name="columns"/> cards filling <paramref name="width"/> (at least 40).</summary>
+    public static float CellWidth(float width, int columns, float spacing)
+    {
+        columns = Math.Max(1, columns);
+        return Math.Max(40f, (width - spacing * (columns - 1)) / columns);
+    }
+
+    /// <summary>The name's text size factor: 1 at the browser's width, up to 1.35 on wide cards.</summary>
+    public static float TextScale(float cellWidth) => Math.Clamp(cellWidth / BaseCellWidth, 1f, 1.35f);
+
+    public static float TitleHeight(float cellWidth) => (float)Math.Ceiling(BaseTitleHeight * TextScale(cellWidth));
+
+    /// <summary>The picture's height: 16:9 across the card inside its padding.</summary>
+    public static float ImageHeight(float cellWidth) => Math.Max(10f, (cellWidth - 2f * Padding) / ImageAspect);
+
+    /// <summary>The whole card: padding, picture, gap, name, gap, strip, padding.</summary>
+    public static float CellHeight(float cellWidth) =>
+        2f * Padding + ImageHeight(cellWidth) + 2f * Gap + TitleHeight(cellWidth) + StripHeight;
+
+    /// <summary>Columns and card size for a page <paramref name="width"/> wide.</summary>
+    public static (int columns, float w, float h) Cell(float width, float spacing)
+    {
+        int c = Columns(width, spacing);
+        float w = CellWidth(width, c, spacing);
+        return (c, w, CellHeight(w));
+    }
+}
+
+/// <summary>
+/// The MODS page's rect: the browser's grid panel, grown into the free space round it (upwards over the sort / filter
+/// line the liveries use, hidden while a tab of ours is up). Pure logic, unit tested.
+/// </summary>
+internal static class PageRect
+{
+    /// <summary>How far the page reaches above the grid panel (the hidden sort / filter line is 35 high).</summary>
+    public const float GrowTop = 34f;
+
+    /// <summary>
+    /// A RectTransform's anchored position and size delta grown by <paramref name="left"/>, <paramref name="right"/>,
+    /// <paramref name="top"/> and <paramref name="bottom"/> (parent units) round its pivot: the size grows by the sums,
+    /// and the position moves so the other edges stay where they were.
+    /// </summary>
+    public static (float x, float y, float w, float h) Grow(float x, float y, float w, float h, float pivotX, float pivotY,
+        float left, float right, float top, float bottom) =>
+        (x - left + pivotX * (left + right), y - bottom + pivotY * (bottom + top), w + left + right, h + top + bottom);
+}
+
+/// <summary>What colour a card's badge is: on / off and the like, and the maturity. Pure logic, unit tested.</summary>
+internal enum BadgeTone
+{
+    /// <summary>The browser's own dark badge.</summary>
+    Plain,
+    /// <summary>On, installed: green.</summary>
+    On,
+    /// <summary>Off: grey.</summary>
+    Off,
+    /// <summary>Waits for a restart: amber.</summary>
+    Waiting,
+    /// <summary>Failed: red.</summary>
+    Failed,
+    /// <summary>An update: blue.</summary>
+    Update,
+    Stable,
+    Beta,
+    Rough,
+}
+
+internal static class BadgeStyle
+{
+    /// <summary>The tone of a card's status (<see cref="ModCards.InstalledStatus"/> / <see cref="ModCards.AvailableStatus"/>).</summary>
+    public static BadgeTone Status(string status)
+    {
+        string s = (status ?? "").Trim().ToUpperInvariant();
+        if (s.Length == 0) return BadgeTone.Plain;
+        if (s == "FAILED") return BadgeTone.Failed;
+        if (s.Contains("RESTART")) return BadgeTone.Waiting;
+        if (s == "UPDATE") return BadgeTone.Update;
+        if (s == "ON" || s == "ALWAYS ON" || s == "INSTALLED") return BadgeTone.On;
+        if (s == "OFF") return BadgeTone.Off;
+        return BadgeTone.Plain;
+    }
+
+    public static BadgeTone Maturity(MaturityLevel level) => level switch
+    {
+        MaturityLevel.Stable => BadgeTone.Stable,
+        MaturityLevel.Beta => BadgeTone.Beta,
+        MaturityLevel.Rough => BadgeTone.Rough,
+        _ => BadgeTone.Plain,
+    };
+
+    /// <summary>The badge's background (RGBA bytes); <see cref="BadgeTone.Plain"/> is the browser's black at 80%.</summary>
+    public static (byte r, byte g, byte b, byte a) Colour(BadgeTone tone) => tone switch
+    {
+        BadgeTone.On => (38, 150, 82, 240),
+        BadgeTone.Off => (96, 98, 104, 235),
+        BadgeTone.Waiting => (201, 138, 30, 240),
+        BadgeTone.Failed => (196, 52, 46, 240),
+        BadgeTone.Update => (40, 110, 196, 240),
+        BadgeTone.Stable => (44, 112, 150, 235),
+        BadgeTone.Beta => (196, 140, 36, 235),
+        BadgeTone.Rough => (176, 62, 48, 240),
+        _ => (0, 0, 0, 204),
+    };
 }
 
 /// <summary>

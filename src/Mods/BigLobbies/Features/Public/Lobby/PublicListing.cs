@@ -60,7 +60,7 @@ internal sealed class PublicListing : IFeature
                         (Enabled.Value ? "listed as 4 slots for players without mods while fewer than 4 are in" : "switched off: only Server Browser+ users see it"));
             }
             if (_realMax <= VanillaMax) return;
-            // With added cars/prefabs (Vera, Tercel, Aro...) the host refuses every game without them, and the game
+            // With added cars/prefabs (the Vera and the other car mods) the host refuses every game without them, and the game
             // shows that as "banned from this session": don't list the room for players without mods at all then.
             bool addedPrefabs = Core.Shared.NetPrefabRegistry.MarkerValue != null;
             if (addedPrefabs && !_loggedPrefabs)

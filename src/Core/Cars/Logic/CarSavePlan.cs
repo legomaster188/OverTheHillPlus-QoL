@@ -45,9 +45,11 @@ public sealed class CarSavePlan
 
     /// <summary>The plan for car <paramref name="carId"/>. The fallback is <paramref name="preferredFallback"/> when the
     /// inventory owns it, else the first other car; never one of <paramref name="notFallback"/> (the other modded cars,
-    /// which their own plans take out of the same save).</summary>
+    /// which their own plans take out of the same save). <paramref name="ownParts"/> are item ids only this car has (its
+    /// liveries): such an item always comes out whole, whatever its states say, and its states go to the sidecar as
+    /// this car's (an item of it without states as one unmounted part), since a game without the mod doesn't know the id.</summary>
     public static CarSavePlan Make(IReadOnlyList<CarSaveItem> items, uint carId, uint preferredFallback,
-        IReadOnlyCollection<uint> notFallback = null)
+        IReadOnlyCollection<uint> notFallback = null, IReadOnlyCollection<uint> ownParts = null)
     {
         var plan = new CarSavePlan();
         if (items == null) return plan;
@@ -63,6 +65,16 @@ public sealed class CarSavePlan
                     plan.CarOwned = true;
                     plan.CarInUse |= it.InUse;
                 }
+                continue;
+            }
+            if (ownParts != null && it.ItemId != 0 && Contains(ownParts, it.ItemId))
+            {
+                plan.RemoveItems.Add(i);
+                if (it.States == null || it.States.Count == 0)
+                    plan.Removed.Add(new CarSidecarState { ItemId = it.ItemId, Count = 1, InUse = it.InUse });
+                else
+                    foreach (var st in it.States)
+                        if (st != null) plan.Removed.Add(new CarSidecarState { ItemId = it.ItemId, Count = st.Count, InUse = st.InUse });
                 continue;
             }
             if (it.States == null || it.States.Count == 0) continue;

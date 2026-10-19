@@ -51,6 +51,9 @@ internal sealed class CarAssets
         return null;
     }
 
+    /// <summary>An embedded asset's bytes ("&lt;n&gt;/&lt;name&gt;"), or null when the DLL has none. Any thread.</summary>
+    public byte[] ReadAsset(string name) => Read(name);
+
     private byte[] Read(string name)
     {
         try
@@ -140,6 +143,26 @@ internal sealed class CarAssets
             return _icon;
         }
     }
+
+    /// <summary>
+    /// The car's picture in the garage and the car lists (&lt;n&gt;_picture.png: a shaded side view in the default paint,
+    /// 512 × 512, from Liveries/tools/vera/render_picture.py; optional: null when the build has none, and the line
+    /// drawing <see cref="Icon"/> is used instead).
+    /// </summary>
+    public Texture2D Picture
+    {
+        get
+        {
+            if (_pictureTried) return _picture;
+            _pictureTried = true;
+            string f = _car.Def.AssetFile(CarDefinition.PictureSuffix);
+            if (Read(f) != null) _picture = Texture(f, linear: false);
+            return _picture;
+        }
+    }
+
+    private Texture2D _picture;
+    private bool _pictureTried;
 
     private Texture2D Texture(string name, bool linear)
     {

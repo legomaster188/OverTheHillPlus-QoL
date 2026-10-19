@@ -15,6 +15,8 @@ internal sealed class PresenceState
     public string Car;
     /// <summary><see cref="Car"/> is a stand-in phrase ("a car") rather than a car's name.</summary>
     public bool CarGeneric;
+    /// <summary>The picture name of a modded car with a public name (see <see cref="DiscordPresence.CarImages"/>), else null.</summary>
+    public string CarImage;
     /// <summary>In a multiplayer session (hosting or joined); false = solo.</summary>
     public bool InSession;
     public int Players, MaxPlayers;
@@ -63,8 +65,14 @@ internal static class DiscordPresence
 {
     /// <summary>Discord's limit for details, state and the asset texts.</summary>
     public const int MaxText = 128;
-    /// <summary>The art asset key of the mods' logo on the Over The Hill Mods application.</summary>
-    public const string DefaultImage = "logo";
+    /// <summary>The mods' logo: an https image URL (Discord's media proxy takes any public image URL as large_image or
+    /// small_image, see developers/events/gateway-events "Activity Asset Image"), from the public repo's assets/discord.</summary>
+    public const string DefaultImage = ImageBase + "logo.png";
+    /// <summary>Where the public repo serves the images (Liveries/discord in the private one).</summary>
+    public const string ImageBase = "https://raw.githubusercontent.com/legomaster188/OverTheHillPlus-QoL/main/assets/discord/";
+    /// <summary>The modded cars with a picture in the public repo (assets/discord/car_&lt;name&gt;.png, Liveries/discord in the
+    /// private one); a car joins the list when its picture is published with the car.</summary>
+    public static readonly string[] CarImages = { "vera" };
     /// <summary>Discord's limit for an image URL.</summary>
     public const int MaxImageUrl = 256;
 
@@ -178,17 +186,29 @@ internal static class DiscordPresence
             w.WriteNumber("start", s.StartUnix);
             w.WriteEndObject();
         }
-        string image = ImageKey(o);
+        string image = ImageKey(o), small = null;
         string text = HoverText(s, o);
+        string car = CarImageKey(s, o);
+        if (car != null) { small = image; image = car; }   // the car's picture is the big one, the logo moves to the corner
         if (image != null || text != null)
         {
             w.WriteStartObject("assets");
             if (image != null) w.WriteString("large_image", image);
             if (text != null) w.WriteString("large_text", text);
+            if (small != null) w.WriteString("small_image", small);
+            if (small != null && car != null) w.WriteString("small_text", "Over The Hill Mods");
             w.WriteEndObject();
         }
         w.WriteBoolean("instance", false);
         w.WriteEndObject();
+    }
+
+    /// <summary>The picture URL of the modded car being driven, when the player shows the car and keeps the default
+    /// image; null otherwise.</summary>
+    private static string CarImageKey(PresenceState s, PresenceOptions o)
+    {
+        if (!o.ShowCar || s == null || !s.InWorld || string.IsNullOrEmpty(s.CarImage) || !string.IsNullOrWhiteSpace(o.LargeImageKey)) return null;
+        return Array.IndexOf(CarImages, s.CarImage) >= 0 ? ImageBase + "car_" + s.CarImage + ".png" : null;
     }
 
     private static string ImageKey(PresenceOptions o)

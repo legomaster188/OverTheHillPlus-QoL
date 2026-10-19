@@ -25,17 +25,10 @@ internal enum NetPrefabCheck
 /// </summary>
 internal static class NetPrefabPlan
 {
-    /// <summary>
-    /// Every key a mod may register, in registration order. <b>Append only</b>: a key's position decides its prefab
-    /// index, so inserting or reordering changes the indices (and the hash) for everyone. "vera" is the Vera Crossover;
-    /// the four "trailer.&lt;name&gt;" entries are the Trailers mod's; "tercel" is the Terrier 4WD Wagon and "aro" the
-    /// Carpati 24, "hilo" the Hilo 89 and "bastion" the Bastion 200 (core's car framework, CarDefinition.RegistryKey). Appending a key changes nothing for games that don't
-    /// register it: only registered entries are in the join hash.
-    /// </summary>
-    public static readonly string[] Order = { "vera", "trailer.utility", "trailer.camper", "trailer.hauler", "trailer.boat", "tercel", "aro", "hilo", "bastion" };
+    public static readonly string[] Order = { "vera" };
 
     /// <summary>The mod id each key of <see cref="Order"/> belongs to (same positions): only that mod may declare it.</summary>
-    public static readonly string[] Owners = { "vera", "trailers", "trailers", "trailers", "trailers", "tercel", "aro", "hilo", "bastion" };
+    public static readonly string[] Owners = { "vera" };
 
     /// <summary>The mod that owns <paramref name="key"/>, null when the key isn't listed.</summary>
     public static string OwnerOf(string key)

@@ -99,6 +99,21 @@ public static class CarCosmetics
         new("cosm_Snorkel", "Performance/Snorkel/SnorkelLevel01"),
         new("cosm_Snorkel", "Performance/Snorkel/SnorkelLevel02"),
         new("cosm_Plate_Rear", "Visual/Rear_Bumper/LicensePlates_Rear", optional: true),
+        // items that mount somewhere else than the rest of their slot: the front plate on the bumper face (the bash
+        // bars and skid plates of its slot sit lower), the whip-light poles on the rear corners or bed, the ladder
+        // hooked over the roof edge (the spare wheel and racks of the Rear slot hang on the tailgate)
+        new("cosm_Plate_Front", "Visual/Front_Bumper/LicensePlates_Front", optional: true),
+        new("cosm_WhipLights", "Visual/Rear/WhipLights_01", optional: true),
+        new("cosm_WhipLights", "Visual/Rear/WhipLights_02", optional: true),
+        new("cosm_WhipLights", "Visual/Rear/WhipLights_03", optional: true),
+        new("cosm_WhipLights", "Visual/Rear/WhipLights_04", optional: true),
+        new("cosm_WhipLights", "Visual/Rear/WhipLights_05", optional: true),
+        new("cosm_WhipLights", "Visual/Rear/WhipLights_06", optional: true),
+        new("cosm_WhipLights", "Visual/Rear/WhipLights_07", optional: true),
+        new("cosm_Ladder", "Visual/Rear/Ladder", optional: true),
+        // the bush cables run from the nose to the windscreen pillars' tops: on a cab of another length they need their
+        // own place and stretch (cosmscale_Bushcables), not the hood slot's
+        new("cosm_Bushcables", "Visual/Hood/Bushcables", optional: true),
     };
 
     /// <summary>The standard anchor table (every car's unless its definition gives its own): the slots, then the items
@@ -127,6 +142,40 @@ public static class CarCosmetics
                 });
         return list.ToArray();
     }
+
+    /// <summary>The prefix of a scale anchor: a model anchor named <c>cosmscale_&lt;name&gt;</c> scales the targets of
+    /// <c>cosm_&lt;name&gt;</c> (its position is the per-axis scale, Unity axes, in each target's own axes), e.g. a roof
+    /// load or bull bar made narrower for a slimmer body. Models without one keep the donor's scale.</summary>
+    public const string ScalePrefix = "cosmscale_";
+    public const float MinScale = 0.5f;
+    public const float MaxScale = 1.5f;
+
+    /// <summary>The scale anchor of a <c>cosm_</c> anchor ("cosm_Roof" gives "cosmscale_Roof"); null for any other name.</summary>
+    public static string ScaleAnchorOf(string anchor) =>
+        anchor != null && anchor.Length > 5 && anchor.StartsWith("cosm_", StringComparison.Ordinal) ? ScalePrefix + anchor.Substring(5) : null;
+
+    /// <summary>A scale anchor's position as a scale: each axis inside [<see cref="MinScale"/>, <see cref="MaxScale"/>],
+    /// 1 where it isn't a positive finite number (a model can't blow an item up or flip it).</summary>
+    public static MeshVec3 ScaleOf(MeshVec3 raw)
+    {
+        static float C(float v) => float.IsNaN(v) || float.IsInfinity(v) || v <= 0f ? 1f : Math.Clamp(v, MinScale, MaxScale);
+        return new MeshVec3(C(raw.X), C(raw.Y), C(raw.Z));
+    }
+
+    /// <summary>A target's local scale after placing: its donor scale with the slot's scale taken back out (an item with
+    /// its own anchor inside a scaled slot keeps its own size; pass 1,1,1 for the slot itself) and its own scale anchor
+    /// applied.</summary>
+    public static MeshVec3 TargetScale(MeshVec3 local, MeshVec3 slotScale, MeshVec3 own)
+    {
+        static float D(float v, float s) => s > 0f ? v / s : v;
+        return new MeshVec3(D(local.X, slotScale.X) * own.X, D(local.Y, slotScale.Y) * own.Y, D(local.Z, slotScale.Z) * own.Z);
+    }
+
+    /// <summary>Whether <paramref name="path"/> is <paramref name="hidden"/>'s node or under it ("Visual/Roof/Christmas"
+    /// hides "Visual/Roof/Christmas" and "Visual/Roof/Christmas/Lights", not "Visual/Roof/Christmas_Front").</summary>
+    public static bool IsUnder(string path, string hidden) =>
+        path != null && hidden != null && path.StartsWith(hidden, StringComparison.Ordinal) &&
+        (path.Length == hidden.Length || path[hidden.Length] == '/');
 
     public static CarCosmeticAnchor Slot(string anchor, string slot) => new() { Anchor = anchor, Target = slot, Slot = slot };
 

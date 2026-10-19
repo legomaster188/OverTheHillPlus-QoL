@@ -2,6 +2,7 @@ using System;
 using Fusion;
 using HarmonyLib;
 using UnityEngine;
+using OverTheHillPlus.Shared;
 
 namespace OverTheHillPlus.Features.Public.PlayerColors;
 

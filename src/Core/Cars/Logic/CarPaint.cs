@@ -127,6 +127,33 @@ public static class CarPaint
         }
     }
 
+    /// <summary>
+    /// Lays a livery with alpha over a painted albedo (both RGBA32 of the same size), the way a decal sits on paint:
+    /// <c>out = under * (1 - a) + livery * a</c> per channel, rounded, alpha 255. <paramref name="outRgba"/> may be
+    /// <paramref name="underRgba"/> itself. Throws ArgumentException on mismatched sizes.
+    /// </summary>
+    public static void Overlay(ReadOnlySpan<byte> underRgba, ReadOnlySpan<byte> liveryRgba, Span<byte> outRgba)
+    {
+        if (underRgba.Length % 4 != 0 || liveryRgba.Length != underRgba.Length || outRgba.Length != underRgba.Length)
+            throw new ArgumentException("the paint, the livery and the output must be RGBA32 of the same size");
+        for (int i = 0; i < underRgba.Length; i += 4)
+        {
+            int a = liveryRgba[i + 3], keep = 255 - a;
+            outRgba[i] = (byte)((underRgba[i] * keep + liveryRgba[i] * a + 127) / 255);
+            outRgba[i + 1] = (byte)((underRgba[i + 1] * keep + liveryRgba[i + 1] * a + 127) / 255);
+            outRgba[i + 2] = (byte)((underRgba[i + 2] * keep + liveryRgba[i + 2] * a + 127) / 255);
+            outRgba[i + 3] = 255;
+        }
+    }
+
+    /// <summary>True when every pixel's alpha is 255 (the livery replaces the paint, as the game's own liveries do).</summary>
+    public static bool IsOpaque(ReadOnlySpan<byte> rgba)
+    {
+        for (int i = 3; i < rgba.Length; i += 4)
+            if (rgba[i] != 255) return false;
+        return true;
+    }
+
     /// <summary>The zone weights out of 255, scaled down together so they add up to at most 255.</summary>
     public static void Weights(byte zoneR, byte zoneG, out int r, out int g)
     {

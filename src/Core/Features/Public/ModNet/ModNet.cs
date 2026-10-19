@@ -65,15 +65,11 @@ internal static class ModNet
         public const ushort Chat = 3;
         public const ushort PingMonitor = 4;
         public const ushort Moderation = 5;
-        /// <summary>Waypoints+: the session's shared pins (host snapshots, guests' add/remove requests).</summary>
         public const ushort Waypoints = 6;
         /// <summary>Race Mode: track, countdown, gate times, results and the track's leaderboard.</summary>
         public const ushort Race = 7;
-        /// <summary>Tag & Hide and Seek (OTH.Tag): the host's round snapshots.</summary>
         public const ushort Tag = 8;
-        /// <summary>Cargo Jobs (OTH.Cargo): the job board, take / abandon requests and host-confirmed pay.</summary>
         public const ushort Cargo = 9;
-        /// <summary>Custom Horns (OTH.Horns): horn choices and sound chunks.</summary>
         public const ushort Horns = 10;
         /// <summary>Server Rules (OTH.Rules): the rules card, votes and notices (RulesWire.Channel, kept equal).</summary>
         public const ushort Rules = 11;
@@ -81,10 +77,17 @@ internal static class ModNet
         public const ushort ReservedPrivate12 = 12;
         /// <summary>Trailers: spawn / hitch requests and every trailer's hitch state (src/Mods/Trailers).</summary>
         public const ushort Trailers = 13;
-        /// <summary>Modded cars (core's car framework: the Vera Crossover, the Terrier 4WD Wagon, ...): each player's paint
-        /// colours, skin and engine sound for each modded car; the car id is in the message (the Vera's in the old
-        /// layout without it).</summary>
         public const ushort CarLook = 15;
+        public const ushort AirRide = 24;
+        public const ushort OnFoot = 40;
+        public const ushort StuntScore = 31;
+        public const ushort Flares = 33;
+        public const ushort TyrePressure = 42;
+        public const ushort Fuel = 43;
+        public const ushort Realism = 45;
+        public const ushort Gearbox = 44;
+        /// <summary>Reserved for the private build: never reuse it.</summary>
+        public const ushort Reserved35 = 35;
         /// <summary>Reserved for the private build: never reuse it.</summary>
         public const ushort Reserved114 = 114;
     }

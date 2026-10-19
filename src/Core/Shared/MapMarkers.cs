@@ -7,16 +7,6 @@ using Object = UnityEngine.Object;
 
 namespace OverTheHillPlus.Shared;
 
-/// <summary>
-/// Extra pins and dotted route lines on the game's map screen, fed by mods (pins from Waypoints+, checkpoints from
-/// Race Mode), so each mod only says what to show. Purely local and visual.
-///
-/// <para>How: the first <see cref="Set"/> or <see cref="SetRoute"/> installs postfixes on MapView.UpdatePlayerIndicators
-/// (per frame while the map is open; no struct parameters), UpdatePlayersNameZoom (to keep dots the same size when
-/// zooming) and OnDestroy. Pins are clones of the game's own map pin icon (label and colour set through
-/// PinpointMapIcon), placed with MapView.WorldToUIPosition the way the game places its pins. Route dots are small UI
-/// images under the same parent, along the straight line between the two spots.</para>
-/// </summary>
 internal static class MapMarkers
 {
     public struct Spot

@@ -232,6 +232,10 @@ internal static class ModsPage
 
     private static readonly List<ModInfo> Sorted = new();
 
+    // The INSTALLED list's search and filter (kept while the game runs).
+    private static string _search = "";
+    private static ModListModel.Show _show = ModListModel.Show.All;
+
     /// <summary>Core first, then by name.</summary>
     private static List<ModInfo> SortedMods()
     {
@@ -261,16 +265,23 @@ internal static class ModsPage
             return null;
         }
         ModInfo open = null;
+        // Finding a mod in a long list: a search box (name, id or description) and an on / off / maturity filter.
+        _search = SimpleMenu.Text("Search", _search ?? "", 40, "Type part of a mod's name or what it does.");
+        SimpleMenu.Choice("Show", "Which mods the list shows.", (int)_show, ModListModel.ShowLabels, i => _show = (ModListModel.Show)i);
+        int listed = 0;
         foreach (var m in mods)
         {
             bool core = ModPageView.IsCore(m);
             bool on = core || ModManager.SwitchedOn(m.Id);
+            bool apiMod = ThirdParty.IsApiMod(m.Id);
+            var maturity = ModMaturity.Of(m, !apiMod);
+            if (!ModListModel.Matches(_search, m.Name, m.Id, m.Description, _show, on, maturity)) continue;
+            listed++;
             string value = ModListModel.SwitchValue(core, ModStatus.SwitchText(on, ModManager.PendingRestart(m.Id)));
             // "update available" once the AVAILABLE tab fetched the list
             string detail = ModListModel.Detail(m.Version, ModManager.FailedReason(m.Id) != null, PatchReport.Failed(m.Id) > 0,
-                AvailableTab.InstalledMark(m));
-            string hint = string.IsNullOrEmpty(m.Description) ? "Enter opens its settings." : m.Description;
-            bool apiMod = ThirdParty.IsApiMod(m.Id);
+                AvailableTab.InstalledMark(m), maturity);
+            string hint = ModMaturity.Describe(string.IsNullOrEmpty(m.Description) ? "Enter opens its settings." : m.Description, m.Id, maturity);
             string badge = ModListModel.Badge(apiMod, RequiredMods.SideBadge(m.Side), RequiredMods.Badge(m));
             bool failed = ModManager.FailedReason(m.Id) != null;
             // The MOD BROWSER shows the mod as one of its cards: the image from the mod's DLL (card.png).
@@ -280,6 +291,7 @@ internal static class ModsPage
                 Author = apiMod ? ModCards.OtherAuthor : ModCards.OurAuthor,
                 Version = m.Version, Side = apiMod ? RequiredMods.SideBadge(m.Side) : RequiredMods.Badge(m),
                 Status = ModCards.InstalledStatus(core, on, ModManager.PendingRestart(m.Id), failed, AvailableTab.UpdateFor(m) != null),
+                Maturity = maturity,
             };
             bool pressed = SimpleMenu.ListRow(m.Name ?? m.Id, detail, badge, value, on, hint, !core, out int step, card);
             if (step != 0 && !core)
@@ -289,6 +301,7 @@ internal static class ModsPage
             }
             if (pressed) open = m;
         }
+        if (listed == 0) SimpleMenu.Note("No mod matches the search.");
         SimpleMenu.Note("Switching a mod on or off takes effect after you restart the game.");
         ThirdPartyRows.Draw(); // plugins of other creators, with an OTHER CREATOR badge
         return open;

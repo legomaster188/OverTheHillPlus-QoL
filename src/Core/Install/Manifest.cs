@@ -28,6 +28,8 @@ internal sealed class ManifestEntry
     /// <summary>Ids of the mods it needs (usually "core"); never null.</summary>
     public string[] Requires = Array.Empty<string>();
     public string Description = "";
+    /// <summary>"Stable", "Beta" or "Rough" (optional; empty: the Mod Manager's own table decides, see ModMaturity).</summary>
+    public string Maturity = "";
 }
 
 /// <summary>
@@ -92,6 +94,7 @@ internal sealed class Manifest
         entry.Url = RequiredString(e, "url", where);
         entry.Sha256 = RequiredString(e, "sha256", where).ToLowerInvariant();
         entry.Description = OptionalString(e, "description");
+        entry.Maturity = OptionalString(e, "maturity");
         if (!e.TryGetProperty("size", out var size) || size.ValueKind != JsonValueKind.Number || !size.TryGetInt64(out entry.Size) || entry.Size <= 0)
             throw new ManifestException($"{where} has no valid \"size\".");
         if (e.TryGetProperty("requires", out var req) && req.ValueKind != JsonValueKind.Null)

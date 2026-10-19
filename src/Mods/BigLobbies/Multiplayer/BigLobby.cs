@@ -252,7 +252,6 @@ internal static class BigLobby
     }
 }
 
-
 [HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.RemovePlayer))]
 internal static class RemovePlayerPromotePatch
 {

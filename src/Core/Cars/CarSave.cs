@@ -50,7 +50,8 @@ internal sealed class CarSave
     {
         if (items == null) return null;
         var model = Model(items, out var own);
-        var plan = CarSavePlan.Make(model, ItemId, FallbackCar != 0 ? FallbackCar : _car.Catalog.Base?.ItemId ?? 0, ModdedCars.OtherItemIds(_car));
+        var plan = CarSavePlan.Make(model, ItemId, FallbackCar != 0 ? FallbackCar : _car.Catalog.Base?.ItemId ?? 0, ModdedCars.OtherItemIds(_car),
+            _car.Liveries.ItemIds);
         WriteSidecar(plan, own, model);
         if (plan.IsEmpty) return null;
 

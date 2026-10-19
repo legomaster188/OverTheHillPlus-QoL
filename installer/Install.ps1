@@ -56,7 +56,7 @@ $CategoryTitles = @{
     "qol"         = "Quality of life"
     "multiplayer" = "Multiplayer and servers"
     "cars"        = "New cars and car parts"
-    "tools"       = "Host and solo tools (cheats)"
+    "tools"       = "Host and solo tools"
 }
 
 # ---- small helpers -----------------------------------------------------------------------------------------------
@@ -278,10 +278,14 @@ function ReadManifest([string]$json) {
         $seen[$m.id.ToLower()] = $true
         $category = [string]$m.category
         if (-not $category) { $category = "qol" }
+        # How finished it is (Stable / Beta / Rough; older lists have none) and the plain note a Rough mod comes with.
+        $maturity = [string]$m.maturity
+        if (@("Stable", "Beta", "Rough") -notcontains $maturity) { $maturity = "" }
         $list.Add([pscustomobject]@{
             Id = [string]$m.id; Name = [string]$m.name; Version = [string]$m.version; File = [string]$m.file
             Url = [string]$m.url; Sha256 = [string]$m.sha256; Size = [int64]$m.size
             Description = [string]$m.description; Category = $category
+            Maturity = $maturity; Note = [string]$m.note
         })
     }
     return $list
@@ -419,10 +423,18 @@ function PickMods($manifest, [string]$game) {
             }
             $mark = " "
             if ($on.ContainsKey($m.Id)) { $mark = "x" }
-            Say (("   {0,2}. [{1}] {2,-22} {3}" -f $n, $mark, (AsciiText $m.Name), (ShortText $m.Description)))
+            $color = "Gray"
+            if ($m.Maturity -eq "Beta") { $color = "Yellow" }
+            if ($m.Maturity -eq "Rough") { $color = "Red" }
+            Say (("   {0,2}. [{1}] {2,-22} {3,-8} {4,-6} {5}" -f $n, $mark, (AsciiText $m.Name), ("v" + $m.Version), $m.Maturity, (ShortText $m.Description))) $color
+            if ($m.Maturity -eq "Rough" -and $m.Note) { Say ("                " + (AsciiText $m.Note)) "Red" }
         }
         Say ""
-        Say "Type numbers to switch mods on or off (for example: 3 7 12). a = all, n = none, q = quality of life only."
+        Say "Stable = used in game for a while. Beta = new or not tested in game much yet. Rough = works badly." "DarkGray"
+        Say ""
+        $hint = "Type numbers to switch mods on or off (for example: 3 7 12). a = all, n = none"
+        if (@($items | Where-Object { $_.Category -eq "tools" }).Count -gt 0) { $hint += ", q = quality of life only" }
+        Say ($hint + ".")
         $answer = Read-Host "Press Enter when you are done"
         if ([string]::IsNullOrWhiteSpace($answer)) { break }
         foreach ($tok in ($answer -split "[,; ]+")) {
@@ -460,7 +472,7 @@ function UpdateMods([string]$game, $bundled) {
     }
     $installed = InstalledFiles $game
     $mine = @($source | Where-Object { $installed -contains $_.File.ToLower() })
-    if ($mine.Count -eq 0) { Warn "No mods are installed yet. Pick 1, 2 or 3 first."; return }
+    if ($mine.Count -eq 0) { Warn "No mods are installed yet. Install some first."; return }
     $dir = PluginDir $game
     $updated = 0
     # Core first: the mods need the matching core.
@@ -529,25 +541,34 @@ function NextSteps([string]$game) {
     Say "  3. If something is wrong, look at BepInEx\LogOutput.log in the game folder, and see the README."
 }
 
-function Menu {
+# The menu entries for this mod list. The "quality of life only" entry is only there when the list has solo and host
+# tools to leave out, so a release without them has a shorter menu.
+function MenuEntries($manifest) {
+    $hasTools = @($manifest | Where-Object { $_.Category -eq "tools" }).Count -gt 0
+    $entries = New-Object System.Collections.Generic.List[object]
+    if ($hasTools) {
+        $entries.Add(@("everything", "Everything         all mods, including the solo and host tools"))
+        $entries.Add(@("qol", "Quality of life    no host tools"))
+    } else {
+        $entries.Add(@("everything", "Everything         all mods"))
+    }
+    $entries.Add(@("choose", "Choose mods        pick from a list"))
+    $entries.Add(@("update", "Update             bring the installed mods up to date"))
+    $entries.Add(@("uninstall", "Uninstall          remove the mods"))
+    return $entries
+}
+
+function Menu($manifest) {
+    $entries = MenuEntries $manifest
     Say ""
     Say "What do you want to do?"
-    Say "  1  Everything         all mods, including the solo and host tools"
-    Say "  2  Quality of life    no cheats and no host tools"
-    Say "  3  Choose mods        pick from a list"
-    Say "  4  Update             bring the installed mods up to date"
-    Say "  5  Uninstall          remove the mods"
+    for ($i = 0; $i -lt $entries.Count; $i++) { Say ("  " + ($i + 1) + "  " + $entries[$i][1]) }
     Say "  Q  Quit"
     $a = (Read-Host "Your choice").Trim().ToLower()
-    switch ($a) {
-        "1" { return "everything" }
-        "2" { return "qol" }
-        "3" { return "choose" }
-        "4" { return "update" }
-        "5" { return "uninstall" }
-        "q" { return "quit" }
-        default { return "" }
-    }
+    if ($a -eq "q") { return "quit" }
+    $n = 0
+    if ([int]::TryParse($a, [ref]$n) -and $n -ge 1 -and $n -le $entries.Count) { return $entries[$n - 1][0] }
+    return ""
 }
 
 # ---- main --------------------------------------------------------------------------------------------------------
@@ -565,9 +586,9 @@ try {
     $act = $Action
     if (-not $act) {
         while ($true) {
-            $act = Menu
+            $act = Menu $bundled
             if ($act) { break }
-            Warn "Please type 1, 2, 3, 4, 5 or Q."
+            Warn "Please type one of the numbers in the list, or Q."
         }
     }
     if ($act -eq "quit") { exit 0 }

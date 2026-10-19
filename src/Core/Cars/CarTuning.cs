@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 using VehiclePhysics;
 using Object = UnityEngine.Object;
@@ -16,8 +15,8 @@ using OverTheHillPlus.Core.Manager;
 /// <item>Baked into the template once (identical on every peer, since every peer builds it with the same code): wheel
 ///   radius (the model's tyre on the unmoved colliders, <see cref="CarWheelFit"/>), suspension travel / spring / damper, tyre grip (a copy of the
 ///   donor's tyre asset), steering lock and the centre of mass.</item>
-/// <item>Applied at runtime, once a second, to every such car in the scene: mass, engine torque and rev range, gear
-///   ratios and final drive. These are values the game itself rewrites (cargo weight, engine-tier upgrades, damage), so
+/// <item>Applied at runtime, once a second, to every such car in the scene (<see cref="TunedCar"/>): mass, engine torque and rev range, gear
+///   ratios, final drive, the engine's power cap and the speed limiter's limit. These are values the game itself rewrites (cargo weight, engine-tier upgrades, damage), so
 ///   each is a <see cref="CarTuneSlot"/>: a game change becomes the new base and the car's multiplier goes back on top.
 ///   Runs where this game simulates the car (offline, solo, host) and on modded guests while the host runs the car
 ///   too, so a guest's prediction matches the host's physics. Nowhere else.</item>
@@ -30,8 +29,27 @@ internal sealed class CarTuning
     private readonly Dictionary<IntPtr, TunedCar> _cars = new();
     private float _next;
 
+    /// <summary>The car's tuning profile (clamped), the same on every peer.</summary>
+    public CarTuningProfile Profile => _profile;
+
     /// <summary>The car's tyre asset (a tuned copy of the donor's), shared by every copy and its CarInfo.</summary>
     public TireDataStandardAsset Tyres { get; private set; }
+
+    /// <summary>The runtime multipliers worked out from the model and the donor when the template is built.</summary>
+    public CarRuntimeFit Fit { get; private set; } = CarRuntimeFit.None;
+
+    /// <summary>The template's tuned wheel (the first wheel collider after the bake), for the CarInfo's suspension setup
+    /// (CarCatalog): whatever game code applies that setup to the wheels writes the car's own values. Null before the bake.</summary>
+    public WheelValues Wheel { get; private set; }
+
+    /// <summary>One wheel collider's values.</summary>
+    public sealed class WheelValues
+    {
+        public float Radius, Inertia, SpringRate, DamperRate, UnsprungMass, BumpStopRate;
+        public string Describe() => string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "r {0:0.000} m, inertia {1:0.##} kg m2, spring {2:0} N/m, damper {3:0} N s/m, unsprung {4:0.#} kg, bump stop {5:0} N/m",
+            Radius, Inertia, SpringRate, DamperRate, UnsprungMass, BumpStopRate);
+    }
 
     public CarTuning(RuntimeCar car)
     {
@@ -71,6 +89,11 @@ internal sealed class CarTuning
         // The model's tyre radius on the unmoved colliders: VPP settles the car onto its own tyres. The same predicate
         // as the garage model's drop (CarWheelFit.Applies), so the car and its garage model always agree.
         bool radius = CarWheelFit.Applies(lay.DonorTyreRadius, lay.TyreRadius);
+        // The rest of each wheel keeps the donor's proportions (CarPhysicsFit): wheel inertia and unsprung mass by the game's
+        // r² rule times the extra load, bump stops with the spring.
+        float wheelMass = CarPhysicsFit.WheelMassScale(p, lay.DonorTyreRadius, lay.TyreRadius);
+        float bump = CarPhysicsFit.BumpStopScale(p);
+        WheelValues first = null;
         foreach (var wc in tpl.GetComponentsInChildren<VPFunselektor3DRaycastWheelCollider>(true))
         {
             if (wc == null) continue;
@@ -78,7 +101,19 @@ internal sealed class CarTuning
             wc.suspensionTravel *= p.SuspensionTravel;
             wc.springRate *= p.SpringRate;
             wc.damperRate *= p.DamperRate;
+            wc.bumpStopRate *= bump;
+            wc.unsprungMass *= wheelMass;
+            wc.inertia *= wheelMass;
+            first ??= new WheelValues
+            {
+                Radius = wc.radius, Inertia = wc.inertia, SpringRate = wc.springRate, DamperRate = wc.damperRate,
+                UnsprungMass = wc.unsprungMass, BumpStopRate = wc.bumpStopRate,
+            };
         }
+        Wheel = first;
+        float donorBase = lay.DonorFrontZ - lay.DonorRearZ, modelBase = lay.FrontZ - lay.RearZ;
+        float donorTrack = Mathf.Abs(lay.DonorWheels[1].x - lay.DonorWheels[0].x), modelTrack = Mathf.Abs(lay.Wheels[1].x - lay.Wheels[0].x);
+        Fit = CarRuntimeFit.For(p, lay.DonorTyreRadius, lay.TyreRadius, donorBase, modelBase, donorTrack, modelTrack);
 
         var com = car.centerOfMass;
         if (com != null)
@@ -90,7 +125,9 @@ internal sealed class CarTuning
             float z = Mathf.LerpUnclamped(lay.RearZ, lay.FrontZ, t);
             com.position = root.TransformPoint(new Vector3(c.x, c.y - p.CentreOfMassDrop, z));
         }
-        _car.Info($"tuning: {p.Describe()}; wheel radius {(radius ? lay.TyreRadius.ToString("0.000") + " m" : "the donor's")}.");
+        _car.Info($"tuning: {p.Describe()}; wheel radius {(radius ? lay.TyreRadius.ToString("0.000") + " m" : "the donor's")}; " +
+                  $"wheel {(first != null ? first.Describe() : "none")} (inertia and unsprung mass x{wheelMass:0.##}, bump stops x{bump:0.##}); " +
+                  $"at runtime {Fit.Describe()}; wheelbase {modelBase:0.00} m (donor {donorBase:0.00}), track {modelTrack:0.00} m (donor {donorTrack:0.00}).");
     }
 
     // ---------------------------------------------------------------- runtime
@@ -121,13 +158,52 @@ internal sealed class CarTuning
             var car = fp.GetComponent<VPVehicleController>();
             if (car == null || !car.isActiveAndEnabled) continue;
             seen.Add(car.Pointer);
-            if (!_cars.TryGetValue(car.Pointer, out var rec)) _cars[car.Pointer] = rec = new TunedCar(car);
-            rec.Apply(_profile);
+            // Another mod is setting these values by hand: stand back without letting go of the slots (see ClaimBook), so the
+            // two never feed each other's writes back in.
+            if (CarTuneClaims.IsHeld(car.Pointer)) continue;
+            if (!_cars.TryGetValue(car.Pointer, out var rec))
+            {
+                _cars[car.Pointer] = rec = new TunedCar(car, TunedCar.Parts.Modded)
+                {
+                    Shared = IsClassSetting,
+                    OnShared = what => _car.LogOnce("shared-" + what,
+                        $"tuning: the car's {what} is its class's own settings object (shared with the stock cars): left as the game has it."),
+                };
+            }
+            float load = _profile.TowKg > 0f ? CarTowLoads.Of(car.Pointer) : 0f;
+            rec.Apply(_profile, TowRules.PowerFactor(load, _profile.TowKg), TowRules.SpeedFactor(load, _profile.TowKg), Fit);
+            if (CarPhysicsProbe.Enabled) CarPhysicsProbe.Watch(_car, fp, car);
         }
         List<IntPtr> gone = null;
         foreach (var k in _cars.Keys)
             if (!seen.Contains(k)) (gone ??= new List<IntPtr>()).Add(k);
         if (gone != null) foreach (var k in gone) _cars.Remove(k);
+    }
+
+    private HashSet<IntPtr> _classSettings;
+
+    /// <summary>True for the brakes, converter or inertia box object of the car's class setup (VehicleControllerSetup,
+    /// one asset for every car of the class): writing it would tune every stock car of the class too.</summary>
+    private bool IsClassSetting(IntPtr p)
+    {
+        if (p == IntPtr.Zero) return false;
+        if (_classSettings == null)
+        {
+            _classSettings = new HashSet<IntPtr>();
+            foreach (var info in new[] { _car.Catalog.Info, _car.Catalog.Base })
+            {
+                try
+                {
+                    var s = info != null ? info.carCategorySetup : null;
+                    if (s == null) continue;
+                    if (s.brakes != null) _classSettings.Add(s.brakes.Pointer);
+                    if (s.clutch != null) _classSettings.Add(s.clutch.Pointer);
+                    if (s.inertia != null) _classSettings.Add(s.inertia.Pointer);
+                }
+                catch (Exception e) { DebugLog.Error("core", e, "CarTuning.IsClassSetting"); }
+            }
+        }
+        return _classSettings.Contains(p);
     }
 
     private void RestoreAll()
@@ -136,116 +212,18 @@ internal sealed class CarTuning
         _cars.Clear();
     }
 
-    /// <summary>Before the game reads a car's "original" engine values, put the game's own values back (they are
-    /// tuned again on the next tick), so tuned values never become the game's originals.</summary>
+    public void ReleaseGears(VPVehicleController car)
+    {
+        if (car != null && _cars.TryGetValue(car.Pointer, out var rec)) rec.ReleaseGears();
+    }
+
+    /// <summary>Before the game reads a car's "original" engine values, put the game's own engine values back (they are
+    /// tuned again on the next tick), so tuned values never become the game's originals. Only the engine's: the mass,
+    /// brakes and the rest stay, so a spawning 8.6 t truck never sits for a second at the donor's weight on its stiff springs.</summary>
     public void BeforeGameReadsBase(CarDamageSystem dmg)
     {
         if (_cars.Count == 0 || dmg == null) return;
         var v = dmg.vehicle;
-        if (v != null && _cars.TryGetValue(v.Pointer, out var rec)) rec.Restore();
-    }
-
-    /// <summary>The runtime-tuned values of one car.</summary>
-    private sealed class TunedCar
-    {
-        private readonly VPVehicleController _car;
-        private IntPtr _eng, _gb, _hl, _diff, _input;
-        private readonly List<CarTuneSlot> _torque = new(), _revs = new(), _gears = new(), _final = new();
-        private readonly HashSet<IntPtr> _gearArrays = new();
-        private readonly List<Il2CppStructArray<float>> _keepAlive = new();
-        private CarTuneSlot _mass;
-
-        public TunedCar(VPVehicleController car) { _car = car; }
-
-        private static IntPtr P(Il2CppSystem.Object o) => o == null ? IntPtr.Zero : o.Pointer;
-
-        private void Rebind()
-        {
-            if (_mass == null)
-            {
-                var rb = _car.GetComponent<Rigidbody>();
-                if (rb != null) _mass = new CarTuneSlot(() => rb.mass, v => rb.mass = v);
-            }
-            var eng = _car.engine;
-            if (P(eng) != _eng)
-            {
-                _eng = P(eng);
-                Drop(_torque); Drop(_revs);
-                if (eng != null)
-                {
-                    _torque.Add(new CarTuneSlot(() => eng.idleRpmTorque, v => eng.idleRpmTorque = v));
-                    _torque.Add(new CarTuneSlot(() => eng.peakRpmTorque, v => eng.peakRpmTorque = v));
-                    _torque.Add(new CarTuneSlot(() => eng.torqueCapLimit, v => eng.torqueCapLimit = v));
-                    _revs.Add(new CarTuneSlot(() => eng.peakRpm, v => eng.peakRpm = v));
-                    _revs.Add(new CarTuneSlot(() => eng.maxRpm, v => eng.maxRpm = v));
-                    _revs.Add(new CarTuneSlot(() => eng.rpmLimiterMax, v => eng.rpmLimiterMax = v));
-                }
-            }
-            var hl = _car.highLowGearsDifferential;
-            var diff = _car.differential;
-            if (P(hl) != _hl || P(diff) != _diff)
-            {
-                _hl = P(hl); _diff = P(diff);
-                Drop(_final);
-                if (hl != null)
-                {
-                    _final.Add(new CarTuneSlot(() => hl.highGearsGearRatio, v => hl.highGearsGearRatio = v));
-                    _final.Add(new CarTuneSlot(() => hl.lowGearsGearRatio, v => hl.lowGearsGearRatio = v));
-                }
-                else if (diff != null) _final.Add(new CarTuneSlot(() => diff.gearRatio, v => diff.gearRatio = v));
-            }
-            // Gear tables: the input component rewrites the gearbox's ratios from its own two tables every input tick.
-            var gb = _car.gearbox;
-            FunselektorFusionVPStandardInput input = null;
-            try { input = _car.GetComponent<FunselektorFusionVPStandardInput>(); } catch (Exception ex) { DebugLog.Error("core", ex, "TunedCar.Rebind"); }
-            if (P(gb) != _gb || P(input) != _input)
-            {
-                _gb = P(gb); _input = P(input);
-                if (input != null)
-                {
-                    AddGears(input.forwardAllGears);
-                    AddGears(input.forwardSecondGearOnly);
-                }
-                if (gb != null) AddGears(gb.forwardGearRatios);
-            }
-        }
-
-        private void AddGears(Il2CppStructArray<float> arr)
-        {
-            if (arr == null || !_gearArrays.Add(arr.Pointer)) return;
-            _keepAlive.Add(arr);
-            for (int i = 0; i < arr.Length; i++)
-            {
-                int idx = i;
-                _gears.Add(new CarTuneSlot(() => arr[idx], v => arr[idx] = v));
-            }
-        }
-
-        private static void Drop(List<CarTuneSlot> slots)
-        {
-            foreach (var s in slots) s.Restore();
-            slots.Clear();
-        }
-
-        public void Apply(CarTuningProfile p)
-        {
-            Rebind();
-            _mass?.Write(CarTuningProfile.Scale(_mass.Sync(), p.Mass, 50f));
-            foreach (var s in _torque) s.Write(CarTuningProfile.Scale(s.Sync(), p.Torque));
-            foreach (var s in _revs) s.Write(CarTuningProfile.Scale(s.Sync(), p.RevRange, 1000f));
-            foreach (var s in _gears) s.Write(CarTuningProfile.Scale(s.Sync(), p.GearRatios));
-            foreach (var s in _final) s.Write(CarTuningProfile.Scale(s.Sync(), p.FinalDrive));
-        }
-
-        public void Restore()
-        {
-            _mass?.Restore();
-            foreach (var l in new[] { _torque, _revs, _gears, _final })
-                foreach (var s in l) s.Restore();
-            // Forget the bindings so the next Apply re-reads the game's values as the new bases.
-            _eng = _gb = _hl = _diff = _input = IntPtr.Zero;
-            _torque.Clear(); _revs.Clear(); _gears.Clear(); _final.Clear();
-            _gearArrays.Clear(); _keepAlive.Clear();
-        }
+        if (v != null && _cars.TryGetValue(v.Pointer, out var rec)) rec.RestoreEngine();
     }
 }

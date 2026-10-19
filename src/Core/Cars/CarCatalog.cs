@@ -13,11 +13,15 @@ namespace OverTheHillPlus.Cars;
 /// built from the name).
 /// <para>Upgrades: the base car's cosmetics (every VehicleCosmetic: bull bars, roof loads, light bars, horns, mudflaps,
 /// side tools, plushies, ...; the game has no rollcage cosmetic) and its mechanical upgrades (engine, health,
-/// suspension, tyres, winch, horn, water resistance = the snorkel) are kept: CarBody places their slots on the model.
-/// Dropped: liveries (painted for the base car's UV layout: the car has its own colours and skins), the protection
-/// upgrades (their model is the base car's rollcage, Performance/Rollcage, shaped for its body: hidden), bed cosmetics
-/// unless the car has a bed, and the other kinds whose models sit on the donor's body (drone, extra headlights, tool
-/// slots).</para>
+/// suspension lift, tyres, winch, horn, water resistance = the snorkel, tool slots, protection) are kept: CarBody places
+/// their slots on the model. The tool slots have no model at all; the protection stages only change a damage modifier
+/// on the car, and their model, the base car's rollcage (Performance/Rollcage, shaped for its body), stays hidden.
+/// Dropped: the base car's liveries (painted for its UV layout; the car's own liveries take their place, see
+/// <see cref="CarLiveryParts"/>), bed cosmetics unless
+/// the car has a bed, cosmetics whose every model sits in a slot or item the car hides (<see cref="DropUnplaceable"/>),
+/// and the drone and extra-headlight kinds (models on the donor's body; no stock car of the donor classes lists them).</para>
+/// <para>The suspension lift sets every wheel's travel to the CarInfo's base travel plus the stage's lift, so the copy
+/// gets the car's own travel (<see cref="CarUpgradeFit.LiftBaseTravel"/>) and the lift adds to it.</para>
 /// </summary>
 internal sealed class CarCatalog
 {
@@ -35,7 +39,7 @@ internal sealed class CarCatalog
     private static readonly HashSet<UpgradeType> KeptUpgrades = new()
     {
         UpgradeType.Default, UpgradeType.Engine, UpgradeType.Health, UpgradeType.Suspension, UpgradeType.Tire,
-        UpgradeType.Winch, UpgradeType.Horn, UpgradeType.WaterResistance,
+        UpgradeType.Winch, UpgradeType.Horn, UpgradeType.WaterResistance, UpgradeType.Inventory, UpgradeType.Protection,
     };
 
     /// <summary>Returned by <see cref="Prepare"/> when the base car can't be found yet but may be later.</summary>
@@ -126,20 +130,27 @@ internal sealed class CarCatalog
         info.hasBed = def.HasBed;
         info.Name = _car.Text.Name(baseInfo.Name);
         info.Description = _car.Text.Description(baseInfo.Description);
-        var icon = _car.Assets.Icon;
+        // The picture (a render) when the car has one, else the line drawing. A 512 px picture at Unity's default 100
+        // px per unit shows at the size of the game's 256 px icons at 50.
+        var icon = _car.Assets.Picture ?? _car.Assets.Icon;
         if (icon != null) info.Icon = Sprite.Create(icon, new Rect(0, 0, icon.width, icon.height), new Vector2(0.5f, 0.5f));
 
         var dropped = new Dictionary<string, int>();
+        string liveries = null;
+        if (info.DefaultMountedUpgrades != null) Filter(info.DefaultMountedUpgrades, dropped);
         if (baseInfo.UpgradesLists != null)
         {
             var lists = Object.Instantiate(baseInfo.UpgradesLists);
             lists.name = def.CarName + "_Upgrades";
             Filter(lists.Parts, dropped);
+            // The car's own liveries right after the kept parts, before any other mod can append to the list: their
+            // bits are the same on every peer with this car mod.
+            try { liveries = _car.Liveries.Build(baseInfo, info, lists, info.DefaultMountedUpgrades); }
+            catch (Exception e) { DebugLog.Error(_car.Id, e, "CarCatalog.Prepare liveries"); liveries = "no liveries: " + e.Message; }
             lists.hideFlags = HideFlags.DontUnloadUnusedAsset;
             Object.DontDestroyOnLoad(lists);
             info.UpgradesLists = lists;
         }
-        if (info.DefaultMountedUpgrades != null) Filter(info.DefaultMountedUpgrades, dropped);
         var sb = new System.Text.StringBuilder();
         foreach (var kv in dropped) sb.Append(sb.Length > 0 ? ", " : "").Append(kv.Value).Append(' ').Append(kv.Key);
         Dropped = sb.Length == 0 ? "nothing" : sb.ToString();
@@ -147,7 +158,7 @@ internal sealed class CarCatalog
         info.hideFlags = HideFlags.DontUnloadUnusedAsset;
         Object.DontDestroyOnLoad(info);
         Info = info;
-        _car.Info($"garage data from {baseInfo.name}; upgrades left out: {Dropped}.");
+        _car.Info($"garage data from {baseInfo.name}; upgrades left out: {Dropped}." + (liveries != null ? " Liveries: " + liveries + "." : ""));
         return null;
     }
 
@@ -197,6 +208,74 @@ internal sealed class CarCatalog
         Info.carColliderBounds = fullSize ? lay.Body.size : lay.Body.extents;
         Info.carColliderBoundsCenter = lay.Body.center;
         if (_car.Tuning.Tyres != null) Info.tireAsset = _car.Tuning.Tyres;
+        FitSuspensionLift();
+    }
+
+    /// <summary>The suspension lift's base travel: the base car's times the car's own multiplier (see the class notes).</summary>
+    private void FitSuspensionLift()
+    {
+        try
+        {
+            var mine = Info.suspensionSetup;
+            var theirs = Base?.suspensionSetup;
+            if (mine == null || theirs == null) return;
+            if (mine.Pointer == theirs.Pointer)
+            {
+                // Instantiate copies serialized classes by value; if it ever shares this one, never change the base car's
+                mine = new VehicleControllerSetup.SuspensionSetup
+                {
+                    radius = theirs.radius, inertia = theirs.inertia, center = theirs.center, suspensionTravel = theirs.suspensionTravel,
+                    suspensionAnchor = theirs.suspensionAnchor, springRate = theirs.springRate, damperRate = theirs.damperRate,
+                    preloadDistance = theirs.preloadDistance, unsprungMass = theirs.unsprungMass, bumpStopRate = theirs.bumpStopRate,
+                    bumpTravelOffset = theirs.bumpTravelOffset, numberOfExtraRays = theirs.numberOfExtraRays,
+                    physicsGroundPenetration = theirs.physicsGroundPenetration,
+                };
+                Info.suspensionSetup = mine;
+            }
+            float baseTravel = theirs.suspensionTravel;
+            mine.suspensionTravel = CarUpgradeFit.LiftBaseTravel(baseTravel, _car.Tuning.Profile.SuspensionTravel);
+            // The rest of the setup is the base car's wheel too: whatever game code applies it (a wheel upgrade) must put the
+            // car's own tuned wheel back, not the donor's (a 8.6 t truck on 42 kN/m springs sits on its bump stops).
+            var w = _car.Tuning.Wheel;
+            if (w != null)
+            {
+                mine.radius = w.Radius;
+                mine.inertia = w.Inertia;
+                mine.springRate = w.SpringRate;
+                mine.damperRate = w.DamperRate;
+                mine.unsprungMass = w.UnsprungMass;
+                mine.bumpStopRate = w.BumpStopRate;
+            }
+            _car.Info($"suspension lift base travel {mine.suspensionTravel:0.###} m (the {Base.name}'s {baseTravel:0.###} m); " +
+                      $"CarInfo wheel {(w != null ? w.Describe() : "the base car's")}.");
+        }
+        catch (Exception e) { DebugLog.Error("core", e, "CarCatalog.FitSuspensionLift"); _car.LogOnce("lift", "suspension lift: " + e.Message); }
+    }
+
+    /// <summary>Leaves out the cosmetics in <paramref name="ids"/>: every model of theirs sits in a slot or item the car
+    /// hides, so they would sell nothing visible. Called while the template is built, before the car's part list is first
+    /// used (the template's and the garage model's part checks run after it). Mechanical upgrades are never dropped here.</summary>
+    public void DropUnplaceable(ICollection<uint> ids)
+    {
+        if (Info == null || ids == null || ids.Count == 0) return;
+        var names = new List<string>();
+        void Drop(Il2CppSystem.Collections.Generic.List<VehiclePartSO> parts)
+        {
+            if (parts == null) return;
+            for (int i = parts.Count - 1; i >= 0; i--)
+            {
+                var p = parts[i];
+                if (p == null || p.Type != ItemType.VehicleCosmetic || !ids.Contains(p.ItemId)) continue;
+                if (!names.Contains(p.name)) names.Add(p.name);
+                parts.RemoveAt(i);
+            }
+        }
+        Drop(Info.UpgradesLists?.Parts);
+        Drop(Info.DefaultMountedUpgrades);
+        if (names.Count == 0) return;
+        names.Sort(StringComparer.Ordinal);
+        Dropped = (Dropped == "nothing" ? "" : Dropped + ", ") + names.Count + " cosmetics with no place on the body";
+        _car.Info($"cosmetics left out (no place on the {_car.Def.CarName}): {string.Join(", ", names)}.");
     }
 
     /// <summary>The catalog is loaded (cars can be registered now).</summary>
@@ -214,6 +293,9 @@ internal sealed class CarCatalog
         if (cat?.IdToSO == null || Info == null) return "the item catalog is gone";
         if (cat.IdToSO.ContainsKey(def.ItemId)) return $"another item already uses the {def.CarName}'s id 0x{def.ItemId:X8}";
         if (cat.NameToId.ContainsKey(def.CarName)) return "another item is already named " + def.CarName;
+        // A livery whose id another item has is left out (logged); the car itself still goes in.
+        string clash = _car.Liveries.Clash(cat);
+        if (clash != null) _car.Warn(clash + ": that livery is left out of the catalog.");
         Add(cat);
         _car.Info("in the item catalog (free).");
         return null;
@@ -225,6 +307,7 @@ internal sealed class CarCatalog
         cat.IdToSO[def.ItemId] = Info;
         cat.IdToName[def.ItemId] = def.CarName;
         cat.NameToId[def.CarName] = def.ItemId;
+        _car.Liveries.AddTo(cat);
         _registeredIn = cat.Pointer;
     }
 
@@ -242,6 +325,7 @@ internal sealed class CarCatalog
                 cat.IdToName.Remove(def.ItemId);
                 cat.NameToId.Remove(def.CarName);
             }
+            if (cat?.IdToSO != null) _car.Liveries.RemoveFrom(cat);
         }
         catch (Exception ex) { DebugLog.Error("core", ex, "CarCatalog.Unregister"); }
         _registeredIn = IntPtr.Zero;

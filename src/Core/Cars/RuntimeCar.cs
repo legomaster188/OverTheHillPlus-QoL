@@ -93,7 +93,11 @@ internal sealed class RuntimeCar
         Drive = new CarDrive(this);
         Tuning = new CarTuning(this);
         Look = new CarLookState(this);
+        Liveries = new CarLiveryParts(this);
     }
+
+    /// <summary>The car's bundled liveries as the game's livery parts (empty when the definition has none).</summary>
+    public CarLiveryParts Liveries { get; }
 
     public string Id => Def.Id;
 
@@ -316,6 +320,7 @@ internal sealed class RuntimeCar
         var donorInfo = vcc.currentCarInfo;
         vcc.currentCarInfo = Catalog.Info;
         CrashTrail.Mark(Id + ": template parts");
+        DropUnplaceableParts(tpl);
         HideDroppedParts(tpl, donorInfo, "template");
         if (Hooks.AfterTemplate != null)
         {
@@ -408,6 +413,40 @@ internal sealed class RuntimeCar
         {
             DebugLog.Error(Id, e, "RuntimeCar.HideDroppedParts");
             Warn($"{what}: could not check the upgrade objects: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Leaves out of the car's garage the cosmetics whose every model CarBody hid on the template (a slot without an
+    /// anchor, the car's hidden slots and items): they would sell nothing visible (<see cref="CarPartObjects.Unplaceable"/>).
+    /// Before HideDroppedParts, which then switches their objects off on the template and the garage model alike.
+    /// </summary>
+    private void DropUnplaceableParts(GameObject root)
+    {
+        try
+        {
+            var hiddenNodes = Body.HiddenNodes;
+            if (hiddenNodes.Count == 0) return;
+            var parts = new List<uint[]>();
+            var hidden = new List<bool>();
+            foreach (var c in root.GetComponentsInChildren<VehicleUpgradeObject>(true))
+            {
+                if (c == null) continue;
+                uint id = 0;
+                try { var p = c.VehiclePartReference; if (p != null) id = p.ItemId; }
+                catch (Exception ex) { DebugLog.Error(Id, ex, "RuntimeCar.DropUnplaceableParts"); }
+                bool under = false;
+                for (var t = c.transform; t != null && t != root.transform && !under; t = t.parent)
+                    under = hiddenNodes.Contains(t.Pointer);
+                parts.Add(new[] { id });
+                hidden.Add(under);
+            }
+            Catalog.DropUnplaceable(CarPartObjects.Unplaceable(parts, hidden));
+        }
+        catch (Exception e)
+        {
+            DebugLog.Error(Id, e, "RuntimeCar.DropUnplaceableParts");
+            Warn("could not check which cosmetics have a place on the car: " + e.Message);
         }
     }
 

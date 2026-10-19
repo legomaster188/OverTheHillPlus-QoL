@@ -1,3 +1,4 @@
+using OverTheHillPlus.Features.Public.GarageLift;
 using OverTheHillPlus.Features.Public.Unstuck;
 using OverTheHillPlus.UI;
 using UnityEngine.InputSystem;
@@ -24,6 +25,12 @@ internal static class DrivingQolSimple
         SimpleMenu.Toggle(DrivingQolConfig.RunInBackground, "Keep running when alt-tabbed", "An alt-tabbed host otherwise freezes the session for everyone.");
         SimpleMenu.Toggle(DrivingQolConfig.SkipSplash, "Skip logo screens", "Straight to the main menu when the game starts.");
         SimpleMenu.Toggle(DrivingQolConfig.HideTutorialHints, "Hide tutorial hints", "No more reminder pop-ups.");
+        if (GarageLiftFeature.Preview != null)
+        {
+            SimpleMenu.Heading("Garage");
+            SimpleMenu.Toggle(GarageLiftFeature.Preview, "Lift preview", "The garage car rises or drops to the suspension stage you highlight, and goes back to the fitted one. Only the garage model moves.");
+            SimpleMenu.Toggle(GarageLiftFeature.ShowText, "Ride height text", "A line such as \"Ride height: +8 cm\" under the stage's description.");
+        }
 
         if (UnstuckFeature.UnstuckKey == null) return;
         float left = UnstuckCore.CooldownLeft;

@@ -214,18 +214,23 @@ internal static class AvailableTab
         else if (installed != null) { value = "Installed"; on = false; canPress = false; badge = "INSTALLED"; }
         else value = "Install";
 
-        string detail = (installed != null && update ? $"v{installed.Version} → v{e.Version}" : "v" + e.Version) + "  ·  " + ModVersion.FormatSize(e.Size);
-        string hint = string.IsNullOrEmpty(e.Description) ? e.Name : e.Description;
+        // How finished it is: the release list's word, else the installed mod's, else core's table.
+        var maturity = ModMaturity.Of(e.Id, !string.IsNullOrEmpty(e.Maturity) ? e.Maturity : installed?.Maturity, true);
+        string version = installed != null && update ? $"v{installed.Version} → v{e.Version}" : "v" + e.Version;
+        string detail = GameMenu.ModListModel.VersionWithMaturity(null, maturity) is { Length: > 0 } label
+            ? version + " · " + label + "  ·  " + ModVersion.FormatSize(e.Size)
+            : version + "  ·  " + ModVersion.FormatSize(e.Size);
+        string hint = ModMaturity.Describe(string.IsNullOrEmpty(e.Description) ? e.Name : e.Description, e.Id, maturity);
         // A card in the MOD BROWSER: an installed mod's image comes from its DLL, the others get a generated card.
         var card = new GameMenu.CardInfo
         {
             ModId = installed?.Id, Seed = e.Id, Title = e.Name, Author = GameMenu.ModCards.OurAuthor,
             Version = e.Version, Side = installed != null ? RequiredMods.SideBadge(installed.Side) : "",
-            Status = GameMenu.ModCards.AvailableStatus(value), Size = ModVersion.FormatSize(e.Size),
+            Status = GameMenu.ModCards.AvailableStatus(value), Size = ModVersion.FormatSize(e.Size), Maturity = maturity,
         };
         bool pressed = SimpleMenu.ListRow(e.Name, detail, badge, value, on, hint, false, out _, card);
         // Cards show the description in the details panel (a line under each card would split the grid).
-        if (!string.IsNullOrEmpty(e.Description) && !GameMenu.GameModsTab.ShowsCards) SimpleMenu.Note(e.Description);
+        if (!string.IsNullOrEmpty(hint) && hint != e.Name && !GameMenu.GameModsTab.ShowsCards) SimpleMenu.Note(hint);
         if (!pressed) return;
         if (pending?.Kind == PendingKind.Delete && !_busy)
         {

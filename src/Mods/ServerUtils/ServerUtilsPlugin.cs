@@ -20,7 +20,7 @@ public class ServerUtilsPlugin : BasePlugin
 {
     public const string Guid = "com.oth.serverutils";
     public const string Name = "Server Utils";
-    public const string Version = "1.0.0";
+    public const string Version = "1.2.0";
 
     /// <summary>Mod id: names the config file (oth.serverutils.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "serverutils";

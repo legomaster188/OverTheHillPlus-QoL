@@ -69,6 +69,8 @@ internal sealed class CarBody
     /// <summary>The donor tyre radius the template used (the garage model's fallback).</summary>
     private float _donorRadius;
     private bool _lodLogged;
+    /// <summary>The cosmetic slots and items the last <see cref="Apply"/> hid (their transforms).</summary>
+    public readonly HashSet<IntPtr> HiddenNodes = new();
 
     public CarBody(RuntimeCar car) { _car = car; }
 
@@ -201,17 +203,26 @@ internal sealed class CarBody
             else _car.Info(report + ".");
         }
 
-        // ---- wheels: move each corner to the model's track, wheelbase and tyre height, then rims and tyres
+        // ---- wheels: move each corner to the model's track, wheelbase and tyre height, then rims and tyres. A model with
+        // its own rear wheel (a dual pair) draws it on the rear corners; one with tandem anchors gets the extra axles as
+        // followers of the physical rear wheels (CarTandemWheels).
         var rim = new List<MeshPart> { blob.Pick(MeshPartKind.Wheel, MeshBlob.WheelName) };
         var tyre = new List<MeshPart> { tyrePart };
         var rimAndTyre = new List<MeshPart> { rim[0], tyrePart };
+        var rimR = new List<MeshPart> { CarTandem.RearRim(blob) };
+        var tyreR = new List<MeshPart> { CarTandem.RearTyre(blob) };
+        var rimAndTyreR = new List<MeshPart> { rimR[0], tyreR[0] };
+        bool ownRear = blob.Part(MeshBlob.RearWheelName) != null || blob.Part(MeshBlob.RearTyreName) != null;
+        var tandem = CarTandem.AxleOffsets(blob);
         for (int i = 0; i < 4; i++)
         {
             MoveTo(rt, corner[i], lay.Wheels[i]);
+            bool rear = i >= 2;
             var filters = corner[i].GetComponentsInChildren<MeshFilter>(true);
             bool hasTyre = false;
             foreach (var mf in filters)
                 if (mf != null && IsTyre(mf.name)) hasTyre = true;
+            var drawn = new List<MeshFilter>();
             foreach (var mf in filters)
             {
                 if (mf == null) continue;
@@ -220,15 +231,25 @@ internal sealed class CarBody
                 if (!isTyre && !isRim) continue;
                 var frame = WheelFrame(mf.transform, corner[i]);
                 var toLocal = mf.transform.worldToLocalMatrix * frame.localToWorldMatrix;
-                var list = isTyre ? tyre : hasTyre ? rim : rimAndTyre;
-                mf.sharedMesh = CachedMesh(n + (isTyre ? "_tyre" : hasTyre ? "_rim" : "_wheel"), list, toLocal);
+                var list = rear ? (isTyre ? tyreR : hasTyre ? rimR : rimAndTyreR) : (isTyre ? tyre : hasTyre ? rim : rimAndTyre);
+                mf.sharedMesh = CachedMesh(n + (rear && ownRear ? "_r" : "") + (isTyre ? "_tyre" : hasTyre ? "_rim" : "_wheel"), list, toLocal);
                 var r = mf.GetComponent<MeshRenderer>();
                 if (r != null) r.sharedMaterials = new[] { _material };
+                drawn.Add(mf);
+            }
+            if (rear && tandem.Length > 0)
+            {
+                int made = CarTandemWheels.Add(rt, wheelMeshes, drawn, tandem);
+                if (template && i == 2)
+                    _car.Info($"tandem: {tandem.Length} extra axle(s), {made} follower object(s) on the left rear wheel, offsets " +
+                              string.Join(", ", Array.ConvertAll(tandem, a => a.ToString("0.00"))) + " m.");
             }
         }
 
         // ---- the game's cosmetics: slots moved to the car's anchors (the rollcage and unanchored slots hidden)
-        if (cosmetics != null) PlaceCosmetics(rt, cosmetics, lay, blob, template);
+        var moves = cosmetics != null ? PlaceCosmetics(rt, cosmetics, lay, blob, template) : null;
+        // ---- the snorkel upgrade's intake probes follow the snorkel (the networked car only: the garage model has none)
+        if (template) PlaceWaterProbes(rt, lay, moves);
 
         // ---- donor-only visuals: the rigid-axle meshes
         var axles = rt.Find("Axles");
@@ -258,8 +279,10 @@ internal sealed class CarBody
                 var p = rt.InverseTransformPoint(wc.position);
                 MoveTo(rt, wc, new Vector3(lay.Wheels[i].x, p.y, lay.Wheels[i].z));
             }
+            FitBumpStops(rt, wheelColliders, lay, blob, tandem);
             MoveLights(rt, lay, blob);
             MoveWinchPoints(rt, lay);
+            PlaceDonorObjects(rt, lay, blob, moves);
             string why = SetBodyCollider(rt, lay, blob);
             if (why != null) return why;
         }
@@ -319,10 +342,15 @@ internal sealed class CarBody
     /// the point in its parent's space. A slot without all its anchors, the rollcage, the car's hidden slots and any
     /// slot not in the table are hidden.
     /// </summary>
-    private void PlaceCosmetics(Transform rt, Transform cosmetics, CarLayout lay, MeshBlob blob, bool log)
+    /// <summary>An offset item's local position before its offset (so placing the same object again never adds it twice).</summary>
+    private static readonly Dictionary<IntPtr, Vector3> ItemBase = new();
+
+    private Dictionary<string, MeshVec3> PlaceCosmetics(Transform rt, Transform cosmetics, CarLayout lay, MeshBlob blob, bool log)
     {
         var def = _car.Def;
         var table = def.CosmeticTable;
+        var moves = new Dictionary<string, MeshVec3>(StringComparer.Ordinal);
+        HiddenNodes.Clear();
         int placed = 0;
         var hidden = new List<string>();
         var where = new List<string>();
@@ -336,21 +364,57 @@ internal sealed class CarBody
                 if (!CarCosmetics.Shown(table, path, a => blob.Anchor(a) != null, def.HiddenSlots))
                 {
                     slot.gameObject.SetActive(false);
+                    HiddenNodes.Add(slot.Pointer);
                     hidden.Add(path == CarCosmetics.Rollcage ? path + " (the donor's shape)" : path);
                     continue;
                 }
+                var slotScale = new MeshVec3(1f, 1f, 1f);
                 foreach (var a in CarCosmetics.For(table, path))
                 {
                     var anchor = blob.Anchor(a.Anchor);
                     if (anchor == null) continue; // an optional item anchor this model lacks: the item stays with its slot
                     var t = cosmetics.Find(a.Target);
                     if (t == null || t.parent == null) continue; // this donor has no such item
+                    var before = rt.InverseTransformPoint(t.position);
                     var want = CarAssets.V(anchor.Position) + CarAssets.V(def.TweakOf(a.Anchor)) + lay.Offset;
                     t.localPosition = t.parent.InverseTransformPoint(rt.TransformPoint(want));
+                    // a slimmer or shorter body: the model's scale anchor resizes the target in its own axes; an item
+                    // with its own anchor keeps its own size inside a scaled slot (a plate stays a plate's size)
+                    var scale = blob.Anchor(CarCosmetics.ScaleAnchorOf(a.Anchor));
+                    var own = scale != null ? CarCosmetics.ScaleOf(scale.Position) : new MeshVec3(1f, 1f, 1f);
+                    var ls = t.localScale;
+                    var fit = CarCosmetics.TargetScale(new MeshVec3(ls.x, ls.y, ls.z), a.IsSlot ? new MeshVec3(1f, 1f, 1f) : slotScale, own);
+                    t.localScale = CarAssets.V(fit);
+                    if (a.IsSlot) slotScale = own;
+                    string sc = scale != null ? $", scale {F(CarAssets.V(own))}" : "";
                     // read back in car-root space: the next run's log shows where each slot really ended up
                     var got = rt.InverseTransformPoint(t.position);
-                    where.Add($"{a.Target} {F(got)} (anchor {a.Anchor} wants {F(want)}{((got - want).magnitude > 0.01f ? ", OFF" : "")})");
+                    var d = got - before;
+                    moves[a.Target] = new MeshVec3(d.x, d.y, d.z);
+                    where.Add($"{a.Target} {F(got)} (anchor {a.Anchor} wants {F(want)}{sc}{((got - want).magnitude > 0.01f ? ", OFF" : "")})");
                 }
+                // single items moved on their own (the car's item offsets), from where the prefab has them in the slot
+                if (def.ItemOffsets != null)
+                    foreach (var kv in def.ItemOffsets)
+                    {
+                        if (CosmeticItemAnchor.SlotOf(kv.Key) != path) continue;
+                        var t = cosmetics.Find(kv.Key);
+                        if (t == null || t.parent == null) continue;
+                        if (!ItemBase.TryGetValue(t.Pointer, out var at)) ItemBase[t.Pointer] = at = t.localPosition;
+                        t.localPosition = at + t.parent.InverseTransformVector(rt.TransformVector(CarAssets.V(kv.Value)));
+                        where.Add($"{kv.Key} {F(rt.InverseTransformPoint(t.position))} (item offset {F(CarAssets.V(kv.Value))})");
+                    }
+                // single items this car can't carry (shaped for the donor's body)
+                if (def.HiddenItems != null)
+                    foreach (var h in def.HiddenItems)
+                    {
+                        if (CosmeticItemAnchor.SlotOf(h) != path) continue;
+                        var t = cosmetics.Find(h);
+                        if (t == null) continue;
+                        t.gameObject.SetActive(false);
+                        HiddenNodes.Add(t.Pointer);
+                        hidden.Add(h);
+                    }
                 placed++;
             }
         }
@@ -360,6 +424,32 @@ internal sealed class CarBody
         // once per build (the car and its garage model), in car-root space with the layout offset (car-root y is up)
         _car.Info($"cosmetics ({(log ? "car" : "garage model")}), layout offset {F(lay.Offset)}, body {F(lay.Body.min)}..{F(lay.Body.max)}: " +
                   string.Join("; ", where));
+        return moves;
+    }
+
+    /// <summary>
+    /// The water probes (the donor's WaterDetector children) moved with what they sit on (<see cref="CarUpgradeFit"/>):
+    /// the stock engine intake with the hood, the snorkel intakes with the snorkel levels, the roof probes with the body's
+    /// top. Without this the snorkel upgrade flooded at the donor's intake heights, not at the modded snorkel's top.
+    /// </summary>
+    private void PlaceWaterProbes(Transform rt, CarLayout lay, Dictionary<string, MeshVec3> moves)
+    {
+        var node = rt.Find(CarUpgradeFit.WaterDetectorNode);
+        if (node == null) return;
+        var donorBody = new BodySpan(lay.DonorBody.min.z, lay.DonorBody.max.z, lay.DonorBody.max.y);
+        var body = new BodySpan(lay.Body.min.z, lay.Body.max.z, lay.Body.max.y);
+        var moved = new List<string>();
+        for (int i = 0; i < node.childCount; i++)
+        {
+            var p = node.GetChild(i);
+            var at = rt.InverseTransformPoint(p.position);
+            var want = CarUpgradeFit.Place(p.name, new MeshVec3(at.x, at.y, at.z), moves, donorBody, body);
+            if (want == null) continue;
+            var w = CarAssets.V(want.Value);
+            p.position = rt.TransformPoint(w);
+            moved.Add($"{p.name} {F(at)} -> {F(w)}");
+        }
+        if (moved.Count > 0) _car.Info("water probes: " + string.Join("; ", moved) + ".");
     }
 
     private static string F(Vector3 v) => $"({v.x:F2}, {v.y:F2}, {v.z:F2})";
@@ -485,26 +575,212 @@ internal sealed class CarBody
         X("Right", lay.Body.max.x);
     }
 
-    /// <summary>The donor's body collider becomes the model's convex hull (or a box of the body when the model has no
-    /// collider part); any further body collider is switched off.</summary>
+    /// <summary>
+    /// The donor's body collider becomes the model's convex hull (or a box of the body when the model has no collider
+    /// part), its bottom lifted a little above the body's lowest point the way the game's own cars are
+    /// (<see cref="CarPhysicsFit.ColliderLift"/>: a sill or bumper skims a rock instead of hooking it); any further donor
+    /// body collider is switched off; the car's <see cref="CarDefinition.BodyBoxes"/> are added as box colliders.
+    /// </summary>
     private string SetBodyCollider(Transform rt, CarLayout lay, MeshBlob blob)
     {
         var holder = rt.Find("Collider");
         if (holder == null) return "the donor has no Collider node";
         var cols = holder.GetComponentsInChildren<MeshCollider>(true);
         if (cols.Length == 0) return "the donor has no body MeshCollider";
+        // the donor's own lift: its body colliders' bottom over its visible body's bottom
+        float donorColMin = float.MaxValue;
+        foreach (var c in cols)
+        {
+            if (c == null || c.sharedMesh == null) continue;
+            var b = MeshBoundsInRoot(rt, c.transform, c.sharedMesh.bounds);
+            donorColMin = Mathf.Min(donorColMin, b.min.y);
+        }
+        float donorLift = donorColMin < float.MaxValue ? donorColMin - lay.DonorBody.min.y : CarPhysicsFit.MinColliderLift;
+        float lift = CarPhysicsFit.ColliderLift(donorLift, lay.DonorTyreRadius, lay.TyreRadius);
+        float bodyMin = lay.Body.min.y - lay.Offset.y; // model space: the ground is y = 0 under the tyres
+
         var main = cols[0];
         var toLocal = main.transform.worldToLocalMatrix * rt.localToWorldMatrix * Matrix4x4.Translate(lay.Offset);
         var hull = blob.Pick(MeshPartKind.Collider, MeshBlob.ColliderName);
         string n = _car.Def.CarName;
-        var mesh = hull != null
-            ? CachedMesh(n + "_collider", new List<MeshPart> { hull }, toLocal)
-            : BoxMesh(n + "_collider_box", new Bounds(lay.Body.center - lay.Offset, lay.Body.size), toLocal);
+        Mesh mesh;
+        float colMin, colMax, floor;
+        if (hull != null)
+        {
+            CarPhysicsFit.HeightRange(hull, out colMin, out colMax);
+            floor = CarPhysicsFit.ColliderFloor(colMin, colMax, bodyMin, lift);
+            mesh = CachedMesh(n + "_collider_" + floor.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture),
+                new List<MeshPart> { CarPhysicsFit.Floored(hull, floor) }, toLocal);
+        }
+        else
+        {
+            var b = new Bounds(lay.Body.center - lay.Offset, lay.Body.size);
+            colMin = b.min.y; colMax = b.max.y;
+            floor = CarPhysicsFit.ColliderFloor(colMin, colMax, bodyMin, lift);
+            b.SetMinMax(new Vector3(b.min.x, floor, b.min.z), b.max);
+            mesh = BoxMesh(n + "_collider_box", b, toLocal);
+        }
         if (mesh == null) return "the car's collider has no triangles";
         main.sharedMesh = mesh;
         main.convex = true;
         for (int i = 1; i < cols.Length; i++) cols[i].enabled = false;
+
+        // the body's extra boxes (a tractor's frame behind the cab), on the main collider's layer
+        var boxes = _car.Def.BodyBoxes ?? Array.Empty<CarBodyBox>();
+        for (int i = 0; i < boxes.Length; i++)
+        {
+            var bx = boxes[i];
+            var go = new GameObject("OTHP_body_box_" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)) { layer = main.gameObject.layer };
+            var t = go.transform;
+            t.SetParent(holder, false);
+            t.SetPositionAndRotation(rt.TransformPoint(CarAssets.V(bx.Center) + lay.Offset), rt.rotation);
+            var box = go.AddComponent<BoxCollider>();
+            var ls = t.lossyScale;
+            box.size = new Vector3(bx.Size.X / Safe(ls.x), bx.Size.Y / Safe(ls.y), bx.Size.Z / Safe(ls.z));
+            box.center = Vector3.zero;
+        }
+        _car.Info($"body collider: {(hull != null ? "the model's collider part" : "a box of the body")} from {colMin:0.00} to {colMax:0.00} m " +
+                  $"over the ground, bottom lifted to {floor:0.00} m (body bottom {bodyMin:0.00} m, lift {lift:0.00} m: the donor's {donorLift:0.00} m " +
+                  $"scaled to the tyre); {cols.Length - 1} other donor body collider(s) off; {boxes.Length} body box(es).");
         return null;
+    }
+
+    private static float Safe(float v) => Mathf.Abs(v) < 1e-4f ? 1f : v;
+
+    /// <summary>A mesh bounds box (in <paramref name="t"/>'s space) as a box in car-root space.</summary>
+    private static Bounds MeshBoundsInRoot(Transform root, Transform t, Bounds lb)
+    {
+        var b = new Bounds();
+        for (int i = 0; i < 8; i++)
+        {
+            var c = lb.center + Vector3.Scale(lb.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+            var p = root.InverseTransformPoint(t.TransformPoint(c));
+            if (i == 0) b = new Bounds(p, Vector3.zero);
+            else b.Encapsulate(p);
+        }
+        return b;
+    }
+
+    /// <summary>
+    /// Each wheel's bump stop collider (the donor's own tyre mesh, 0.38 m over the hub, moving with it: a solid fender
+    /// behind the raycast suspension) resized to the model's tyre, so it stands as high over the ground as on a stock car
+    /// (a smaller tyre left the donor's big one 0.15 to 0.2 m lower, catching rocks a stock car clears). The rear wheels of
+    /// a tandem get one per extra axle, moved along the car with it.
+    /// </summary>
+    private void FitBumpStops(Transform rt, Transform wheelColliders, CarLayout lay, MeshBlob blob, float[] tandem)
+    {
+        if (wheelColliders == null) return;
+        var front = CarAssets.RootBounds(new[] { blob.Pick(MeshPartKind.Tyre, MeshBlob.TyreName) });
+        var rear = CarAssets.RootBounds(new[] { CarTandem.RearTyre(blob) });
+        var report = new List<string>();
+        for (int i = 0; i < 4; i++)
+        {
+            var wc = wheelColliders.Find("Wheel" + Corners[i]);
+            var bs = wc != null ? wc.Find("WheelHub/BumpStopCollider") : null;
+            var mc = bs != null ? bs.GetComponent<MeshCollider>() : null;
+            if (mc == null || mc.sharedMesh == null) continue;
+            var donor = MeshBoundsInRoot(rt, bs, mc.sharedMesh.bounds);
+            float donorWidth = donor.size.x;
+            float modelWidth = (i < 2 ? front : rear).size.x;
+            var s = CarPhysicsFit.BumpStopColliderScale(lay.DonorTyreRadius, lay.TyreRadius, donorWidth, modelWidth);
+            var ls = bs.localScale;
+            bs.localScale = new Vector3(ls.x * s.X, ls.y * s.Y, ls.z * s.Z);
+            report.Add($"{Corners[i]} x{s.X:0.00}/{s.Y:0.00}");
+            if (i < 2 || tandem == null) continue;
+            for (int a = 0; a < tandem.Length; a++)
+            {
+                var copy = Object.Instantiate(bs.gameObject, bs.parent, false);
+                copy.name = "OTHP_bumpstop_tandem_" + a.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var ct = copy.transform;
+                ct.localPosition = bs.localPosition + bs.parent.InverseTransformVector(rt.TransformVector(new Vector3(0f, 0f, tandem[a])));
+                ct.localRotation = bs.localRotation;
+                ct.localScale = bs.localScale;
+            }
+            if (tandem.Length > 0) report.Add($"{Corners[i]} +{tandem.Length} tandem");
+        }
+        if (report.Count > 0) _car.Info("bump stop colliders sized to the model's tyres (width/radius): " + string.Join(", ", report) + ".");
+    }
+
+    /// <summary>The donor's lens flares, smoke, dust and wheel sounds moved onto the model or switched off
+    /// (<see cref="CarDonorObjects"/>); any other light or flare outside the cosmetic slots is switched off.</summary>
+    private void PlaceDonorObjects(Transform rt, CarLayout lay, MeshBlob blob, Dictionary<string, MeshVec3> moves)
+    {
+        var rules = CarDonorObjects.For(_car.Def.DonorObjects);
+        var done = new List<string>();
+        foreach (var r in rules)
+        {
+            var t = rt.Find(r.Path);
+            if (t == null) continue;
+            var at = rt.InverseTransformPoint(t.position);
+            Vector3? want = null;
+            string why;
+            switch (r.Follow)
+            {
+                case DonorFollow.Anchor:
+                case DonorFollow.Hood:
+                {
+                    string a = CarDonorObjects.PickAnchor(r, n => blob.Anchor(n) != null, at.x);
+                    if (a != null) { want = CarAssets.V(blob.Anchor(a).Position) + lay.Offset; why = a; break; }
+                    if (r.Follow == DonorFollow.Anchor) { why = "off (no " + string.Join("/", r.Anchors) + ")"; break; }
+                    if (moves != null && moves.TryGetValue(CarUpgradeFit.Hood, out var d)) { want = at + CarAssets.V(d); why = "with the hood"; break; }
+                    want = at + new Vector3(0f, lay.Body.max.y - lay.DonorBody.max.y, lay.FrontZ - lay.DonorFrontZ);
+                    why = "with the front axle";
+                    break;
+                }
+                case DonorFollow.Wheel:
+                {
+                    int w = Mathf.Clamp(r.Wheel, 0, 3);
+                    var d = lay.Wheels[w] - lay.DonorWheels[w];
+                    // the ground under a smaller tyre is higher on the body (the live car settles by the radius difference)
+                    want = at + new Vector3(d.x, lay.WheelDrop - lay.VisualDrop, d.z);
+                    why = "wheel " + Corners[w];
+                    break;
+                }
+                default:
+                    why = "off";
+                    break;
+            }
+            if (want.HasValue) MoveTo(rt, t, want.Value);
+            else SwitchOff(t);
+            done.Add($"{r.Path} {F(at)} -> {(want.HasValue ? F(want.Value) : "-")} ({why})");
+        }
+        // anything else that shines: off (the donor's lamps are not where the model's are)
+        var off = new List<string>();
+        foreach (var l in rt.GetComponentsInChildren<Light>(true))
+        {
+            string path = PathBelow(rt, l.transform);
+            if (CarDonorObjects.Placed(path, rules)) continue;
+            l.intensity = 0f;
+            l.enabled = false;
+            off.Add(path);
+        }
+        foreach (var f in rt.GetComponentsInChildren<UnityEngine.Rendering.LensFlareComponentSRP>(true))
+        {
+            string path = PathBelow(rt, f.transform);
+            if (CarDonorObjects.Placed(path, rules) || off.Contains(path)) continue;
+            f.intensity = 0f;
+            f.enabled = false;
+            off.Add(path);
+        }
+        _car.Info("donor objects: " + string.Join("; ", done) + (off.Count > 0 ? "; other lights and flares off: " + string.Join(", ", off) : "") + ".");
+    }
+
+    /// <summary>Switches a donor object off for good: its lights and flares disabled (the game toggles the light objects
+    /// themselves on and off), anything else inactive.</summary>
+    private static void SwitchOff(Transform t)
+    {
+        bool shines = false;
+        foreach (var l in t.GetComponentsInChildren<Light>(true)) { l.intensity = 0f; l.enabled = false; shines = true; }
+        foreach (var f in t.GetComponentsInChildren<UnityEngine.Rendering.LensFlareComponentSRP>(true)) { f.intensity = 0f; f.enabled = false; shines = true; }
+        if (!shines) t.gameObject.SetActive(false);
+    }
+
+    private static string PathBelow(Transform root, Transform t)
+    {
+        var parts = new List<string>();
+        for (var c = t; c != null && c != root; c = c.parent) parts.Add(c.name);
+        parts.Reverse();
+        return string.Join("/", parts);
     }
 
     private static Mesh BoxMesh(string name, Bounds b, Matrix4x4 toLocal)

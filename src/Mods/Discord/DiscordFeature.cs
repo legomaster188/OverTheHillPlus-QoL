@@ -70,6 +70,9 @@ internal sealed class DiscordFeature : IFeature
             // A car a stock game doesn't have (core's NonStockCars) shows the name its mod allows: the stock car it
             // stands in for, or "a car".
             if (info != null) s.Car = Core.Shared.NonStockCars.ShownName(info.ItemId, Localized(info.Name), out s.CarGeneric);
+            // The framework's modded cars ("cars.<id>") with a public name get their picture; the others keep the logo.
+            string owner = info == null || s.CarGeneric ? null : Core.Shared.NonStockCars.OwnerOf(info.ItemId);
+            if (owner != null && owner.StartsWith("cars.", StringComparison.Ordinal)) s.CarImage = owner.Substring(5);
         }
         catch (Exception ex) { DebugLog.Error("discord", ex, "DiscordFeature.Read"); }
         try
@@ -126,7 +129,7 @@ internal sealed class DiscordFeature : IFeature
             if (key != DiscordConfig.LargeImageKey.Value) DiscordConfig.LargeImageKey.Value = key.Trim();
             string text = TextRow("Large image text", DiscordConfig.LargeText.Value, 64);
             if (text != DiscordConfig.LargeText.Value) DiscordConfig.LargeText.Value = text;
-            Small("Empty = the mods' logo (art asset \"logo\" on the application). An https image URL works too; \"none\" = text only.");
+            Small("Empty = the mods' logo. An art asset key of the application or an https image URL works too; \"none\" = text only.");
         });
     }
 }

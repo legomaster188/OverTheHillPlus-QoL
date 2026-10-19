@@ -47,23 +47,24 @@ internal static class CarPage
         string skin = cfg.Skin.Value;
         bool skinOn = !string.IsNullOrEmpty(skin);
         bool zones = car.Assets.HasZones;
+        // Paint and trim stay usable with a skin or livery on: one with see-through parts sits on top of them.
         string colourHint = zones
-            ? skinOn ? "A skin is on: it replaces the paint (set Skin to None to use the colours)." : null
+            ? skinOn ? "A skin is on: a full one hides these colours, a see-through one sits on top of them." : null
             : "This build of the car has no paint zones yet, so it keeps its standard paint (skins still work).";
 
         var paintLabels = CarPaint.PaintLabels(def.Paints);
         int pi = IndexOf(paintLabels, cfg.Paint.Value);
         SimpleMenu.Choice("Paint", colourHint ?? "The body colour. Other players with this mod see it too.", pi, paintLabels,
-            i => cfg.Paint.Value = paintLabels[i], zones && !skinOn);
+            i => cfg.Paint.Value = paintLabels[i], zones);
         if (string.Equals(cfg.Paint.Value, CarPaint.Custom, StringComparison.OrdinalIgnoreCase))
-            ColourRows(def.Id + "|paint", "Paint colour", cfg.PaintCustom, zones && !skinOn);
+            ColourRows(def.Id + "|paint", "Paint colour", cfg.PaintCustom, zones);
 
         var trimLabels = CarPaint.TrimLabels(def.Trims);
         int ti = IndexOf(trimLabels, cfg.Trim.Value);
         SimpleMenu.Choice("Trim", colourHint ?? def.TrimHint, ti, trimLabels,
-            i => cfg.Trim.Value = trimLabels[i], zones && !skinOn);
+            i => cfg.Trim.Value = trimLabels[i], zones);
         if (string.Equals(cfg.Trim.Value, CarPaint.Custom, StringComparison.OrdinalIgnoreCase))
-            ColourRows(def.Id + "|trim", "Trim colour", cfg.TrimCustom, zones && !skinOn);
+            ColourRows(def.Id + "|trim", "Trim colour", cfg.TrimCustom, zones);
 
         var engineNames = new string[def.EngineSounds.Length];
         for (int i = 0; i < engineNames.Length; i++) engineNames[i] = def.EngineSounds[i].Name;
@@ -75,13 +76,13 @@ internal static class CarPage
         int si = skinOn ? -1 : 0;
         for (int i = 0; i < skins.Count; i++)
         {
-            labels[i + 1] = skins[i].Name;
+            labels[i + 1] = skins[i].Source == Api.Cars.SkinSource.ModIo ? skins[i].Name + " (mod.io)" : skins[i].Name;
             if (skinOn && skins[i].Key == skin) si = i + 1;
         }
         string skinHint = skins.Count == 0
             ? $"No skins found. A skin is a livery pack with \"car\": \"{def.CarName}\" (see the note below)."
-            : si > 0 ? $"{skins[si - 1].Key} ({skins[si - 1].Side}x{skins[si - 1].Side}). Players with the same pack see it; the others see your colours."
-            : "A skin from a livery pack replaces the paint. Players with the same pack see it; the others see your colours.";
+            : si > 0 ? SkinHint(skins[si - 1])
+            : "A skin goes over the garage's livery and your paint. Players who have the same one see it; the others see your colours.";
         SimpleMenu.Choice("Skin", skinHint, si, labels, i => cfg.Skin.Value = i == 0 ? "" : skins[i - 1].Key,
             skins.Count > 0 || skinOn, si < 0 ? "Not found" : null);
         if (car.Look.SkinStatus != null) SimpleMenu.Note(car.Look.SkinStatus);
@@ -93,10 +94,21 @@ internal static class CarPage
                 Menu.SetStatus($"{Api.Cars.SkinsFor(def.Id).Count} {def.CarName} skin(s) found.");
             });
         SimpleMenu.Button("Open the skins folder", null, SkinsFolder, OpenFolder);
+        if (car.Liveries.Any)
+            SimpleMenu.Note($"The {def.CarName}'s own liveries are in the garage's Liveries tab, like a stock car's; everyone with this " +
+                            "mod sees the one you mount. They are in the Skin list too (for when the garage can't be used).");
         SimpleMenu.Note("Make a skin: a folder in BepInEx/config/oth.liveries/ (or the game's LocalLiveries folder) with " +
                         $"manifest.json {{\"liveries\":[{{\"car\":\"{def.CarName}\",\"name\":\"…\",\"texture\":\"x.png\",\"icon\":\"x_icon.png\"}}]}} " +
-                        $"and a square PNG (2048 pixels, up to 16 MB) painted on the {def.CarName}'s UV layout; body, rims and tyres share it.");
+                        $"and a square PNG (2048 pixels, up to 16 MB) painted on the {def.CarName}'s UV layout; body, rims and tyres share it. " +
+                        $"A mod.io livery with \"car\": \"{def.CarName}\" works too once you have it installed.");
     }
+
+    private static string SkinHint(Api.Cars.Skin s) => s.Source switch
+    {
+        Api.Cars.SkinSource.Bundled => "Built into this car mod (also in the garage's Liveries tab). Everyone with this mod sees it.",
+        Api.Cars.SkinSource.ModIo => $"From mod.io ({s.Side}x{s.Side}). Players who have it installed see it; the others see your colours.",
+        _ => $"{s.Key} ({s.Side}x{s.Side}). Players with the same pack see it; the others see your colours.",
+    };
 
     /// <summary>A #RRGGBB box and R / G / B steps (for a gamepad) for a custom colour.</summary>
     private static void ColourRows(string key, string label, ConfigEntry<string> entry, bool enabled)

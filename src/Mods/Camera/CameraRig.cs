@@ -84,6 +84,7 @@ internal static class CameraRig
 
     public static void Set(CamMode m)
     {
+        ExtraCameras.StopAll(); // another mod's camera (the Cockpit view) gives way to a choice made here
         if (CameraConfig.Mode.Value == m) return;
         var from = CameraConfig.Mode.Value;
         CameraConfig.Mode.Value = m;
@@ -93,8 +94,46 @@ internal static class CameraRig
         DebugLog.Info(CameraPlugin.ModId, $"camera {CameraMath.Name(from)} -> {CameraMath.Name(m)} (status: {Status})");
     }
 
-    public static void Cycle(int dir) =>
-        Set(dir >= 0 ? CameraMath.Next(CameraConfig.Mode.Value, CameraConfig.InCycle) : CameraMath.Previous(CameraConfig.Mode.Value, CameraConfig.InCycle));
+    /// <summary>The cycle: Game, our cameras, then the cameras other mods added (core's ExtraCameras), then Game again.</summary>
+    public static void Cycle(int dir)
+    {
+        var extras = ExtraCameras.InCycle();
+        var active = ExtraCameras.Active;
+        if (active != null)
+        {
+            int i = extras.IndexOf(active);
+            ExtraCameras.StopAll();
+            ChangedAt = Time.unscaledTime;
+            if (dir >= 0) { if (i >= 0 && i + 1 < extras.Count) ExtraCameras.TurnOn(extras[i + 1]); }
+            else if (i > 0) ExtraCameras.TurnOn(extras[i - 1]);
+            else Set(CameraMath.Previous(CamMode.Game, CameraConfig.InCycle));
+            return;
+        }
+        var cur = CameraConfig.Mode.Value;
+        if (dir >= 0)
+        {
+            var next = CameraMath.Next(cur, CameraConfig.InCycle);
+            if (next == CamMode.Game && extras.Count > 0)
+            {
+                Set(CamMode.Game);
+                ExtraCameras.TurnOn(extras[0]);
+            }
+            else Set(next);
+        }
+        else if (cur == CamMode.Game && extras.Count > 0) ExtraCameras.TurnOn(extras[extras.Count - 1]);
+        else Set(CameraMath.Previous(cur, CameraConfig.InCycle));
+    }
+
+    /// <summary>Another mod's camera is about to turn on (core's ExtraCameras): back to the game's camera under it.</summary>
+    internal static void ExtraTurningOn(ExtraCamera camera)
+    {
+        if (CameraConfig.Mode.Value != CamMode.Game)
+        {
+            CameraConfig.Mode.Value = CamMode.Game;
+            _droneReady = false;
+        }
+        ChangedAt = Time.unscaledTime;
+    }
 
     // ---- once per frame, after the game's camera ----
 

@@ -888,8 +888,10 @@ internal static class GameModsTab
             bool api = ThirdParty.IsApiMod(mod.Id);
             name = mod.Name ?? mod.Id;
             author = api ? ModCards.OtherAuthor : ModCards.OurAuthor;
-            desc = !string.IsNullOrEmpty(model?.Hint) ? model.Hint : mod.Description ?? "";
-            line1 = (string.IsNullOrEmpty(mod.Version) ? "" : "v" + mod.Version + "  ·  ") + RequiredMods.Badge(mod);
+            var maturity = ModMaturity.Of(mod, !api);
+            desc = !string.IsNullOrEmpty(model?.Hint) ? model.Hint : ModMaturity.Describe(mod.Description, mod.Id, maturity);
+            string vm = ModMaturity.VersionAndLabel(mod.Version, maturity);
+            line1 = (vm.Length == 0 ? "" : vm + "  ·  ") + RequiredMods.Badge(mod);
             line2 = status;
             if (_pageCard == null || !string.Equals(_pageCard.ModId, mod.Id, StringComparison.OrdinalIgnoreCase))
                 _pageCard = new CardInfo { ModId = mod.Id, Seed = mod.Id, Title = name };

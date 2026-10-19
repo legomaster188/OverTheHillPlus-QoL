@@ -24,7 +24,7 @@ public class VeraPlugin : BasePlugin
 {
     public const string Guid = "com.oth.vera";
     public const string Name = "Vera Crossover";
-    public const string Version = "1.1.0";
+    public const string Version = "1.1.1";
 
     /// <summary>Mod id: names the config file (oth.vera.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = VeraDefinition.Id;

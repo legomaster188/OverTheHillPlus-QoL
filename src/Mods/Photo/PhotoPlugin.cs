@@ -19,7 +19,7 @@ public class PhotoPlugin : BasePlugin
 {
     public const string Guid = "com.oth.photo";
     public const string Name = "Photo & Spectate";
-    public const string Version = "1.0.0";
+    public const string Version = "1.2.0";
 
     /// <summary>Mod id: names the config file (oth.photo.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "photo";

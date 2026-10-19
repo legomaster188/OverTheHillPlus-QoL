@@ -12,7 +12,7 @@ using OverTheHillPlus.Core.Manager;
 /// <summary>
 /// Driving QoL: everyday tweaks that give no advantage. A higher frame-rate cap, a background cap and keep running when
 /// alt-tabbed, the driving camera's field of view, compass range, auto headlights, skipping the logo screens, faster
-/// fades, no tutorial hints, and the unstuck button.
+/// fades, no tutorial hints, the unstuck button and the garage's live suspension lift preview.
 /// </summary>
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
@@ -20,7 +20,7 @@ public class DrivingQolPlugin : BasePlugin
 {
     public const string Guid = "com.oth.drivingqol";
     public const string Name = "Driving QoL";
-    public const string Version = "1.0.0";
+    public const string Version = "1.2.0";
 
     /// <summary>Mod id: names the config file (oth.drivingqol.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "drivingqol";
@@ -38,7 +38,8 @@ public class DrivingQolPlugin : BasePlugin
             Side = ModSide.Client,
             Name = Name,
             Description = "Everyday tweaks: higher frame-rate cap, keep running when alt-tabbed, field of view, auto " +
-                          "headlights, skip the logo screens, hide tutorial hints, and an unstuck button for your car.",
+                          "headlights, skip the logo screens, hide tutorial hints, an unstuck button for your car, and a live ride " +
+                          "height preview for suspension lifts in the garage.",
             Version = Version,
             DrawSimple = DrivingQolSimple.Draw,
         });
