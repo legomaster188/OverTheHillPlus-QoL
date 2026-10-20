@@ -88,7 +88,7 @@ internal static class ModdedCars
         if (why != null) return why;
         why = InstallHooks();
         if (why != null) return why;
-        // Its skins (livery packs for its car name), listed for anyone through core's modded-car API (the Livery Packs
+        // Its skins (livery packs for its car name), listed for anyone through core's modded-car API (the Liveries+
         // page shows them too). Refused (a livery name another car took): the car doesn't start.
         if (!Api.Cars.Register(new Api.Cars.ModdedCar
             {
@@ -148,6 +148,8 @@ internal static class ModdedCars
 
     // ---------------------------------------------------------------- lookups
 
+    /// <summary>Gearbox+ reads or replaces a car's gear table: a modded car's tuned ratios go back to the game's own first (see
+    /// <see cref="CarTuning.ReleaseGears"/>). Nothing happens for a car that is not modded.</summary>
     internal static void ReleaseGears(VehiclePhysics.VPVehicleController car)
     {
         if (car == null) return;

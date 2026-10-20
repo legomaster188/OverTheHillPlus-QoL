@@ -4,7 +4,7 @@ using OverTheHillPlus.UI;
 
 namespace OverTheHillPlus.ServerUtils;
 
-/// <summary>Server Utils' everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
+/// <summary>Host+'s everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
 internal static class ServerUtilsSimple
 {
     private static readonly float[] AutosaveSteps = { 0f, 5f, 10f, 15f, 30f };

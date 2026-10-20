@@ -18,8 +18,8 @@ using OverTheHillPlus.Core.Manager;
 public class PhotoPlugin : BasePlugin
 {
     public const string Guid = "com.oth.photo";
-    public const string Name = "Photo & Spectate";
-    public const string Version = "1.2.0";
+    public const string Name = "Photo+";
+    public const string Version = "1.2.1";
 
     /// <summary>Mod id: names the config file (oth.photo.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "photo";

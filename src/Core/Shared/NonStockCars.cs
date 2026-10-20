@@ -14,7 +14,7 @@ internal static class NonStockCars
     private sealed class Entry
     {
         public string Owner;
-        /// <summary>What others may call the car (e.g. Discord Presence); null: "a car".</summary>
+        /// <summary>What others may call the car (e.g. Discord+); null: "a car".</summary>
         public string PublicName;
     }
 

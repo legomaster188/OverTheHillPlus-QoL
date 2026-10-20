@@ -10,7 +10,7 @@ namespace OverTheHillPlus.Horns;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Custom Horns: pick a horn (built-in ones made at runtime, or your own wav file from BepInEx/config/oth.horns), and
+/// Horns+: pick a horn (built-in ones made at runtime, or your own wav file from BepInEx/config/oth.horns), and
 /// every player with this mod hears it when you honk. Synced over the mod network as a horn id; custom files go in
 /// chunks with a 256 KB cap. A Server mod: its networked part runs only where the session runs it too.
 /// </summary>
@@ -19,8 +19,8 @@ using OverTheHillPlus.Core.Manager;
 public class HornsPlugin : BasePlugin
 {
     public const string Guid = "com.oth.horns";
-    public const string Name = "Custom Horns";
-    public const string Version = "1.0.0";
+    public const string Name = "Horns+";
+    public const string Version = "1.0.1";
 
     /// <summary>Mod id: names the config file (oth.horns.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "horns";

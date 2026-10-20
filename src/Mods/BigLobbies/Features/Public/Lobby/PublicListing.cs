@@ -53,7 +53,7 @@ internal sealed class PublicListing : IFeature
             if (r.Pointer != _runner)
             {
                 _runner = r.Pointer;
-                _realMax = max; // the size the room was created with (Big Lobbies' choice)
+                _realMax = max; // the size the room was created with (Lobby+'s choice)
                 _lastSet = -1;
                 if (_realMax > VanillaMax)
                     BigLobbiesPlugin.Logger.LogInfo($"[Lobby] public listing: a {_realMax}-slot room; " +

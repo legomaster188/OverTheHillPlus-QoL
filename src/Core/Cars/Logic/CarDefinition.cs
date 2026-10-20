@@ -65,7 +65,11 @@ public sealed class CarDefinition
 
     /// <summary>How it drives compared with the donor.</summary>
     public CarTuningProfile Tuning = new();
+    /// <summary>The real gearbox Gearbox+ gives the car in its "real car's gearbox" mode, by the set's id ("close5", "truck5",
+    /// "truck4", "vintage3", "kei5" or "heavy5"); empty: the game's step is continued, as for every other car.</summary>
     public string GearSet = "";
+    /// <summary>The real car's differentials for Gearbox+: front axle, rear axle and centre, each 0 (the game's own), 1 (open),
+    /// 2 (limited slip) or 3 (locked). Null: the game's own.</summary>
     public byte[] Diffs;
 
     // ---------------------------------------------------------------- look

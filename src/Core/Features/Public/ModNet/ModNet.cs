@@ -70,9 +70,9 @@ internal static class ModNet
         public const ushort Race = 7;
         public const ushort Tag = 8;
         public const ushort Cargo = 9;
-        /// <summary>Custom Horns (OTH.Horns): horn choices and sound chunks.</summary>
+        /// <summary>Horns+ (OTH.Horns): horn choices and sound chunks.</summary>
         public const ushort Horns = 10;
-        /// <summary>Server Rules (OTH.Rules): the rules card, votes and notices (RulesWire.Channel, kept equal).</summary>
+        /// <summary>Rules+ (OTH.Rules): the rules card, votes and notices (RulesWire.Channel, kept equal).</summary>
         public const ushort Rules = 11;
         /// <summary>Reserved for the private build: never reuse it.</summary>
         public const ushort ReservedPrivate12 = 12;
@@ -85,11 +85,12 @@ internal static class ModNet
         public const ushort AirRide = 24;
         public const ushort OnFoot = 40;
         public const ushort StuntScore = 31;
-        /// <summary>Player Flares (OTH.Flares): a player's flare request to the host and the host's broadcast of an accepted flare.</summary>
+        /// <summary>Flares+ (OTH.Flares): a player's flare request to the host and the host's broadcast of an accepted flare.</summary>
         public const ushort Flares = 33;
         public const ushort TyrePressure = 42;
         public const ushort Fuel = 43;
         public const ushort Realism = 45;
+        /// <summary>Gearbox+ (OTH.Gearbox): a player's differential setup to the host, so the host simulates the car the way the player's game predicts it.</summary>
         public const ushort Gearbox = 44;
         /// <summary>Reserved for the private build: never reuse it.</summary>
         public const ushort Reserved35 = 35;

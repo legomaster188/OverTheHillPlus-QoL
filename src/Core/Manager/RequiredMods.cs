@@ -191,7 +191,7 @@ internal static class RequiredMods
     public static readonly IReadOnlyList<string> CodeTable = new[]
     {
         "vera", "-", "-", "-", "chat", "horns", "-", "biglobbies", "tercel", "trailers",
-        "aro", "hilo", "bastion", "hilo22", "-", "drifter", "nomad", "mule", "pixie", "bento", "longhorn", "-", "ibex", "marmot", "drover",
+        "aro", "hilo", "bastion", "hilo22", "gearbox", "drifter", "nomad", "mule", "pixie", "bento", "longhorn", "-", "ibex", "marmot", "drover",
         "limber", "badger", "gemse",
     };
 

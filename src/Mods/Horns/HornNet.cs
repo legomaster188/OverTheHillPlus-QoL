@@ -24,12 +24,12 @@ using OverTheHillPlus.Core.Manager;
 /// before anything plays it, and keeps it for this sender and this session only. As a guest in a public session your
 /// own file is not sent (others hear the game's horn); built-in horns still are.</para>
 ///
-/// <para>Nothing runs unless <see cref="ModManager.ServerModActive"/> says the session runs Custom Horns (solo,
+/// <para>Nothing runs unless <see cref="ModManager.ServerModActive"/> says the session runs Horns+ (solo,
 /// hosting, or a host that advertises it). Every message is rate limited by the mod network as well.</para>
 /// </summary>
 internal static class HornNet
 {
-    /// <summary>The mod-network channel id given to Custom Horns (core's table, never reuse it).</summary>
+    /// <summary>The mod-network channel id given to Horns+ (core's table, never reuse it).</summary>
     public const ushort Channel = Net.Channels.Horns;
 
     private const float ChunksPerSecond = 2f, ChunkBurst = 2f;
@@ -117,7 +117,7 @@ internal static class HornNet
     /// <summary>What the others are told: your own file only where you may send it.</summary>
     public static HornChoice Announced => _mine.Kind == HornKind.Custom && (_mineBytes == null || GameState.IsPublicGuest) ? HornChoice.Stock : _mine;
 
-    /// <summary>True while this session runs Custom Horns (see the class summary).</summary>
+    /// <summary>True while this session runs Horns+ (see the class summary).</summary>
     public static bool Active => ModManager.ServerModActive(HornsPlugin.ModId);
 
     /// <summary>Talking to the other players is possible right now.</summary>
@@ -375,7 +375,7 @@ internal static class HornNet
     /// <summary>One line for the MODS page.</summary>
     public static string Describe()
     {
-        if (!Active) return "off in this session: the host doesn't run Custom Horns, so everyone hears the game's horn";
+        if (!Active) return "off in this session: the host doesn't run Horns+, so everyone hears the game's horn";
         try
         {
             var r = GameState.Runner;

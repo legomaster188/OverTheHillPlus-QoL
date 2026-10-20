@@ -15,7 +15,7 @@ namespace OverTheHillPlus.Audio;
 /// the game's volume settings, see <see cref="GameVolume"/>). Every call is checked: a missing export, a stopped
 /// channel or a bad file is a false / zero, never an exception. Main thread only.</para>
 ///
-/// <para>Used by Radio and Custom Horns. Nothing is latched before the game's FMOD is up: until then every call is a
+/// <para>Used by Radio and Horns+. Nothing is latched before the game's FMOD is up: until then every call is a
 /// cheap "not ready", and the lookup is tried again (at most twice a second).</para>
 /// </summary>
 internal static class FmodCore

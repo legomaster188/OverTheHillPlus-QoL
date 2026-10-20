@@ -23,8 +23,8 @@ using OverTheHillPlus.Core.Manager;
 public class TrailersPlugin : BasePlugin
 {
     public const string Guid = "com.oth.trailers";
-    public const string Name = "Trailers";
-    public const string Version = "1.0.1";
+    public const string Name = "Trailers+";
+    public const string Version = "1.0.2";
 
     /// <summary>Mod id: names the config file (oth.trailers.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "trailers";

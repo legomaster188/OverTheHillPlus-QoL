@@ -146,7 +146,7 @@ internal static class RoomNamePatch
 }
 
 /// <summary>
-/// Styles the session name Fusion/Photon publishes, when hosting. (The session's player count is set by Big Lobbies'
+/// Styles the session name Fusion/Photon publishes, when hosting. (The session's player count is set by Lobby+'
 /// own prefix on the same method.)
 /// </summary>
 [HarmonyPatch(typeof(NetworkRunner), nameof(NetworkRunner.StartGame))]

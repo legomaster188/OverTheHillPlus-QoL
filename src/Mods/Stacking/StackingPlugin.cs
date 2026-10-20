@@ -10,7 +10,7 @@ namespace OverTheHillPlus.Stacking;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Cosmetic Stacking: in the garage's cosmetics screen, Shift + click puts a cosmetic on without taking off the one of
+/// Stacking+: in the garage's cosmetics screen, Shift + click puts a cosmetic on without taking off the one of
 /// its type already on (two roof loads, several plushies, ...); a plain click works as in the game, and clicking a
 /// fitted one takes only that one off. A hint line at the bottom of the screen says so. The stack is the game's own
 /// per-car "in use" flags, saved and sent as usual, so everyone sees it (also players without the mod). Local only.
@@ -20,8 +20,8 @@ using OverTheHillPlus.Core.Manager;
 public class StackingPlugin : BasePlugin
 {
     public const string Guid = "com.oth.stacking";
-    public const string Name = "Cosmetic Stacking";
-    public const string Version = "1.0.0";
+    public const string Name = "Stacking+";
+    public const string Version = "1.0.1";
 
     /// <summary>Mod id: names the config file (oth.stacking.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "stacking";

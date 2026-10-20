@@ -2,7 +2,7 @@ using BepInEx.Configuration;
 
 namespace OverTheHillPlus.LiveryPacks;
 
-/// <summary>Livery Packs' settings in BepInEx/config/oth.liverypacks.cfg.</summary>
+/// <summary>Liveries+'s settings in BepInEx/config/oth.liverypacks.cfg.</summary>
 internal static class LiveryPacksConfig
 {
     public static ConfigEntry<bool> LoadPacks;

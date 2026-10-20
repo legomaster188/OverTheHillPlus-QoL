@@ -5,13 +5,13 @@ using static OverTheHillPlus.Menu;
 
 namespace OverTheHillPlus.RealNights;
 
-/// <summary>Real Nights' per-frame work (the lamp lights and the headlight boost) and its advanced cards.</summary>
+/// <summary>Nights+'s per-frame work (the lamp lights and the headlight boost) and its advanced cards.</summary>
 internal sealed class RealNightsFeature : IFeature
 {
     public void Register()
     {
         Registry.OnTick(Tick);
-        Registry.Section(Registry.PlusMode, "Real Nights", DrawAdvanced);
+        Registry.Section(Registry.PlusMode, "Nights+", DrawAdvanced);
     }
 
     // Timed and error-guarded by core (a feature hook); the sky itself runs in COZY's own update (SkyPatch).

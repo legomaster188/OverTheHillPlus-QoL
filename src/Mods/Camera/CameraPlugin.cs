@@ -19,7 +19,7 @@ public class CameraPlugin : BasePlugin
 {
     public const string Guid = "com.oth.camera";
     public const string Name = "Camera+";
-    public const string Version = "1.2.0";
+    public const string Version = "1.2.1";
 
     /// <summary>Mod id: names the config file (oth.camera.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "camera";

@@ -44,7 +44,7 @@ internal static class GameModsScreen
             if (GameModsTab.Attached && IsTop(GameModsTab.State))
             {
                 // Already in the browser: the tab (or the full view, when the widgets are missing) opens there, after
-                // the page's pass when a row of a page asked for it (e.g. Server Creator+'s Lobby size opens Big Lobbies).
+                // the page's pass when a row of a page asked for it (e.g. Server Creator+'s Lobby size opens Lobby+).
                 GameModsTab.OpenLater(tab, modId, closeOnBack);
                 return true;
             }

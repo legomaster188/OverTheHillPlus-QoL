@@ -7,7 +7,7 @@ namespace OverTheHillPlus.ControllerFeel;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Controller Feel's per-frame flow.
+/// Rumble+'s per-frame flow.
 /// 1. <see cref="Tick"/> (core's after-ticks hook): works out whether the pad may rumble at all (<see cref="FeelGate"/>),
 ///    reads the car (<see cref="FeelSampler"/>) and mixes this frame's effects (<see cref="FeelMixer"/>).
 /// 2. <see cref="AfterGameUpdate"/> (a postfix on the game's <c>ControllerVibrationManager.Update</c>, which has just written
@@ -192,7 +192,7 @@ internal static class ControllerFeelCore
     private static void Fail(Exception e, string where)
     {
         DebugLog.Error(ControllerFeelPlugin.ModId, e, where);
-        ControllerFeelPlugin.Logger?.LogError("Controller Feel failed and is off for this session (the motors are stopped): " + e);
+        ControllerFeelPlugin.Logger?.LogError("Rumble+ failed and is off for this session (the motors are stopped): " + e);
         _failed = true;
         PadOutput.Stop("failed");
     }
@@ -203,7 +203,7 @@ internal static class ControllerFeelCore
     /// <summary>Why nothing is shown or felt, for the MODS page, or null while it works.</summary>
     public static string Problem()
     {
-        if (_failed) return "Controller Feel stopped after an error (see the log); the motors are off.";
+        if (_failed) return "Rumble+ stopped after an error (see the log); the motors are off.";
         if (PadOutput.Current() == null) return "No gamepad found. Plug one in or switch it on.";
         return null;
     }

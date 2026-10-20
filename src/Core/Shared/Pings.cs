@@ -5,7 +5,7 @@ using UnityEngine;
 namespace OverTheHillPlus.Shared;
 
 /// <summary>
-/// Short-lived pings mods raise on the maps (Player Flares): the owner replaces its whole list whenever it changes and
+/// Short-lived pings mods raise on the maps (Flares+): the owner replaces its whole list whenever it changes and
 /// the Minimap draws them as pins kept at the panel's edge. The game's map screen gets the same spots through
 /// <see cref="MapMarkers"/>. Main thread only.
 /// </summary>

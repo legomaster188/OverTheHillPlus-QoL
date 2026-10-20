@@ -97,7 +97,7 @@ internal sealed partial class SectionMap
          .Section("ExtraPlayersHud", "maphud")
          .Section("MapExtraPlayers", "maphud");
 
-        // [Multiplayer] is split between Big Lobbies (lobby size, crash guards) and Server Creator+ (name, join message).
+        // [Multiplayer] is split between Lobby+ (lobby size, crash guards) and Server Creator+ (name, join message).
         m.Section("Multiplayer", "biglobbies");
         foreach (var k in new[] { "ExpandLobbySize", "DefaultMaxPlayers", "CustomMaxPlayers", "FallRescue", "LobbyGuards",
                                   "MeasuredCapacity", "SlotKeeper", "LendSlotsToJoiners" })

@@ -3,7 +3,7 @@ using System;
 namespace OverTheHillPlus.DrivingQol;
 
 /// <summary>
-/// Driving QoL's per-frame work that runs before the features' ticks (as the old ModBehaviour ran it): the frame-rate
+/// Driving+'s per-frame work that runs before the features' ticks (as the old ModBehaviour ran it): the frame-rate
 /// caps, field of view, compass range and auto headlights (<see cref="Qol.Tick"/>), plugged into core's hooks.
 /// </summary>
 internal static class DrivingQolFrame

@@ -50,7 +50,7 @@ internal sealed class DiskFolder : IFolderLister
 }
 
 /// <summary>
-/// Helpers for mods that read files from their own folder only (Radio, Custom Horns): a path must resolve strictly
+/// Helpers for mods that read files from their own folder only (Radio, Horns+): a path must resolve strictly
 /// inside the folder, names must be plain, and no link (symlink, junction) is ever followed, on the way in either.
 /// Pure (System.IO only), so the tests cover it.
 /// </summary>

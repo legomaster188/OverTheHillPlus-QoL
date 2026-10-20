@@ -30,7 +30,7 @@ internal static class ControllerFeelStepPatch
         {
             if (_loggedError) return;
             _loggedError = true;
-            ControllerFeelPlugin.Logger.LogError("Controller Feel step failed (further errors suppressed): " + e);
+            ControllerFeelPlugin.Logger.LogError("Rumble+ step failed (further errors suppressed): " + e);
         }
     }
 }

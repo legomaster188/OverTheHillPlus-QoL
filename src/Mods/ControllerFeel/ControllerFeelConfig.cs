@@ -2,7 +2,7 @@ using BepInEx.Configuration;
 
 namespace OverTheHillPlus.ControllerFeel;
 
-/// <summary>Controller Feel's settings in BepInEx/config/oth.controllerfeel.cfg.</summary>
+/// <summary>Rumble+'s settings in BepInEx/config/oth.controllerfeel.cfg.</summary>
 internal static class ControllerFeelConfig
 {
     public static ConfigEntry<bool> Rumble, OnlyWithPad, TriggerMotors;

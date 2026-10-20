@@ -8,13 +8,13 @@ namespace OverTheHillPlus.Api;
 /// <summary>
 /// Skins for modded cars (cars a mod adds to the game, like the Vera Crossover). A modded car registers its id, its
 /// display name, the car name livery packs use for it, and two callbacks (which skin it wears now, and wear this one);
-/// then anyone (the Livery Packs page, another mod) can list the registered cars and the skins found for each, and
+/// then anyone (the Liveries+ page, another mod) can list the registered cars and the skins found for each, and
 /// switch a car's skin. See docs/modding-api.md.
 ///
 /// <para>A skin is an entry of a livery pack in the game's own format (a folder with <c>manifest.json</c>
 /// <c>{"liveries":[{"car","name","texture","icon"}]}</c> and the PNG textures) whose <c>car</c> is the modded car's
 /// livery name (any case). Packs are read from the game's LocalLiveries folder and BepInEx/config/oth.liveries/, with
-/// the same folder confinement as Livery Packs, and each texture must be a square PNG of 1024, 2048 or 4096 pixels
+/// the same folder confinement as Liveries+, and each texture must be a square PNG of 1024, 2048 or 4096 pixels
 /// and at most 16 MB. A skin's key is "&lt;pack folder&gt;/&lt;entry name&gt;". Loading and showing the texture is the
 /// car mod's own business (the game doesn't know the car).</para>
 ///

@@ -181,7 +181,7 @@ internal static class ChatNet
     private static void OnMessage(Net.Message m)
     {
         if (m.Type != MsgSay) return;
-        // Host: a guest who writes is not away (Server Utils' AFK rule can't see typing; told through core).
+        // Host: a guest who writes is not away (Host+'s AFK rule can't see typing; told through core).
         // m.From is the guest who sent it.
         if (Net.IsHost && m.From.IsRealPlayer) PlayerActivity.MarkActive(m.From);
         if (!ChatFeature.Enabled.Value) return; // a host relaying with chat off: ModNet already forwarded it

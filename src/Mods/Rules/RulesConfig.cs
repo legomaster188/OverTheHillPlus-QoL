@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 
 namespace OverTheHillPlus.Rules;
 
-/// <summary>Server Rules & MOTD's settings in BepInEx/config/oth.rules.cfg.</summary>
+/// <summary>Rules+'s settings in BepInEx/config/oth.rules.cfg.</summary>
 internal static class RulesConfig
 {
     public const int RuleSlots = 6, AnnouncementSlots = 6;
@@ -44,7 +44,7 @@ internal static class RulesConfig
 
         RulesOnJoin = cfg.Bind("Rules", "ShowOnJoin", true, "Show the rules to each player who joins.");
         RulesAsNotices = cfg.Bind("Rules", "NoticesForPlayersWithoutMod", false,
-            "Players without Server Rules get the rules as pop-up notices, which everyone in the session sees (at most once every 3 minutes; joins in between share one). Players with it get a rules window only they see.");
+            "Players without Rules+ get the rules as pop-up notices, which everyone in the session sees (at most once every 3 minutes; joins in between share one). Players with it get a rules window only they see.");
         RulesTitle = cfg.Bind("Rules", "Title", "Server rules", "Title of the rules window.");
         for (int i = 0; i < RuleSlots; i++)
             RuleLines[i] = cfg.Bind("Rules", "Rule" + (i + 1), DefaultRules[i], $"Rule {i + 1} (empty = not used).");
@@ -57,7 +57,7 @@ internal static class RulesConfig
             Announcements[i] = cfg.Bind("Announcements", "Message" + (i + 1), "", $"Announcement {i + 1} (empty = not used).");
 
         VoteKickEnabled = cfg.Bind("VoteKick", "Enabled", true,
-            "When hosting, players with Server Rules can vote to remove a player. A strict majority of them is needed; you can veto any vote, and you can never be voted out.");
+            "When hosting, players with Rules+ can vote to remove a player. A strict majority of them is needed; you can veto any vote, and you can never be voted out.");
         HostVotes = cfg.Bind("VoteKick", "HostVotes", true, "Your own vote counts too when hosting.");
         MinYes = cfg.Bind("VoteKick", "MinimumYesVotes", 2, "A vote never passes with fewer yes votes than this (at least 2).");
         // Insert / Delete: no other mod and none of the game's own bindings use them by default.

@@ -6,7 +6,7 @@ using UnstuckCore = OverTheHillPlus.Features.Public.Unstuck.Unstuck;
 
 namespace OverTheHillPlus.DrivingQol;
 
-/// <summary>Driving QoL's everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
+/// <summary>Driving+'s everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
 internal static class DrivingQolSimple
 {
     private static readonly int[] FpsSteps = { 0, 30, 60, 90, 120, 144, 165, 240, 360 };

@@ -39,7 +39,7 @@ internal static class LiveryPacksLoader
     public static void EnsureFolder()
     {
         try { Directory.CreateDirectory(Root); }
-        catch (Exception e) { DebugLog.Error("liverypacks", e, "LiveryPacksLoader.EnsureFolder"); LiveryPacksPlugin.Logger.LogWarning("[Livery Packs] Could not create " + Root + ": " + e.Message); }
+        catch (Exception e) { DebugLog.Error("liverypacks", e, "LiveryPacksLoader.EnsureFolder"); LiveryPacksPlugin.Logger.LogWarning("[Liveries+] Could not create " + Root + ": " + e.Message); }
     }
 
     /// <summary>A scan has run at least once (the page scans on demand, never every frame).</summary>
@@ -59,7 +59,7 @@ internal static class LiveryPacksLoader
         catch (Exception e)
         {
             DebugLog.Error("liverypacks", e, "LiveryPacksLoader.Rescan");
-            LiveryPacksPlugin.Logger.LogWarning("[Livery Packs] Scan failed: " + e.Message);
+            LiveryPacksPlugin.Logger.LogWarning("[Liveries+] Scan failed: " + e.Message);
             Packs = Array.Empty<LiveryPack>();
         }
     }
@@ -105,11 +105,11 @@ internal static class LiveryPacksLoader
                 Registered.Add(pack.Folder);
                 added++;
             }
-            catch (Exception e) { DebugLog.Error("liverypacks", e, "LiveryPacksLoader.RegisterInto"); LiveryPacksPlugin.Logger.LogWarning($"[Livery Packs] '{pack.Folder}' could not be added: {e.Message}"); }
+            catch (Exception e) { DebugLog.Error("liverypacks", e, "LiveryPacksLoader.RegisterInto"); LiveryPacksPlugin.Logger.LogWarning($"[Liveries+] '{pack.Folder}' could not be added: {e.Message}"); }
         }
         DebugLog.Info(LiveryPacksPlugin.ModId, $"{added} of {Packs.Count} pack(s) added to the game's livery list ({ShadowedByGame.Count} left to the game's own folder of the same name)");
         if (added > 0 || Packs.Count > 0)
-            LiveryPacksPlugin.Logger.LogInfo($"[Livery Packs] {added} of {Packs.Count} pack(s) added to the game's livery list.");
+            LiveryPacksPlugin.Logger.LogInfo($"[Liveries+] {added} of {Packs.Count} pack(s) added to the game's livery list.");
     }
 
     private static HashSet<string> GameLocalFolders()
@@ -143,7 +143,7 @@ internal static class LiveryPacksLoader
         catch (Exception e)
         {
             DebugLog.Error("liverypacks", e, "LiveryPacksLoader.Reload");
-            LiveryPacksPlugin.Logger.LogWarning("[Livery Packs] Reload failed: " + e.Message);
+            LiveryPacksPlugin.Logger.LogWarning("[Liveries+] Reload failed: " + e.Message);
             return "Failed: " + e.Message;
         }
     }
@@ -171,7 +171,7 @@ internal static class LiveryPacksLoader
                 var profile = OverlandSaver.CurrentProfileSave?.Profile;
                 if (profile != null) profile.ShowLocalLiveryMods = value.Value;
             }
-            catch (Exception e) { DebugLog.Error("liverypacks", e, "LiveryPacksLoader.ShowLocalInGarage"); LiveryPacksPlugin.Logger.LogWarning("[Livery Packs] Could not switch local mods: " + e.Message); }
+            catch (Exception e) { DebugLog.Error("liverypacks", e, "LiveryPacksLoader.ShowLocalInGarage"); LiveryPacksPlugin.Logger.LogWarning("[Liveries+] Could not switch local mods: " + e.Message); }
         }
     }
 }
@@ -183,6 +183,6 @@ internal static class RegisterLocalLiveriesPatch
     {
         // A throw here would end the game's own refresh half-way.
         try { LiveryPacksLoader.RegisterInto(__instance); }
-        catch (Exception e) { DebugLog.Error("liverypacks", e, "RegisterLocalLiveriesPatch.Postfix"); LiveryPacksPlugin.Logger.LogWarning("[Livery Packs] Adding packs failed: " + e.Message); }
+        catch (Exception e) { DebugLog.Error("liverypacks", e, "RegisterLocalLiveriesPatch.Postfix"); LiveryPacksPlugin.Logger.LogWarning("[Liveries+] Adding packs failed: " + e.Message); }
     }
 }

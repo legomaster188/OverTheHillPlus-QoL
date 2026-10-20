@@ -31,7 +31,7 @@ public readonly struct MountedPart
 }
 
 /// <summary>
-/// Cosmetic Stacking's decisions, pure (unit-tested). The game's mount (VehicleCustomizationControllerHelpers
+/// Stacking+'s decisions, pure (unit-tested). The game's mount (VehicleCustomizationControllerHelpers
 /// .MountDismountPart) takes off the first mounted part of the same kind (HaveAlreadySameTypeMounted: same
 /// CosmeticType for a cosmetic) before it adds the new one; a stack is the same per-car "in use" flags the game already
 /// saves and sends (one bit per part), just with several of one type set.

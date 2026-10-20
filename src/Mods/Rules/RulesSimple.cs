@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace OverTheHillPlus.Rules;
 
-/// <summary>Server Rules & MOTD's MODS page: welcome, rules, announcements and vote kick.</summary>
+/// <summary>Rules+'s MODS page: welcome, rules, announcements and vote kick.</summary>
 internal static class RulesSimple
 {
     private static readonly int[] Minutes = { 5, 10, 15, 20, 30, 45, 60 };
@@ -31,9 +31,9 @@ internal static class RulesSimple
             SimpleMenu.Note("Server Creator+'s join message is on too: joining players get both. Switch one of them off.");
 
         SimpleMenu.Heading("Rules");
-        SimpleMenu.Toggle(RulesConfig.RulesOnJoin, "Show the rules on join", "Players with Server Rules get a window only they see.");
+        SimpleMenu.Toggle(RulesConfig.RulesOnJoin, "Show the rules on join", "Players with Rules+ get a window only they see.");
         SimpleMenu.Toggle(RulesConfig.RulesAsNotices, "Notices for players without it",
-            "Players without Server Rules get the rules as pop-up notices instead, which everyone in the session sees: " +
+            "Players without Rules+ get the rules as pop-up notices instead, which everyone in the session sees: " +
             "at most once every 3 minutes, joins in between share one.");
         TextEntry(RulesConfig.RulesTitle, "Title", RulesWire.MaxTitleChars, "Title of the rules window.");
         for (int i = 0; i < RulesConfig.RuleSlots; i++)
@@ -41,7 +41,7 @@ internal static class RulesSimple
         SimpleMenu.Button("Show the rules", null, hosting ? "Shows your rules window here, as players with the mod see it."
             : "Asks the host for the rules window again.", () => Menu.SetStatus(RulesClient.AskForRules()));
         if (hosting)
-            SimpleMenu.Button("Send the rules to everyone now", null, "Notices for everyone, and the window for players with Server Rules.",
+            SimpleMenu.Button("Send the rules to everyone now", null, "Notices for everyone, and the window for players with Rules+.",
                 () => Menu.SetStatus(RulesHost.SendRulesToEveryone()));
 
         SimpleMenu.Heading("Announcements");
@@ -54,7 +54,7 @@ internal static class RulesSimple
 
         SimpleMenu.Heading("Vote kick (host settings)");
         SimpleMenu.Toggle(RulesConfig.VoteKickEnabled, "Vote kick",
-            "Players with Server Rules can vote to remove a player: a strict majority of them, at least the minimum below. You can veto any vote and are never voted out.");
+            "Players with Rules+ can vote to remove a player: a strict majority of them, at least the minimum below. You can veto any vote and are never voted out.");
         SimpleMenu.Toggle(RulesConfig.HostVotes, "Your vote counts", "Count your own vote when hosting.");
         SimpleMenu.IntChoice("Minimum yes votes", "A vote never passes with fewer yes votes.", RulesConfig.MinYes.Value, new[] { 2, 3, 4, 5 },
             v => v.ToString(), v => RulesConfig.MinYes.Value = v);
@@ -102,7 +102,7 @@ internal static class RulesSimple
         foreach (var (player, name) in _targets)
         {
             var p = player;
-            SimpleMenu.Button(name, "start vote", $"Ask the players with Server Rules to vote on removing {name}.",
+            SimpleMenu.Button(name, "start vote", $"Ask the players with Rules+ to vote on removing {name}.",
                 () => Menu.SetStatus(RulesClient.StartVote(p)));
         }
     }

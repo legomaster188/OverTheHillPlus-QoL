@@ -2,7 +2,7 @@ using BepInEx.Configuration;
 
 namespace OverTheHillPlus.RealNights;
 
-/// <summary>Real Nights' settings in BepInEx/config/oth.realnights.cfg.</summary>
+/// <summary>Nights+'s settings in BepInEx/config/oth.realnights.cfg.</summary>
 internal static class RealNightsConfig
 {
     public static ConfigEntry<bool> DarkNights;

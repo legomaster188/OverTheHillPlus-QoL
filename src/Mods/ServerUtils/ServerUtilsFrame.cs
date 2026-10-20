@@ -3,7 +3,7 @@ using System;
 namespace OverTheHillPlus.ServerUtils;
 
 /// <summary>
-/// Server Utils' work outside the features' ticks, plugged into core's CoreBehaviour hooks: putting back the host's
+/// Host+'s work outside the features' ticks, plugged into core's CoreBehaviour hooks: putting back the host's
 /// graphics values and process priority when the game quits (the old ModBehaviour did it on quit).
 /// </summary>
 internal static class ServerUtilsFrame

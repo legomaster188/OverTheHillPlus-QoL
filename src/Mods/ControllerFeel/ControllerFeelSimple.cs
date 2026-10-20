@@ -5,7 +5,7 @@ using OverTheHillPlus.UI;
 
 namespace OverTheHillPlus.ControllerFeel;
 
-/// <summary>Controller Feel's MODS page: the switches, a strength for each effect, the game's own rumble, and a motor test.</summary>
+/// <summary>Rumble+'s MODS page: the switches, a strength for each effect, the game's own rumble, and a motor test.</summary>
 internal static class ControllerFeelSimple
 {
     private static readonly float[] Strengths = { 0f, 0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f };
@@ -24,7 +24,7 @@ internal static class ControllerFeelSimple
         if (problem != null) SimpleMenu.Note(problem);
 
         SimpleMenu.Heading("Rumble");
-        SimpleMenu.Toggle(ControllerFeelConfig.Rumble, "Controller Feel", "Master switch. Off: this mod never touches the gamepad's motors.");
+        SimpleMenu.Toggle(ControllerFeelConfig.Rumble, "Rumble+", "Master switch. Off: this mod never touches the gamepad's motors.");
         bool on = ControllerFeelConfig.Rumble.Value;
         SimpleMenu.Toggle(ControllerFeelConfig.OnlyWithPad, "Only when playing with the gamepad", "No rumble while the game is set to keyboard and mouse.", on);
         SimpleMenu.Actions("Test the motors", ("Test now", ControllerFeelCore.StartTest, on && problem == null));
@@ -41,7 +41,7 @@ internal static class ControllerFeelSimple
 
         SimpleMenu.Heading("The game's own rumble");
         int level = Array.IndexOf(GameLevels, (float)Math.Round(ControllerFeelConfig.GameRumble.Value * 2f) / 2f);
-        SimpleMenu.Choice("Keep the game's rumble", "The game has its own rumble now (bumps, wheelspin, winch...). All: both together. None: Controller Feel only.",
+        SimpleMenu.Choice("Keep the game's rumble", "The game has its own rumble now (bumps, wheelspin, winch...). All: both together. None: Rumble+ only.",
             level, new[] { "All of it", "Half", "None" }, i => ControllerFeelConfig.GameRumble.Value = GameLevels[i], on, wrap: true);
         SimpleMenu.Note(Info());
     }

@@ -19,8 +19,8 @@ using OverTheHillPlus.Core.Manager;
 public class RadioPlugin : BasePlugin
 {
     public const string Guid = "com.oth.radio";
-    public const string Name = "Radio";
-    public const string Version = "1.0.0";
+    public const string Name = "Radio+";
+    public const string Version = "1.0.1";
 
     /// <summary>Mod id: names the config file (oth.radio.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "radio";

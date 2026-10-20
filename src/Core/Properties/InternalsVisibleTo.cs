@@ -28,6 +28,7 @@
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Longhorn")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Limber")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Gemse")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Gearbox")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Cockpit")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Flares")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Drifter")]

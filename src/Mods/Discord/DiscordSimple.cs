@@ -2,7 +2,7 @@ using OverTheHillPlus.UI;
 
 namespace OverTheHillPlus.Discord;
 
-/// <summary>Discord Presence's everyday settings, first on its MODS page.</summary>
+/// <summary>Discord+'s everyday settings, first on its MODS page.</summary>
 internal static class DiscordSimple
 {
     internal static void Draw()

@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 
 namespace OverTheHillPlus.Flares;
 
-/// <summary>Player Flares' settings in BepInEx/config/oth.flares.cfg.</summary>
+/// <summary>Flares+'s settings in BepInEx/config/oth.flares.cfg.</summary>
 internal static class FlaresConfig
 {
     public static ConfigEntry<Key> FlareKey;

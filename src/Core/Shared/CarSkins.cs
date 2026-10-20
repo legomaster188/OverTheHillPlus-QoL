@@ -85,7 +85,7 @@ internal static class CarSkinScan
     /// <summary>
     /// Scans every pack folder in <paramref name="roots"/>, in order: a pack folder name seen in an earlier root wins
     /// (the same pack in two places is read once). Only entries whose car is one of <paramref name="cars"/> (livery car
-    /// names, any case; null: every car) are looked at: other cars' liveries are the game's (or Livery Packs')
+    /// names, any case; null: every car) are looked at: other cars' liveries are the game's (or Liveries+')
     /// business, so they are neither checked nor reported. Skin names are unique per car (a pack may use one livery
     /// name for several cars). Refused packs that hold an entry for a wanted car, and bad skins, are each one line in
     /// Skipped.

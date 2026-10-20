@@ -58,7 +58,7 @@ internal static class RulesOverlay
         float hTitle = _title.CalcHeight(new GUIContent(p.Title), inner);
         float hWelcome = p.Welcome.Length > 0 ? _body.CalcHeight(new GUIContent(p.Welcome), inner) + 8f : 0f;
         float hRules = rules.Length > 0 ? _body.CalcHeight(new GUIContent(rules), inner) : 0f;
-        string foot = "Read them again any time on the Server Rules page (MODS).";
+        string foot = "Read them again any time on the Rules+ page (MODS).";
         float hFoot = _small.CalcHeight(new GUIContent(foot), inner);
         float h = 18f + hTitle + 8f + hWelcome + hRules + 10f + hFoot + 16f;
         var box = new Rect(x, y, w, h);
@@ -93,7 +93,7 @@ internal static class RulesOverlay
             case VoteOutcome.Passing:
                 head = $"Vote passed: removing {v.TargetName}";
                 line2 = $"{v.Yes} of {v.Eligible} voted yes · in {Mathf.CeilToInt(RulesClient.VoteSecondsLeft)} s unless the host vetoes";
-                line3 = RulesHost.Hosting ? "Veto on the Server Rules page (MODS) to keep them" : null;
+                line3 = RulesHost.Hosting ? "Veto on the Rules+ page (MODS) to keep them" : null;
                 edge = Theme.Bad;
                 break;
             case VoteOutcome.Passed:

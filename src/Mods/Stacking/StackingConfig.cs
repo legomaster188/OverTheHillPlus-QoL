@@ -2,7 +2,7 @@ using BepInEx.Configuration;
 
 namespace OverTheHillPlus.Stacking;
 
-/// <summary>Cosmetic Stacking's settings in BepInEx/config/oth.stacking.cfg.</summary>
+/// <summary>Stacking+'s settings in BepInEx/config/oth.stacking.cfg.</summary>
 internal static class StackingConfig
 {
     /// <summary>A gamepad button to hold instead of Shift (the keyboard's Shift always works).</summary>

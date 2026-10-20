@@ -18,8 +18,8 @@ using OverTheHillPlus.Core.Manager;
 public class CockpitPlugin : BasePlugin
 {
     public const string Guid = "com.oth.cockpit";
-    public const string Name = "Cockpit";
-    public const string Version = "1.2.0";
+    public const string Name = "Cockpit+";
+    public const string Version = "1.2.1";
 
     /// <summary>Mod id: names the config file (oth.cockpit.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "cockpit";

@@ -3,8 +3,8 @@ using BepInEx.Configuration;
 namespace OverTheHillPlus.DrivingQol;
 
 /// <summary>
-/// Driving QoL's own settings in BepInEx/config/oth.drivingqol.cfg. Same section and keys as in the old
-/// OverTheHillPlus config ([QoL] ...), so the settings migration can copy them over (Server Utils' host governor reads
+/// Driving+'s own settings in BepInEx/config/oth.drivingqol.cfg. Same section and keys as in the old
+/// OverTheHillPlus config ([QoL] ...), so the settings migration can copy them over (Host+'s host governor reads
 /// [QoL] FpsCap / BackgroundFpsCap through core by these names). The unstuck feature binds its own [Unstuck] entries on
 /// <see cref="File"/> in its Register.
 /// </summary>

@@ -45,7 +45,7 @@ internal sealed class LiveryPack
 
 /// <summary>
 /// Reads livery packs from one folder (pure file-system code; the tests compile this file on its own). Shared by
-/// Livery Packs (which hands the packs to the game's own livery list) and the modded-car skins (Api.Cars), which read
+/// Liveries+ (which hands the packs to the game's own livery list) and the modded-car skins (Api.Cars), which read
 /// the textures themselves. A pack is a
 /// sub-folder in the format the game's own livery mods use (mod.io uploads and the game's LocalLiveries folder):
 /// <c>manifest.json</c> = <c>{"liveries":[{"car","name","texture","icon"}]}</c> next to 2048x2048 PNG textures and

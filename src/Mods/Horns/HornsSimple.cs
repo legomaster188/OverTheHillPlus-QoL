@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace OverTheHillPlus.Horns;
 
-/// <summary>Custom Horns' everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
+/// <summary>Horns+'s everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
 internal static class HornsSimple
 {
     private static readonly float[] VolumeSteps = { 0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1f };

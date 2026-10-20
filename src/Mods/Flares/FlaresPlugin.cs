@@ -10,7 +10,7 @@ namespace OverTheHillPlus.Flares;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Player Flares: keep track of friends while exploring. Name tags over other players' cars stay up much farther away
+/// Flares+: keep track of friends while exploring. Name tags over other players' cars stay up much farther away
 /// (fading and shrinking with distance, with the distance in metres), and a key fires a flare that climbs with a glow
 /// and a smoke trail in your player colour, which every player with the mod sees from far away (also as a ping on the
 /// map, compass and minimap). Optionally a flare goes up by itself when you lie stuck on your side or roof. See
@@ -21,8 +21,8 @@ using OverTheHillPlus.Core.Manager;
 public class FlaresPlugin : BasePlugin
 {
     public const string Guid = "com.oth.flares";
-    public const string Name = "Player Flares";
-    public const string Version = "1.0.0";
+    public const string Name = "Flares+";
+    public const string Version = "1.0.1";
 
     /// <summary>Mod id: names the config file (oth.flares.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "flares";
@@ -81,7 +81,7 @@ public class FlaresPlugin : BasePlugin
         {
             if (_loggedTick) return;
             _loggedTick = true;
-            Logger.LogError("Player Flares tick failed (further errors suppressed): " + e);
+            Logger.LogError("Flares+ tick failed (further errors suppressed): " + e);
         }
     }
 

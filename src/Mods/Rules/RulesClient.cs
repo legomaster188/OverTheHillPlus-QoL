@@ -149,7 +149,7 @@ internal static class RulesClient
         if (!Net.IsGuest) return "Blocked: join or host a multiplayer session first.";
         // Starting a vote affects another player: not from a public lobby (the host can still start one there).
         if (GameState.IsPublicGuest) return "Blocked: in public lobbies only the host can start a vote.";
-        if (!Net.HostHas(RulesWire.Channel)) return "Blocked: the host doesn't run Server Rules.";
+        if (!Net.HostHas(RulesWire.Channel)) return "Blocked: the host doesn't run Rules+.";
         var r = Net.SendToHost(RulesWire.Channel, RulesWire.MsgStartVote, RulesWire.EncodeStartVote(target.RawEncoded));
         return r == Net.SendResult.Sent ? "Asked the host to start the vote." : "Failed: " + r + ".";
     }
@@ -178,7 +178,7 @@ internal static class RulesClient
             ShowRules(RulesHost.Popup("you", true));
             return "Showing your rules (as a guest with the mod sees them).";
         }
-        if (!Net.IsGuest || !Net.HostHas(RulesWire.Channel)) return "Blocked: the host doesn't run Server Rules.";
+        if (!Net.IsGuest || !Net.HostHas(RulesWire.Channel)) return "Blocked: the host doesn't run Rules+.";
         var r = Net.SendToHost(RulesWire.Channel, RulesWire.MsgAskRules, System.Array.Empty<byte>());
         return r == Net.SendResult.Sent ? "Asked the host for the rules." : "Failed: " + r + ".";
     }

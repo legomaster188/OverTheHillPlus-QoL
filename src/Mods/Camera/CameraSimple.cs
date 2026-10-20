@@ -40,7 +40,7 @@ internal static class CameraSimple
         };
         if (entry == null)
         {
-            SimpleMenu.Note("The game camera keeps the game's field of view (Driving QoL can change it).");
+            SimpleMenu.Note("The game camera keeps the game's field of view (Driving+ can change it).");
             return;
         }
         SimpleMenu.FloatChoice(label, "Field of view of the " + CameraMath.Name(mode).ToLowerInvariant() + " camera. Game = keep the game's.",

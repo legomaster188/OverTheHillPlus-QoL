@@ -3,7 +3,7 @@ using BepInEx.Configuration;
 namespace OverTheHillPlus.ServerUtils;
 
 /// <summary>
-/// Server Utils' own settings file, BepInEx/config/oth.serverutils.cfg. Its features bind their entries on
+/// Host+'s own settings file, BepInEx/config/oth.serverutils.cfg. Its features bind their entries on
 /// <see cref="File"/> in their Register, with the same sections and keys as in the old OverTheHillPlus config
 /// ([Host Governor], [Ping Monitor], [Moderation], [Autosave], [JoinSmoothing], [Network Performance], [SettingsShare]), so the
 /// settings migration can copy them over.

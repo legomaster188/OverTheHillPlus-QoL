@@ -11,7 +11,7 @@ namespace OverTheHillPlus.Features.Public.ServerBrowserPlus;
 /// <summary>
 /// The game's server list hides every server with more than 4 player slots: OverlandSessionInfo's constructor sets a
 /// private flag to (SessionInfo.MaxPlayers &lt;= 4) and SessionInfoListAdapter.ApplyFilters skips every entry without it
-/// (decoded with Cpp2IL; join by code never looks at it). So big lobbies, ours (Big Lobbies) and other hosts', never
+/// (decoded with Cpp2IL; join by code never looks at it). So big lobbies, ours (Lobby+) and other hosts', never
 /// show in the browser. This sets the flag for them again, so they are listed like any other server (the game's own
 /// hide-full / hide-private / area / search filters still apply). Only this game's list changes; players without the
 /// mod still can't see servers above 4 slots.

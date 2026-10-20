@@ -10,7 +10,7 @@ namespace OverTheHillPlus.DrivingQol;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Driving QoL: everyday tweaks that give no advantage. A higher frame-rate cap, a background cap and keep running when
+/// Driving+: everyday tweaks that give no advantage. A higher frame-rate cap, a background cap and keep running when
 /// alt-tabbed, the driving camera's field of view, compass range, auto headlights, skipping the logo screens, faster
 /// fades, no tutorial hints, the unstuck button and the garage's live suspension lift preview.
 /// </summary>
@@ -19,8 +19,8 @@ using OverTheHillPlus.Core.Manager;
 public class DrivingQolPlugin : BasePlugin
 {
     public const string Guid = "com.oth.drivingqol";
-    public const string Name = "Driving QoL";
-    public const string Version = "1.2.0";
+    public const string Name = "Driving+";
+    public const string Version = "1.2.1";
 
     /// <summary>Mod id: names the config file (oth.drivingqol.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "drivingqol";

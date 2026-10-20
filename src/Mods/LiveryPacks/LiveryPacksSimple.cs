@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace OverTheHillPlus.LiveryPacks;
 
-/// <summary>Livery Packs' MODS page: the folder, each pack's state, reload, and the garage's local-mods switch.</summary>
+/// <summary>Liveries+'s MODS page: the folder, each pack's state, reload, and the garage's local-mods switch.</summary>
 internal static class LiveryPacksSimple
 {
     private static readonly string[] OffOn = { "Off", "On" };
@@ -49,7 +49,7 @@ internal static class LiveryPacksSimple
 
     /// <summary>
     /// One skin row per modded car (cars a mod adds, like the Vera Crossover), through core's Api.Cars: skins are pack
-    /// entries whose "car" is that car's livery name. Livery Packs never references the car's mod.
+    /// entries whose "car" is that car's livery name. Liveries+ never references the car's mod.
     /// </summary>
     private static void DrawModdedCars()
     {

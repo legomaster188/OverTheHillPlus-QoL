@@ -53,7 +53,7 @@ internal readonly struct HornChoice : IEquatable<HornChoice>
 }
 
 /// <summary>
-/// Custom Horns' wire format on its mod-network channel (little-endian; fields are only ever appended):
+/// Horns+'s wire format on its mod-network channel (little-endian; fields are only ever appended):
 /// <list type="bullet">
 /// <item><see cref="MsgSelect"/>: [u8 kind][u8 built-in id][u8 mode][u64 hash][i32 length][u8 flags] - "this is my
 ///   horn". <see cref="FlagAskBack"/> asks every receiver to answer with its own (a player who just arrived).</item>

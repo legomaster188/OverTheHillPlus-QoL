@@ -7,7 +7,7 @@ using UnityEngine;
 namespace OverTheHillPlus.Horns;
 
 /// <summary>
-/// Custom Horns' per-frame work (your horn choice, the network, the player) and its Advanced card. Your choice is
+/// Horns+'s per-frame work (your horn choice, the network, the player) and its Advanced card. Your choice is
 /// read from the settings once a second; your own file is re-read when it changes on disk.
 /// </summary>
 internal sealed class HornsFeature : IFeature
@@ -64,7 +64,7 @@ internal sealed class HornsFeature : IFeature
     {
         if (logged) return;
         logged = true;
-        HornsPlugin.Logger.LogError($"Custom Horns {part} failed (further errors suppressed): {e}");
+        HornsPlugin.Logger.LogError($"Horns+ {part} failed (further errors suppressed): {e}");
     }
 
     /// <summary>Works out your horn from the settings (and your file), and tells the network when it changed.</summary>
@@ -134,7 +134,7 @@ internal sealed class HornsFeature : IFeature
 
     private static void DrawCard()
     {
-        Menu.Card("Custom Horns", "Your horn: a built-in one or your own wav file. Players with this mod hear it when you honk; everyone else hears the game's horn.", () =>
+        Menu.Card("Horns+", "Your horn: a built-in one or your own wav file. Players with this mod hear it when you honk; everyone else hears the game's horn.", () =>
         {
             Menu.KeyValue("Your horn", HornsSimple.Label(HornsConfig.Horn.Value));
             if (OwnProblem != null) Menu.KeyValue("Problem", OwnProblem);

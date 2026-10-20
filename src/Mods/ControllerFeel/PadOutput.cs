@@ -98,7 +98,7 @@ internal static class PadOutput
             if (!_loggedError)
             {
                 _loggedError = true;
-                ControllerFeelPlugin.Logger?.LogWarning("[Controller Feel] writing to the gamepad failed (further errors not logged): " + ex.Message);
+                ControllerFeelPlugin.Logger?.LogWarning("[Rumble+] writing to the gamepad failed (further errors not logged): " + ex.Message);
             }
             return false;
         }

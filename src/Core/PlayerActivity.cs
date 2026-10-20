@@ -5,7 +5,7 @@ namespace OverTheHillPlus;
 
 /// <summary>
 /// What players are doing that another mod knows about, told through core so mods don't reference each other. Used by
-/// the host's AFK rule (Server Utils): a guest who spectates or types a message is still there.
+/// the host's AFK rule (Host+): a guest who spectates or types a message is still there.
 ///
 /// - Local player: the mod that owns the activity adds a check (the spectate camera, the chat box); others read
 ///   <see cref="Spectating"/> / <see cref="Chatting"/>.

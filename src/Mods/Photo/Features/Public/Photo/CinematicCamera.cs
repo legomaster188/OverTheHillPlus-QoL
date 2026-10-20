@@ -221,7 +221,7 @@ internal static class CinematicCamera
     private static void RestoreFov(ref LensSettings lens)
     {
         _fovTouched = false;
-        // Driving QoL's FOV override (if set, read through core) re-applies itself next frame; otherwise go back to
+        // Driving+'s FOV override (if set, read through core) re-applies itself next frame; otherwise go back to
         // the game setting.
         if (CoreConfig.Find("QoL", "FovOverride") is BepInEx.Configuration.ConfigEntry<float> fov && fov.Value > 0f) return;
         try

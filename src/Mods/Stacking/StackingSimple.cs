@@ -2,7 +2,7 @@ using OverTheHillPlus.UI;
 
 namespace OverTheHillPlus.Stacking;
 
-/// <summary>Cosmetic Stacking's settings on its MODS page.</summary>
+/// <summary>Stacking+'s settings on its MODS page.</summary>
 internal static class StackingSimple
 {
     private static readonly string[] Pads = { "None", "Left trigger", "Left stick press", "Right stick press" };

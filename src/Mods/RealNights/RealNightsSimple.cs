@@ -3,7 +3,7 @@ using OverTheHillPlus.UI;
 
 namespace OverTheHillPlus.RealNights;
 
-/// <summary>Real Nights' everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
+/// <summary>Nights+'s everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
 internal static class RealNightsSimple
 {
     private static readonly float[] DarkSteps = { 0f, 0.25f, 0.4f, 0.5f, 0.6f, 0.75f, 0.9f, 1f };

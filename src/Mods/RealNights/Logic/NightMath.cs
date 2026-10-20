@@ -35,7 +35,7 @@ internal struct NightLook
 /// <summary>Darkness over the time of day and weather: pure maths, no game types.</summary>
 internal static class NightMath
 {
-    // The game's clock: the auto headlights of Driving QoL use 19:00-07:00. Dusk ramps from 18:30 to 20:30 and dawn
+    // The game's clock: the auto headlights of Driving+ use 19:00-07:00. Dusk ramps from 18:30 to 20:30 and dawn
     // from 04:30 to 06:30, so the sky is at its best around 19:30 and 05:30.
     public const float DuskStart = 18.5f, DuskEnd = 20.5f, DawnStart = 4.5f, DawnEnd = 6.5f;
 

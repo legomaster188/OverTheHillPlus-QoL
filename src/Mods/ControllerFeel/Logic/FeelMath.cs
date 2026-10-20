@@ -2,7 +2,7 @@ using System;
 
 namespace OverTheHillPlus.ControllerFeel;
 
-/// <summary>Small curve helpers for Controller Feel (no game types, so the tests compile this file in).</summary>
+/// <summary>Small curve helpers for Rumble+ (no game types, so the tests compile this file in).</summary>
 internal static class FeelMath
 {
     public static float Clamp01(float x) => float.IsNaN(x) ? 0f : x < 0f ? 0f : x > 1f ? 1f : x;

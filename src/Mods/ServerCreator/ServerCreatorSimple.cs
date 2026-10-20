@@ -27,13 +27,13 @@ internal static class ServerCreatorSimple
         SimpleMenu.Toggle(ServerCreatorConfig.JoinMessageEnabled, "Greet players who join",
             "A pop-up for everyone when a player joins. Edit the text under Advanced > Lobby.");
 
-        // The lobby size is Big Lobbies' setting (the game's own Max players row on the Create Server screen): this row
+        // The lobby size is Lobby+'s setting (the game's own Max players row on the Create Server screen): this row
         // leads to its page, where it can also be switched on.
         bool installed = ModManager.Find(BigLobbiesId) != null;
         bool running = ModManager.IsLoaded(BigLobbiesId);
-        SimpleMenu.Button("Lobby size", !installed ? "Not installed" : running ? "Big Lobbies" : "Switched off",
-            installed ? "Max players for the servers you create, up to 16: on Big Lobbies' page."
-                : "The game allows up to 4 players. The Big Lobbies mod allows up to 16.",
+        SimpleMenu.Button("Lobby size", !installed ? "Not installed" : running ? "Lobby+" : "Switched off",
+            installed ? "Max players for the servers you create, up to 16: on Lobby+'s page."
+                : "The game allows up to 4 players. The Lobby+ mod allows up to 16.",
             () => ModsPage.Open(BigLobbiesId), installed);
     }
 }

@@ -20,7 +20,7 @@ public class GraphicsPlugin : BasePlugin
 {
     public const string Guid = "com.oth.graphics";
     public const string Name = "Graphics+";
-    public const string Version = "1.2.0";
+    public const string Version = "1.2.1";
 
     /// <summary>Mod id: names the config file (oth.graphics.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "graphics";

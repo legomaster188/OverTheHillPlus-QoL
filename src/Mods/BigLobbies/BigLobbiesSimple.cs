@@ -3,7 +3,7 @@ using OverTheHillPlus.UI;
 
 namespace OverTheHillPlus.BigLobbies;
 
-/// <summary>Big Lobbies' everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
+/// <summary>Lobby+'s everyday settings, first on its MODS page (the rest is in its Advanced fold).</summary>
 internal static class BigLobbiesSimple
 {
     private static readonly int[] SizeSteps = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };

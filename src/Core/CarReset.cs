@@ -10,7 +10,7 @@ namespace OverTheHillPlus;
 /// reset-player RPC does it (decoded with Cpp2IL): detach the winches, then VehicleBase.Reposition to the car's spot
 /// raised a bit, keeping only its heading. The height comes from a ground raycast (skipping the car itself, moving
 /// bodies and overhangs more than 2 m above it), so a car that sank into the terrain comes back out on top.
-/// In core because more than one mod resets cars (Driving QoL's unstuck, and others).
+/// In core because more than one mod resets cars (Driving+'s unstuck, and others).
 /// </summary>
 internal static class CarReset
 {

@@ -10,7 +10,7 @@ namespace OverTheHillPlus.ControllerFeel;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Controller Feel: gamepad rumble from what the car is doing. Surface texture (gravel, rock, snow, sand, mud...) from the
+/// Rumble+: gamepad rumble from what the car is doing. Surface texture (gravel, rock, snow, sand, mud...) from the
 /// wheels' ground contact and speed, suspension hits and bottoming out, landings after jumps, wheelspin, lock-ups and
 /// skids, the engine's idle shake and the winch rope's strain, each with its own strength. It adds to the game's own
 /// controller rumble (ControllerVibrationManager) and can replace it. Local only: nothing is sent to anyone. See
@@ -21,8 +21,8 @@ using OverTheHillPlus.Core.Manager;
 public class ControllerFeelPlugin : BasePlugin
 {
     public const string Guid = "com.oth.controllerfeel";
-    public const string Name = "Controller Feel";
-    public const string Version = "1.0.0";
+    public const string Name = "Rumble+";
+    public const string Version = "1.0.1";
 
     /// <summary>Mod id: names the config file (oth.controllerfeel.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "controllerfeel";
@@ -78,7 +78,7 @@ public class ControllerFeelPlugin : BasePlugin
         {
             if (_loggedTick) return;
             _loggedTick = true;
-            Logger.LogError("Controller Feel tick failed (further errors suppressed): " + e);
+            Logger.LogError("Rumble+ tick failed (further errors suppressed): " + e);
         }
     }
 }

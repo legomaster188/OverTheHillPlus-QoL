@@ -30,26 +30,27 @@ you pick them, so the zip itself is tiny.
 | | Mod | |
 |---|---|---|
 | <img src="assets/discord/thumb_core.jpg" width="64" height="36" alt=""> | **Mod Manager** | The MODS menu, installing and updating. Everything else needs it |
-| <img src="assets/discord/thumb_biglobbies.jpg" width="64" height="36" alt=""> | Big Lobbies | Up to 16 players instead of 4 |
+| <img src="assets/discord/thumb_biglobbies.jpg" width="64" height="36" alt=""> | Lobby+ | Up to 16 players instead of 4 |
 | <img src="assets/discord/thumb_serverbrowser.jpg" width="64" height="36" alt=""> | Server Browser+ | Favourites, filters, all regions at once, friends' servers, rejoin |
 | <img src="assets/discord/thumb_servercreator.jpg" width="64" height="36" alt=""> | Server Creator+ | Coloured server names and a join message |
-| <img src="assets/discord/thumb_serverutils.jpg" width="64" height="36" alt=""> | Server Utils | Ping list, kick/ban tools, autosave, share your settings with a code |
-| <img src="assets/discord/thumb_chat.jpg" width="64" height="36" alt=""> | Chat | Press T to chat |
-| <img src="assets/discord/thumb_rules.jpg" width="64" height="36" alt=""> | Server Rules | Welcome message, rules and vote kick. Host only |
+| <img src="assets/discord/thumb_serverutils.jpg" width="64" height="36" alt=""> | Host+ | Ping list, kick/ban tools, autosave, share your settings with a code |
+| <img src="assets/discord/thumb_chat.jpg" width="64" height="36" alt=""> | Chat+ | Press T to chat |
+| <img src="assets/discord/thumb_rules.jpg" width="64" height="36" alt=""> | Rules+ | Welcome message, rules and vote kick. Host only |
 | <img src="assets/discord/thumb_camera.jpg" width="64" height="36" alt=""> | Camera+ | Hood, bumper, far chase and drone cams |
-| <img src="assets/discord/thumb_cockpit.jpg" width="64" height="36" alt=""> | Cockpit | First person with a dash and wheel for every car |
-| <img src="assets/discord/thumb_photo.jpg" width="64" height="36" alt=""> | Photo & Spectate | Big screenshots, hide the HUD, watch other players |
-| <img src="assets/discord/thumb_drivingqol.jpg" width="64" height="36" alt=""> | Driving QoL | FPS cap, FOV, auto headlights, skip intros, unstuck button |
+| <img src="assets/discord/thumb_cockpit.jpg" width="64" height="36" alt=""> | Cockpit+ | First person with a dash and wheel for every car |
+| <img src="assets/discord/thumb_photo.jpg" width="64" height="36" alt=""> | Photo+ | Big screenshots, hide the HUD, watch other players |
+| <img src="assets/discord/thumb_drivingqol.jpg" width="64" height="36" alt=""> | Driving+ | FPS cap, FOV, auto headlights, skip intros, unstuck button |
 | <img src="assets/discord/thumb_graphics.jpg" width="64" height="36" alt=""> | Graphics+ | A lot more graphics settings, plus presets |
-| <img src="assets/discord/thumb_realnights.jpg" width="64" height="36" alt=""> | Real Nights | Actually dark nights. Your headlights matter now |
-| <img src="assets/discord/thumb_discord.jpg" width="64" height="36" alt=""> | Discord Presence | Shows your map and car on Discord |
-| <img src="assets/discord/thumb_horns.jpg" width="64" height="36" alt=""> | Custom Horns | Pick a horn or use your own .wav |
-| <img src="assets/discord/thumb_controllerfeel.jpg" width="64" height="36" alt=""> | Controller Feel | Rumble for gravel, bumps, landings and wheelspin |
-| <img src="assets/discord/thumb_radio.jpg" width="64" height="36" alt=""> | Radio | Play your own music while you drive |
-| <img src="assets/discord/thumb_flares.jpg" width="64" height="36" alt=""> | Player Flares | See friends' names from far off and shoot a flare |
-| <img src="assets/discord/thumb_stacking.jpg" width="64" height="36" alt=""> | Cosmetic Stacking | Shift + click to put more than one cosmetic in a slot |
-| <img src="assets/discord/thumb_liverypacks.jpg" width="64" height="36" alt=""> | Livery Packs | Load liveries from a folder instead of mod.io |
-| <img src="assets/discord/thumb_trailers.jpg" width="64" height="36" alt=""> | Trailers | Tow a trailer, camper, car hauler or boat |
+| <img src="assets/discord/thumb_realnights.jpg" width="64" height="36" alt=""> | Nights+ | Actually dark nights. Your headlights matter now |
+| <img src="assets/discord/thumb_discord.jpg" width="64" height="36" alt=""> | Discord+ | Shows your map and car on Discord |
+| <img src="assets/discord/thumb_horns.jpg" width="64" height="36" alt=""> | Horns+ | Pick a horn or use your own .wav |
+| <img src="assets/discord/thumb_controllerfeel.jpg" width="64" height="36" alt=""> | Rumble+ | Rumble for gravel, bumps, landings and wheelspin |
+| <img src="assets/discord/thumb_radio.jpg" width="64" height="36" alt=""> | Radio+ | Play your own music while you drive |
+| <img src="assets/discord/thumb_flares.jpg" width="64" height="36" alt=""> | Flares+ | See friends' names from far off and shoot a flare |
+| <img src="assets/discord/thumb_stacking.jpg" width="64" height="36" alt=""> | Stacking+ | Shift + click to put more than one cosmetic in a slot |
+| <img src="assets/discord/thumb_liverypacks.jpg" width="64" height="36" alt=""> | Liveries+ | Load liveries from a folder instead of mod.io |
+| <img src="assets/discord/thumb_trailers.jpg" width="64" height="36" alt=""> | Trailers+ | Tow a trailer, camper, car hauler or boat |
+| <img src="assets/discord/thumb_gearbox.jpg" width="64" height="36" alt=""> | Gearbox+ | More gears or the real car's gearbox, a real neutral, and diff locks (K) |
 
 ## Cars
 
@@ -76,7 +77,36 @@ Bought in the garage like any other car, with their own paints and liveries, and
 | <img src="assets/discord/thumb_nomad.jpg" width="64" height="36" alt=""> | Nomad | Huge expedition truck on portal axles |
 | <img src="assets/discord/thumb_longhorn.jpg" width="64" height="36" alt=""> | Longhorn 389 | American semi |
 
-Everyone in the lobby needs the same car mods (and Trailers) as the host. If you get "banned from this session" when
+### Liveries on the new cars
+
+Every car except the Drifter comes with three liveries in the garage's Liveries tab, plus "Paint" for your own colours.
+They're free and not locked behind kilometres. Some of them are see-through in places, so they sit on top of whatever
+paint you picked. Other players with the car mod see your livery too.
+
+Making your own works like a normal livery mod:
+
+1. Grab the car's template from [`liveries/templates`](liveries/templates). It's the car's 2048 x 2048 texture with the
+   paint areas, glass, lamps, a 25 cm grid and labels for each side. The `_guides` version is just the lines, for
+   laying over your work.
+2. Paint a 2048 PNG on it. Leave parts transparent if you want the player's paint to show through there.
+3. Put it in a folder with a `manifest.json`:
+
+   ```json
+   {"liveries": [{"car": "Hilo", "name": "My Livery", "texture": "my_livery.png", "icon": "my_livery_icon.png"}]}
+   ```
+
+   `car` is the car's name in the game: `Vera`, `Terrier`, `Carpati`, `Ibex`, `Marmot`, `Hilo`, `Hilo22`, `Drover`,
+   `Mule`, `Bastion`, `Pixie`, `Bento`, `Limber`, `Badger`, `Gemse`, `Nomad` or `Longhorn`.
+4. To try it, drop the folder in `Documents\My Games\over the hill\LocalLiveries\` and pick it in the garage's Livery
+   Mods tab (turn on "Show local mods"). It also shows on the car's page in MODS, under Skin.
+
+You can upload it to mod.io like any livery. mod.io has no tag for these cars, so tick no car tag and put the car's name
+in the title or description so people can find it. Other players only see a mod.io livery if they're subscribed to it
+too.
+
+With Liveries+ you can also keep livery packs in `BepInEx\config\oth.liveries\` and skip mod.io entirely.
+
+Everyone in the lobby needs the same car mods (and Trailers+) as the host. If you get "banned from this session" when
 joining, that's why. Option `1` in the installer gets you everything.
 
 ## Problems

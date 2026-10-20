@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 
 namespace OverTheHillPlus.Flares;
 
-/// <summary>Player Flares' MODS page: the flare, the auto flare and the far name tags.</summary>
+/// <summary>Flares+'s MODS page: the flare, the auto flare and the far name tags.</summary>
 internal static class FlaresSimple
 {
     private static readonly float[] Distances = { 150f, 300f, 600f, 1000f, 1500f, 2000f, 3000f };
@@ -43,7 +43,7 @@ internal static class FlaresSimple
 
         if (GameState.IsAuthority && GameState.Runner != null)
             SimpleMenu.Toggle(FlaresConfig.HostRelay, "Pass on players' flares", "Players with this mod send their flares through you; you check each one and show it to everyone.");
-        SimpleMenu.Note($"Fire a flare with {KeyName(FlaresConfig.FlareKey.Value)}. Only players with Player Flares see your flare; it carries your position and colour, nothing else.");
+        SimpleMenu.Note($"Fire a flare with {KeyName(FlaresConfig.FlareKey.Value)}. Only players with Flares+ see your flare; it carries your position and colour, nothing else.");
     }
 
     private static string KeyName(Key key) => key == Key.None ? "no key set" : KeybindEditor.KeyName(key);

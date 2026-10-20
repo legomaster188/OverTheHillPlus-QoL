@@ -11,9 +11,9 @@ using Net = OverTheHillPlus.Features.Public.ModNet.ModNet;
 namespace OverTheHillPlus.Rules;
 
 /// <summary>
-/// The host's side of Server Rules: the welcome and rules for each player who joins, timed announcements, and vote
+/// The host's side of Rules+: the welcome and rules for each player who joins, timed announcements, and vote
 /// kicks. Everyone sees the welcome and announcements on core's host notice pop-up (<see cref="HostNotice"/>, so
-/// players without mods see them too). A player with Server Rules gets the rules in a window only they see (over the
+/// players without mods see them too). A player with Rules+ gets the rules in a window only they see (over the
 /// mod network); one without it gets them as notices, which everyone sees. Only the host acts: every entry point
 /// checks that this game hosts a multiplayer session.
 /// </summary>
@@ -168,7 +168,7 @@ internal static class RulesHost
         if (RuleLines().Count == 0) return "Blocked: no rules to send (empty, or they failed the word filter).";
         int windows = Net.Broadcast(RulesWire.Channel, RulesWire.MsgRules, RulesWire.EncodeRules(Popup("everyone", false)));
         int n = QueueRuleNotices(Time.unscaledTime);
-        return $"Sent: {n} rule(s) as notices, and the rules window to {windows} player(s) with Server Rules.";
+        return $"Sent: {n} rule(s) as notices, and the rules window to {windows} player(s) with Rules+.";
     }
 
     // ---------------------------------------------------------------- messages from guests
@@ -201,7 +201,7 @@ internal static class RulesHost
 
     // ---------------------------------------------------------------- votes
 
-    /// <summary>Everyone who may vote: the guests running Server Rules, and the host when it votes.</summary>
+    /// <summary>Everyone who may vote: the guests running Rules+, and the host when it votes.</summary>
     private static List<int> Voters()
     {
         var list = new List<int>();

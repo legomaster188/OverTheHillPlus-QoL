@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace OverTheHillPlus.Horns;
 
-/// <summary>Custom Horns' small text and log helpers.</summary>
+/// <summary>Horns+'s small text and log helpers.</summary>
 internal static class HornsUtil
 {
     private static readonly HashSet<string> Logged = new();

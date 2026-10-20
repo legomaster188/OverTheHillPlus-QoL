@@ -60,7 +60,7 @@ internal static partial class ApiRules
                 // Round 5.
                 "vera", "camera", "radio", "horns", "rules", "discord",
                 "liverypacks", "tercel", "trailers", "stacking", "aro", "hilo",
-                "bastion", "hilo22", "realnights", "cockpit", "flares", "drifter", "nomad", "mule", "pixie", "bento", "longhorn", "controllerfeel", "ibex", "marmot",
+                "bastion", "hilo22", "realnights", "gearbox", "cockpit", "flares", "drifter", "nomad", "mule", "pixie", "bento", "longhorn", "controllerfeel", "ibex", "marmot",
                 // Round 6.
                 "drover", "limber", "badger", "gemse",
             };

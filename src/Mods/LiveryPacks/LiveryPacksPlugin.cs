@@ -10,7 +10,7 @@ namespace OverTheHillPlus.LiveryPacks;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Livery Packs: local livery packs from BepInEx/config/oth.liveries/, in the same format as the game's livery mods,
+/// Liveries+: local livery packs from BepInEx/config/oth.liveries/, in the same format as the game's livery mods,
 /// added to the garage's own livery list without mod.io. Only reads inside that folder (see LiveryPackScan).
 /// </summary>
 [BepInPlugin(Guid, Name, Version)]
@@ -18,8 +18,8 @@ using OverTheHillPlus.Core.Manager;
 public class LiveryPacksPlugin : BasePlugin
 {
     public const string Guid = "com.oth.liverypacks";
-    public const string Name = "Livery Packs";
-    public const string Version = "1.0.0";
+    public const string Name = "Liveries+";
+    public const string Version = "1.0.1";
 
     /// <summary>Mod id: names the config file (oth.liverypacks.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "liverypacks";

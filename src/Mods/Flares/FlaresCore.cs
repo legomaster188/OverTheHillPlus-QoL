@@ -14,11 +14,11 @@ namespace OverTheHillPlus.Flares;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Player Flares' flow. You press the key (or get stuck, with auto flares on):
+/// Flares+'s flow. You press the key (or get stuck, with auto flares on):
 /// - solo or hosting: the flare is checked against your own cooldown, shown, and broadcast to every modded guest;
 /// - as a guest: your position goes to the host (ModNet channel 33). The host checks the rate (one per 3 s and six a
 ///   minute for any player), that the flare starts within 60 m of that player's car and that it relays flares at all,
-///   picks the colour itself (UIManager.GetPlayerColor, which Big Lobbies extends past four players) and broadcasts
+///   picks the colour itself (UIManager.GetPlayerColor, which Lobby+ extends past four players) and broadcasts
 ///   the flare to everyone; you see yours when it comes back. A host without the mod, or no host link, shows only your
 ///   own flare on your screen.
 /// A flare is a local visual (<see cref="FlareVisual"/>) plus, for a while, a ping on the game's map
@@ -102,7 +102,7 @@ internal static class FlaresCore
         Show(info);
     }
 
-    /// <summary>The player's colour as the game (and Big Lobbies) show it, lifted so it is never too dark for the sky.</summary>
+    /// <summary>The player's colour as the game (and Lobby+) show it, lifted so it is never too dark for the sky.</summary>
     private static Color ColorOf(PlayerRef p)
     {
         var c = new Color(1f, 0.45f, 0.2f);
@@ -195,7 +195,7 @@ internal static class FlaresCore
         if (result == ModNet.SendResult.Sent) return; // the host sends it back to everyone, us included
         var c = ColorOf(me.Value);
         Show(new FlareInfo(me.Value.RawEncoded, pos.x, pos.y, pos.z, FlareWire.ToByte(c.r), FlareWire.ToByte(c.g), FlareWire.ToByte(c.b), auto));
-        if (!auto) FlaresHud.Say("Only you can see this flare (the host doesn't run Player Flares)");
+        if (!auto) FlaresHud.Say("Only you can see this flare (the host doesn't run Flares+)");
     }
 
     internal static void Keys(Keyboard kb)

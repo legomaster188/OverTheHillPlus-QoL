@@ -10,7 +10,7 @@ namespace OverTheHillPlus.BigLobbies;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Big Lobbies: up to 16 players (more typed), and everything that keeps lobbies above the game's 4 player slots
+/// Lobby+: up to 16 players (more typed), and everything that keeps lobbies above the game's 4 player slots
 /// working: crash guards, spawn points, fall rescue, slot keeping, overflow names, extra player colours, player
 /// table guards, the player-slot janitor and the lobby garage for players 5 and up.
 /// </summary>
@@ -19,8 +19,8 @@ using OverTheHillPlus.Core.Manager;
 public class BigLobbiesPlugin : BasePlugin
 {
     public const string Guid = "com.oth.biglobbies";
-    public const string Name = "Big Lobbies";
-    public const string Version = "1.2.0";
+    public const string Name = "Lobby+";
+    public const string Version = "1.2.1";
 
     /// <summary>Mod id: names the config file (oth.biglobbies.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "biglobbies";

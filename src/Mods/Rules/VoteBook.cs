@@ -22,7 +22,7 @@ internal enum VoteOutcome : byte
 ///
 /// <para>Rules:</para>
 /// <list type="bullet">
-/// <item>Voters ("eligible") are the players who run Server Rules (and the host, when the host votes), minus the
+/// <item>Voters ("eligible") are the players who run Rules+ (and the host, when the host votes), minus the
 ///   target. The starter must be one of them and counts as a yes.</item>
 /// <item>A vote passes with a strict majority of the voters, and never with fewer than <see cref="MinYes"/> yes votes.
 ///   It fails as soon as it can no longer pass, or when <see cref="Duration"/> runs out.</item>
@@ -87,8 +87,8 @@ internal sealed class VoteBook
         if (target == starter) return "you can't vote yourself out";
         var eligible = new HashSet<int>();
         foreach (int v in voters) if (v != target) eligible.Add(v);
-        if (!eligible.Contains(starter)) return "only players with Server Rules can vote";
-        if (eligible.Count < MinYes) return $"at least {MinYes} players with Server Rules are needed to vote";
+        if (!eligible.Contains(starter)) return "only players with Rules+ can vote";
+        if (eligible.Count < MinYes) return $"at least {MinYes} players with Rules+ are needed to vote";
         if (_starterUntil.TryGetValue(starter, out float s) && now < s) return $"you can start another vote in {Math.Ceiling(s - now)} s";
         if (_targetUntil.TryGetValue(target, out float t) && now < t) return $"that player can't be voted on again for {Math.Ceiling(t - now)} s";
         while (_kicks.Count > 0 && now - _kicks.Peek() > 600f) _kicks.Dequeue();
@@ -109,7 +109,7 @@ internal sealed class VoteBook
         if (v == null || !v.Live) return "no vote is running";
         if (v.Outcome == VoteOutcome.Passing) return "the vote is already decided";
         if (voter == v.Target) return "you can't vote on yourself";
-        if (!v.Eligible.Contains(voter)) return "only players with Server Rules can vote";
+        if (!v.Eligible.Contains(voter)) return "only players with Rules+ can vote";
         v.Ballots[voter] = yes;
         return null;
     }

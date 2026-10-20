@@ -86,7 +86,7 @@ internal static class LampLights
             if (++_errors >= 25)
             {
                 Off = true;
-                RealNightsPlugin.Logger.LogError("Real Nights: too many errors in the lamp lights; they are off for this session.");
+                RealNightsPlugin.Logger.LogError("Nights+: too many errors in the lamp lights; they are off for this session.");
                 DestroyAll();
             }
         }

@@ -118,7 +118,7 @@ internal static class NightSky
         DebugLog.Error(RealNightsPlugin.ModId, e, where);
         if (_loggedError) return;
         _loggedError = true;
-        RealNightsPlugin.Logger.LogWarning($"Real Nights: {where} failed: {e.Message}");
+        RealNightsPlugin.Logger.LogWarning($"Nights+: {where} failed: {e.Message}");
     }
 
     /// <summary>The game's clock as hours, read once per frame (it is a networked value).</summary>
@@ -189,7 +189,7 @@ internal static class NightSky
 
 /// <summary>
 /// The hook into COZY's shader push, at low priority so it runs after Graphics+'s own (when both are on, Graphics+ has
-/// done its sky first, and Real Nights then sets the night's stars and darkness on top: only night and storms are ours).
+/// done its sky first, and Nights+ then sets the night's stars and darkness on top: only night and storms are ours).
 /// Both halves go through a guard site: timed, on the crash trail, and an exception never reaches the game.
 /// </summary>
 [HarmonyPatch(typeof(CozyWeather), nameof(CozyWeather.UpdateShaderVariables))]

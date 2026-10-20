@@ -3,7 +3,7 @@ using OverTheHillPlus.Features.Public.ModNet;
 
 namespace OverTheHillPlus.Rules;
 
-/// <summary>The rules pop-up a host sends a player with Server Rules who just joined.</summary>
+/// <summary>The rules pop-up a host sends a player with Rules+ who just joined.</summary>
 internal sealed class RulesPopup
 {
     public string Title = "";
@@ -23,7 +23,7 @@ internal sealed class VoteView
 }
 
 /// <summary>
-/// Server Rules' messages on the mod network (pure; compiled by the tests with core's NetWriter / NetReader).
+/// Rules+'s messages on the mod network (pure; compiled by the tests with core's NetWriter / NetReader).
 /// Channel <see cref="Channel"/>, version 1; new fields are only ever appended.
 /// <list type="bullet">
 /// <item><see cref="MsgRules"/> host -> guest: [string title][string welcome][byte n][string rule]*n</item>

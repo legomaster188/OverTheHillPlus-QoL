@@ -10,7 +10,7 @@ namespace OverTheHillPlus.Rules;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Server Rules &amp; MOTD (host): a welcome message and the rules for each player who joins (players without mods get
+/// Rules+ &amp; MOTD (host): a welcome message and the rules for each player who joins (players without mods get
 /// them through core's host notices), timed announcements, and vote kick among the players who run this mod. All text
 /// passes the word filter.
 /// </summary>
@@ -19,8 +19,8 @@ using OverTheHillPlus.Core.Manager;
 public class RulesPlugin : BasePlugin
 {
     public const string Guid = "com.oth.rules";
-    public const string Name = "Server Rules & MOTD";
-    public const string Version = "1.2.0";
+    public const string Name = "Rules+";
+    public const string Version = "1.2.1";
 
     /// <summary>Mod id: names the config file (oth.rules.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "rules";

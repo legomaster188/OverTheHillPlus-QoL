@@ -212,6 +212,8 @@ internal sealed class CarTuning
         _cars.Clear();
     }
 
+    /// <summary>Another mod (Gearbox+) is about to read or replace this car's gear table: the game's own ratios go back into it,
+    /// so the tuned ones never become its "stock" ratios. The tuning binds the car's table again on the next tick.</summary>
     public void ReleaseGears(VPVehicleController car)
     {
         if (car != null && _cars.TryGetValue(car.Pointer, out var rec)) rec.ReleaseGears();

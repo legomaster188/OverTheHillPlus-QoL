@@ -10,7 +10,7 @@ namespace OverTheHillPlus.RealNights;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Real Nights: nights that are actually dark (moonlight only, adjustable), a starry sky with the Milky Way on clear
+/// Nights+: nights that are actually dark (moonlight only, adjustable), a starry sky with the Milky Way on clear
 /// nights, storms that go pitch black, and the lamps on your car (roof light bars, bull-bar lamps, the custom light
 /// bars) and the headlights lighting the ground. Only changes what you see; works with Graphics+ (which keeps the day).
 /// </summary>
@@ -19,8 +19,8 @@ using OverTheHillPlus.Core.Manager;
 public class RealNightsPlugin : BasePlugin
 {
     public const string Guid = "com.oth.realnights";
-    public const string Name = "Real Nights";
-    public const string Version = "1.2.0";
+    public const string Name = "Nights+";
+    public const string Version = "1.2.1";
 
     /// <summary>Mod id: names the config file (oth.realnights.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "realnights";

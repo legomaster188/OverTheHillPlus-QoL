@@ -3,7 +3,7 @@ using BepInEx.Configuration;
 
 namespace OverTheHillPlus.Horns;
 
-/// <summary>Custom Horns' settings in BepInEx/config/oth.horns.cfg (your own wav files go in the oth.horns folder).</summary>
+/// <summary>Horns+'s settings in BepInEx/config/oth.horns.cfg (your own wav files go in the oth.horns folder).</summary>
 internal static class HornsConfig
 {
     public static ConfigEntry<string> Horn;

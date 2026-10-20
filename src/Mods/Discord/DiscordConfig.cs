@@ -2,7 +2,7 @@ using BepInEx.Configuration;
 
 namespace OverTheHillPlus.Discord;
 
-/// <summary>Discord Presence's settings in BepInEx/config/oth.discord.cfg.</summary>
+/// <summary>Discord+'s settings in BepInEx/config/oth.discord.cfg.</summary>
 internal static class DiscordConfig
 {
     /// <summary>The "Over The Hill Mods" Discord application (public: an application id is not a secret).</summary>

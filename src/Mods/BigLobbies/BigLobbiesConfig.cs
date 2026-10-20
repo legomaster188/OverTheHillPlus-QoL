@@ -3,7 +3,7 @@ using BepInEx.Configuration;
 namespace OverTheHillPlus.BigLobbies;
 
 /// <summary>
-/// Big Lobbies' own settings in BepInEx/config/oth.biglobbies.cfg. Same sections and keys as in the old
+/// Lobby+'s own settings in BepInEx/config/oth.biglobbies.cfg. Same sections and keys as in the old
 /// OverTheHillPlus config ([Multiplayer] ...), so the settings migration can copy them over. The features of this
 /// mod (SlotKeeper, overflow names, colours, player tables, janitor, lobby garage) bind their own entries on
 /// <see cref="File"/> in their Register.
