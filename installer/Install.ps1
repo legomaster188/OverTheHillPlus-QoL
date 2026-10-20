@@ -57,6 +57,7 @@ $CategoryTitles = @{
     "multiplayer" = "Multiplayer and servers"
     "cars"        = "New cars and car parts"
     "tools"       = "Host and solo tools"
+    "secret"      = "Secret"
 }
 
 # ---- small helpers -----------------------------------------------------------------------------------------------
@@ -405,7 +406,7 @@ function PickMods($manifest, [string]$game) {
     if (@($items | Where-Object { $installed -contains $_.File.ToLower() }).Count -gt 0) {
         foreach ($m in $items) { if ($installed -contains $m.File.ToLower()) { $on[$m.Id] = $true } }
     } else {
-        foreach ($m in $items) { if ($m.Category -ne "tools") { $on[$m.Id] = $true } }
+        foreach ($m in $items) { if ($m.Category -ne "tools" -and $m.Category -ne "secret") { $on[$m.Id] = $true } }
     }
     while ($true) {
         Say ""
@@ -440,9 +441,9 @@ function PickMods($manifest, [string]$game) {
         foreach ($tok in ($answer -split "[,; ]+")) {
             $t = $tok.Trim().ToLower()
             if (-not $t) { continue }
-            if ($t -eq "a") { foreach ($m in $items) { $on[$m.Id] = $true }; continue }
+            if ($t -eq "a") { foreach ($m in $items) { if ($m.Category -ne "secret") { $on[$m.Id] = $true } }; continue }
             if ($t -eq "n") { $on.Clear(); continue }
-            if ($t -eq "q") { $on.Clear(); foreach ($m in $items) { if ($m.Category -ne "tools") { $on[$m.Id] = $true } }; continue }
+            if ($t -eq "q") { $on.Clear(); foreach ($m in $items) { if ($m.Category -ne "tools" -and $m.Category -ne "secret") { $on[$m.Id] = $true } }; continue }
             $num = 0
             if ([int]::TryParse($t, [ref]$num) -and $num -ge 1 -and $num -le $items.Count) {
                 $id = $items[$num - 1].Id
@@ -596,12 +597,12 @@ try {
     switch ($act) {
         "everything" {
             EnsureBepInEx $game
-            InstallMods $game $bundled @($bundled | ForEach-Object { $_.Id })
+            InstallMods $game $bundled @($bundled | Where-Object { $_.Category -ne "secret" } | ForEach-Object { $_.Id })
             NextSteps $game
         }
         "qol" {
             EnsureBepInEx $game
-            InstallMods $game $bundled @($bundled | Where-Object { $_.Category -ne "tools" } | ForEach-Object { $_.Id })
+            InstallMods $game $bundled @($bundled | Where-Object { $_.Category -ne "tools" -and $_.Category -ne "secret" } | ForEach-Object { $_.Id })
             NextSteps $game
         }
         "choose" {

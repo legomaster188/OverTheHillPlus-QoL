@@ -39,4 +39,5 @@
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Drover")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Badger")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.ControllerFeel")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Unreleased")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("OTH.Core.Tests")]
