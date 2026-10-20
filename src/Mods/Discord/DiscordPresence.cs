@@ -72,7 +72,7 @@ internal static class DiscordPresence
     public const string ImageBase = "https://raw.githubusercontent.com/legomaster188/OverTheHillPlus-QoL/main/assets/discord/";
     /// <summary>The modded cars with a picture in the public repo (assets/discord/car_&lt;name&gt;.png, Liveries/discord in the
     /// private one); a car joins the list when its picture is published with the car.</summary>
-    public static readonly string[] CarImages = { "vera" };
+    public static readonly string[] CarImages = { "vera", "tercel", "aro", "hilo", "bastion" };
     /// <summary>Discord's limit for an image URL.</summary>
     public const int MaxImageUrl = 256;
 

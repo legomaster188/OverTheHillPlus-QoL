@@ -190,9 +190,9 @@ internal static class RequiredMods
     /// mod is in it.</summary>
     public static readonly IReadOnlyList<string> CodeTable = new[]
     {
-        "vera", "-", "-", "-", "chat", "-", "-", "biglobbies", "-", "-",
-        "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
-        "-", "-", "-",
+        "vera", "-", "-", "-", "chat", "horns", "-", "biglobbies", "tercel", "trailers",
+        "aro", "hilo", "bastion", "hilo22", "-", "drifter", "nomad", "mule", "pixie", "bento", "longhorn", "-", "ibex", "marmot", "drover",
+        "limber", "badger", "gemse",
     };
 
     private static int CodeOf(string id)
@@ -787,6 +787,10 @@ internal static class RequiredMods
         _ => $"you have v{i.Installed}, the server needs v{i.Required}: you can't join until they match",
     };
 
+    /// <summary>
+    /// The specific reason a server's prefab check would refuse this game ("The server runs Trailers, you don't; you
+    /// run the Terrier 4WD Wagon, the server doesn't."), or null when no prefab issue is in the list.
+    /// </summary>
     public static string PrefabSummary(IReadOnlyList<RequiredModIssue> issues, Func<string, string> nameOf)
     {
         if (issues == null) return null;

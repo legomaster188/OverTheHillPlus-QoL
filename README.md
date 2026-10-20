@@ -1,7 +1,7 @@
 # Over The Hill Plus
 
 Mods for **over the hill**: a better server browser, lobbies of up to 16 players, chat, more graphics options, camera
-and photo tools, and one new car. Take everything or pick only what you like. Every mod can be switched off in the game.
+and photo tools, trailers, gamepad rumble, your own music and horns, and 18 new cars. Take everything or pick only what you like. Every mod can be switched off in the game.
 
 ## Install (2 minutes)
 
@@ -17,6 +17,8 @@ and photo tools, and one new car. Take everything or pick only what you like. Ev
    - `2` Choose mods: a numbered list. Type numbers to switch mods on or off, then press Enter.
    - `3` Update: brings the mods you already have up to date.
    - `4` Uninstall: removes the mods. It asks before it touches BepInEx or your settings.
+
+   The cars are downloaded from this page's release when you pick them, so the zip stays small.
 4. **Start the game.** The first start takes a few minutes while BepInEx gets ready. Then press **F7**, or press Esc
    and choose **MODS**.
 
@@ -52,8 +54,8 @@ Run `Install.bat` and pick `4`. By hand: delete the folder `BepInEx\plugins\Over
   A console window then opens with the game.
 - **Where are the logs?** `BepInEx\LogOutput.log` is the main one. The mods also write to `BepInEx\oth-debug\`, and
   after a crash to `BepInEx\oth-reports\`. Attach these when you report a problem.
-- **"Banned from this session" when joining a server.** The host runs the Vera, the new car. The game refuses players
-  who don't have it. Install the same mods as the host, the easiest way is menu option `1`.
+- **"Banned from this session" when joining a server.** The host runs one of the new cars or the trailers. The game
+  refuses players who don't have them. Install the same mods as the host, the easiest way is menu option `1`.
 - **My antivirus removed a file.** The DLLs are not signed. Add the game folder as an exception, then run the
   installer again.
 
@@ -79,7 +81,39 @@ The core is the mod manager. The other mods need it, and the installer always ad
 | <img src="assets/discord/thumb_graphics.jpg" width="64" height="36" alt=""> Graphics+ | Graphics options past the game's own, with profiles. Only changes what you see |
 | <img src="assets/discord/thumb_realnights.jpg" width="64" height="36" alt=""> Real Nights | Dark nights with only moonlight, a starry sky, storms that go pitch black, and your lamps lighting the ground. Only you see it |
 | <img src="assets/discord/thumb_discord.jpg" width="64" height="36" alt=""> Discord Presence | Your map, car and player count on your Discord profile (the server name only if you allow it) |
-| <img src="assets/discord/thumb_vera.jpg" width="64" height="36" alt=""> Vera Crossover | A new car: a mid-size seven-seat crossover in the game's style, with colours, skins and the game's cosmetics. Everyone in the session needs it. See Credits |
+| <img src="assets/discord/thumb_horns.jpg" width="64" height="36" alt=""> Custom Horns | A built-in horn sound or your own wav file; other players with the mod hear it |
+| <img src="assets/discord/thumb_controllerfeel.jpg" width="64" height="36" alt=""> Controller Feel | Gamepad rumble from the surface, bumps, landings, wheelspin and the winch. Only you feel it |
+| <img src="assets/discord/thumb_radio.jpg" width="64" height="36" alt=""> Radio | Your own mp3, ogg and wav files while you drive, one station per folder. Only you hear it |
+| <img src="assets/discord/thumb_flares.jpg" width="64" height="36" alt=""> Player Flares | Name tags you can see from far away, and a flare in your colour to show friends where you are |
+| <img src="assets/discord/thumb_stacking.jpg" width="64" height="36" alt=""> Cosmetic Stacking | Shift + click in the garage to add a cosmetic without removing the one already on |
+| <img src="assets/discord/thumb_liverypacks.jpg" width="64" height="36" alt=""> Livery Packs | Livery packs from a folder, in the same format as the game's livery mods, without mod.io |
+| <img src="assets/discord/thumb_trailers.jpg" width="64" height="36" alt=""> Trailers | A utility trailer, a teardrop camper, a car hauler or a boat on its trailer to tow. Everyone in the session needs it |
+
+### New cars
+
+Each car is bought in the garage like the game's own, with its own colours, liveries and the game's cosmetics. Everyone in
+the session needs the car's mod. Pick only the cars you want: each is a separate download.
+
+| Car | What it is |
+|---|---|
+| <img src="assets/discord/thumb_vera.jpg" width="64" height="36" alt=""> Vera Crossover | A mid-size seven-seat crossover in the game's style, with colours, skins and the game's cosmetics (see Credits) |
+| <img src="assets/discord/thumb_tercel.jpg" width="64" height="36" alt=""> Terrier 4WD Wagon | A small early-80s wagon with part-time four-wheel drive, light and narrow |
+| <img src="assets/discord/thumb_aro.jpg" width="64" height="36" alt=""> Carpați 24 | A classic 1970s five-door 4x4 hardtop on a ladder frame, heavy, low-geared and tough |
+| <img src="assets/discord/thumb_ibex.jpg" width="64" height="36" alt=""> Ibex | A 1970s utility 4x4 with a canvas top, four doors and the spare on the back door |
+| <img src="assets/discord/thumb_marmot.jpg" width="64" height="36" alt=""> Marmot | A tiny early-80s 4x4 hardtop with round lamps and leaf springs |
+| <img src="assets/discord/thumb_hilo.jpg" width="64" height="36" alt=""> Hilo 89 | A late-1980s compact 4x4 pickup, light, simple and sturdy (see Credits) |
+| <img src="assets/discord/thumb_hilo22.jpg" width="64" height="36" alt=""> Hilo 22 | A modern double-cab 4x4 pickup with a torquey turbo-diesel and a long bed (see Credits) |
+| <img src="assets/discord/thumb_drover.jpg" width="64" height="36" alt=""> Drover | A mid-1970s full-size 4x4 pickup with a regular cab and an 8 ft box |
+| <img src="assets/discord/thumb_mule.jpg" width="64" height="36" alt=""> Mule | A late-1940s half-ton stepside pickup with round fenders and a wooden-floored box |
+| <img src="assets/discord/thumb_bastion.jpg" width="64" height="36" alt=""> Bastion 200 | A 2000s full-size 4x4 SUV, big, heavy and at home off the road (see Credits) |
+| <img src="assets/discord/thumb_drifter.jpg" width="64" height="36" alt=""> Drifter | A 1980s four-wheel-drive camper van with a pop-top roof, a roof rack and a swing-away spare |
+| <img src="assets/discord/thumb_pixie.jpg" width="64" height="36" alt=""> Pixie | A tiny kei-class work van, light, slow and nimble (see Credits) |
+| <img src="assets/discord/thumb_bento.jpg" width="64" height="36" alt=""> Bento | A tiny kei flatbed mini truck, light and nimble (see Credits) |
+| <img src="assets/discord/thumb_limber.jpg" width="64" height="36" alt=""> Limber | A 1970s army one-tonner with the cab over the front wheels and a canvas-covered body |
+| <img src="assets/discord/thumb_badger.jpg" width="64" height="36" alt=""> Badger | A 2-tonne cab-over army truck with tall single tyres and a canvas tilt |
+| <img src="assets/discord/thumb_gemse.jpg" width="64" height="36" alt=""> Gemse 6x6 | A 1970s Alpine six-wheeler with portal hubs and six driven wheels; it crawls almost anywhere |
+| <img src="assets/discord/thumb_nomad.jpg" width="64" height="36" alt=""> Nomad | A cab-forward 4x4 truck with portal axles and a drop-side flatbed, the heaviest car in the garage |
+| <img src="assets/discord/thumb_longhorn.jpg" width="64" height="36" alt=""> Longhorn 389 | An American long-nose tractor unit with a tall grille, dual stacks and a tandem drive axle |
 
 ## Features
 
@@ -178,6 +212,19 @@ The Vera Crossover's body, wheels and glass are based on "Hyundai ix55- Veracruz
 [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Changes: interior, plates, badges and lettering removed,
 hidden parts removed, panels turned the right way out, re-shaded and given LODs, a new UV layout and textures in the
 game's style, the tyre rebuilt, and mount points added for the game's cosmetics.
+
+These cars are based on models shared under CC BY 4.0. Each was changed in the same ways: interior, plates, badges
+and lettering removed, hidden parts removed, panels turned the right way out, re-shaded and given LODs, a new UV layout
+and textures in the game's style, and mount points added for the game's cosmetics.
+
+- The Hilo 89's body is based on "Toyota Hilux 1989" (https://sketchfab.com/3d-models/toyota-hilux-1989-5f545f0a2fdc4acd8d551e773fa24a1c) by Plevako (https://sketchfab.com/Plevako), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/).
+- The Hilo 22's body is based on "2022 Toyota Hilux" (https://sketchfab.com/3d-models/2022-toyota-hilux-82bd37c5065040098fb0b86e07fcb959) by BHP3D (https://sketchfab.com/BHP3D), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/).
+- The Bastion 200's body is based on "Toyota Land Cruiser J200 2017" (https://sketchfab.com/3d-models/toyota-land-cruiser-j200-2017-374e85a6e18743429f6d9c0e7bbffb3c) by David_Holiday (https://sketchfab.com/David_Holiday), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/).
+- The Pixie's body, glass and mirrors are based on "Daihatsu Hijet" (https://sketchfab.com/3d-models/daihatsu-hijet-13c80ca6d94e4600b0440c59281367f5) by Jazmin_BeamNG_Lover (https://sketchfab.com/aacps), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/).
+- The Bento's body is based on "Honda Acty" (https://sketchfab.com/3d-models/honda-acty-20bd497876a44910bff0670d86127a9b) by Car2022 (https://sketchfab.com/Car2022), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/).
+
+The Terrier, Carpați 24, Ibex, Marmot, Drover, Mule, Drifter, Limber, Badger, Gemse 6x6, Nomad and Longhorn 389 are our own
+models. The cars carry no maker names, badges or lettering.
 
 ## Notes
 

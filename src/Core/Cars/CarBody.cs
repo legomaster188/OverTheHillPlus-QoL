@@ -248,6 +248,7 @@ internal sealed class CarBody
 
         // ---- the game's cosmetics: slots moved to the car's anchors (the rollcage and unanchored slots hidden)
         var moves = cosmetics != null ? PlaceCosmetics(rt, cosmetics, lay, blob, template) : null;
+        if (cosmetics != null) KeepItemTextures(cosmetics, template);
         // ---- the snorkel upgrade's intake probes follow the snorkel (the networked car only: the garage model has none)
         if (template) PlaceWaterProbes(rt, lay, moves);
 
@@ -296,6 +297,49 @@ internal sealed class CarBody
     }
 
     /// <summary>The donor's wheel collider radius (the four averaged; 0 when it has none).</summary>
+    /// <summary>Donor item materials, by instance id, as copies that keep their own texture.</summary>
+    private static readonly Dictionary<int, Material> ItemMaterials = new();
+
+    /// <summary>
+    /// Some of the game's cosmetic items (the spare wheels on the hood, roof and rear) are drawn with a material that
+    /// samples the donor car's own livery atlas, and it is switchable, so the car's PropertyBlockSetter writes the car's
+    /// livery into it. On a modded car that is our atlas, and the item's UVs land on our body's texels: a garbled tyre.
+    /// Those items get a copy of their material with _IsSwitchable off (as Custom Cosmetics parts have), so they keep
+    /// the donor's own texture; dirt, snow and damage still reach them through the same blocks. Runs on the un-awakened
+    /// template and garage model, before the setter collects its materials.
+    /// </summary>
+    private void KeepItemTextures(Transform cosmetics, bool log)
+    {
+        int swapped = 0;
+        foreach (var r in cosmetics.GetComponentsInChildren<Renderer>(true))
+        {
+            if (r == null) continue;
+            var mats = r.sharedMaterials;
+            bool changed = false;
+            for (int i = 0; i < mats.Length; i++)
+            {
+                var m = mats[i];
+                if (m == null || m == _material || !m.HasProperty(LiveryProperty) || !m.HasProperty("_IsSwitchable")) continue;
+                if (m.GetFloat("_IsSwitchable") < 0.5f) continue;
+                int id = m.GetInstanceID();
+                if (!ItemMaterials.TryGetValue(id, out var copy) || copy == null)
+                {
+                    copy = new Material(m) { name = m.name + "_kept" };
+                    copy.SetFloat("_IsSwitchable", 0f);
+                    copy.hideFlags = HideFlags.DontUnloadUnusedAsset;
+                    Object.DontDestroyOnLoad(copy);
+                    ItemMaterials[id] = copy;
+                }
+                mats[i] = copy;
+                changed = true;
+            }
+            if (!changed) continue;
+            r.sharedMaterials = mats;
+            swapped++;
+        }
+        if (log && swapped > 0) _car.Info($"cosmetics: {swapped} item renderer(s) keep the donor's own texture (not our livery atlas).");
+    }
+
     private static float ColliderRadius(Transform rt)
     {
         float sum = 0f;
@@ -736,6 +780,14 @@ internal sealed class CarBody
                     why = "wheel " + Corners[w];
                     break;
                 }
+                case DonorFollow.Body:
+                {
+                    var b = CarDonorObjects.BodyFollow(new MeshVec3(at.x, at.y, at.z), M(lay.DonorBody.min), M(lay.DonorBody.max),
+                        M(lay.Body.min), M(lay.Body.max));
+                    want = new Vector3(b.X, b.Y, b.Z);
+                    why = "against the body";
+                    break;
+                }
                 default:
                     why = "off";
                     break;
@@ -774,6 +826,8 @@ internal sealed class CarBody
         foreach (var f in t.GetComponentsInChildren<UnityEngine.Rendering.LensFlareComponentSRP>(true)) { f.intensity = 0f; f.enabled = false; shines = true; }
         if (!shines) t.gameObject.SetActive(false);
     }
+
+    private static MeshVec3 M(Vector3 v) => new(v.x, v.y, v.z);
 
     private static string PathBelow(Transform root, Transform t)
     {

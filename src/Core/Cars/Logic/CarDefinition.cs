@@ -5,6 +5,14 @@ using OverTheHillPlus.Core.Shared;
 
 namespace OverTheHillPlus.Cars;
 
+/// <summary>
+/// Everything that makes one modded car (the Vera Crossover, the Terrier 4WD Wagon, ...): its identity, the stock cars
+/// it is built from, its assets, how it drives, its colours and engine sounds and where the game's cosmetics go on it.
+/// Core's car framework (<see cref="ModdedCars"/>) does the rest the same way for every car: the network prefab, the
+/// garage entry, the save filter, the join rules, the tuning, the look and its sync, the MODS page.
+/// <para>The identity values are part of the network protocol and of the save sidecar: they never change once a car is
+/// released. Pure (unit-tested): <see cref="Validate"/> checks it.</para>
+/// </summary>
 public sealed class CarDefinition
 {
     // ---------------------------------------------------------------- identity

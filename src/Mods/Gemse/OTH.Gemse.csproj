@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Gemse</AssemblyName>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model (gemse.mesh, with body_lod1..3 and the rear wheel for the tandem) and its textures, made by
+         Liveries/tools/gemse/build_gemse.py with the shared exporter (Liveries/gemse/), read by core's car framework (CarAssets). -->
+    <EmbeddedResource Include="Assets\*.mesh;Assets\*.png" Exclude="Assets\card.png" LogicalName="gemse/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

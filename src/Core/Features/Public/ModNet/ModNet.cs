@@ -70,6 +70,7 @@ internal static class ModNet
         public const ushort Race = 7;
         public const ushort Tag = 8;
         public const ushort Cargo = 9;
+        /// <summary>Custom Horns (OTH.Horns): horn choices and sound chunks.</summary>
         public const ushort Horns = 10;
         /// <summary>Server Rules (OTH.Rules): the rules card, votes and notices (RulesWire.Channel, kept equal).</summary>
         public const ushort Rules = 11;
@@ -77,10 +78,14 @@ internal static class ModNet
         public const ushort ReservedPrivate12 = 12;
         /// <summary>Trailers: spawn / hitch requests and every trailer's hitch state (src/Mods/Trailers).</summary>
         public const ushort Trailers = 13;
+        /// <summary>Modded cars (core's car framework: the Vera Crossover, the Terrier 4WD Wagon, ...): each player's paint
+        /// colours, skin and engine sound for each modded car; the car id is in the message (the Vera's in the old
+        /// layout without it).</summary>
         public const ushort CarLook = 15;
         public const ushort AirRide = 24;
         public const ushort OnFoot = 40;
         public const ushort StuntScore = 31;
+        /// <summary>Player Flares (OTH.Flares): a player's flare request to the host and the host's broadcast of an accepted flare.</summary>
         public const ushort Flares = 33;
         public const ushort TyrePressure = 42;
         public const ushort Fuel = 43;

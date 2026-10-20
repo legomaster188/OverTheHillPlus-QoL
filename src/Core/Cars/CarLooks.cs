@@ -473,7 +473,7 @@ internal static class CarLooks
         bool transparent = false;
         try
         {
-            t = new Texture2D(2, 2, TextureFormat.RGBA32, true, false) { name = car.Def.CarName + "_skin" };
+            t = new Texture2D(2, 2, TextureFormat.RGBA32, true, false) { name = car.Def.CarName + "_skin", ignoreMipmapLimit = true };
             // Readable for now: its alpha is checked before the pixels go to the GPU only.
             if (!ImageConversion.LoadImage(t, new Il2CppStructArray<byte>(read.Bytes), false)) failed = "the PNG could not be decoded";
             else if (t.width != read.Side || t.height != read.Side) failed = "the PNG decoded to another size";
@@ -507,8 +507,7 @@ internal static class CarLooks
             return 0;
         }
         t.Apply(false, true); // the pixels live on the GPU only from here
-        t.wrapMode = TextureWrapMode.Clamp;
-        t.anisoLevel = car.Assets.Albedo.anisoLevel;
+        CarAssets.Sampling(t, full: true);
         t.hideFlags = HideFlags.DontUnloadUnusedAsset;
         Cache[cacheKey] = new Tex { Key = cacheKey, Texture = t, LastUsed = Time.unscaledTime, Car = car };
         tex = t;
@@ -562,13 +561,12 @@ internal static class CarLooks
         {
             if (c.Build.IsFaulted) throw c.Build.Exception?.GetBaseException() ?? new InvalidOperationException("the build failed");
             var px = c.Build.Result;
-            var t = new Texture2D(c.W, c.H, TextureFormat.RGBA32, true, false) { name = car.Def.CarName + suffix };
+            var t = new Texture2D(c.W, c.H, TextureFormat.RGBA32, true, false) { name = car.Def.CarName + suffix, ignoreMipmapLimit = true };
             var arr = new Il2CppStructArray<Color32>(c.W * (long)c.H);
             px.AsSpan().CopyTo(MemoryMarshal.AsBytes(arr.AsSpan()));
             t.SetPixels32(arr);
             t.Apply(true, true); // mipmaps, then the pixels live on the GPU only
-            t.wrapMode = TextureWrapMode.Clamp;
-            t.anisoLevel = car.Assets.Albedo.anisoLevel;
+            CarAssets.Sampling(t, full: true);
             t.hideFlags = HideFlags.DontUnloadUnusedAsset;
             c.Texture = t;
             tex = t;

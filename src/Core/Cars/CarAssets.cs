@@ -126,10 +126,27 @@ internal sealed class CarAssets
 
     // ---------------------------------------------------------------- Unity objects (main thread)
 
-    public Texture2D Albedo => _albedo ??= Texture(_car.Def.AssetFile("albedo_base"), linear: false);
+    public Texture2D Albedo => _albedo ??= Texture(_car.Def.AssetFile("albedo_base"), linear: false, full: true);
     public Texture2D Ao => _ao ??= Texture(_car.Def.AssetFile("ao"), linear: true);
-    public Texture2D Lights => _lights ??= Texture(_car.Def.AssetFile("lights"), linear: true);
+    public Texture2D Lights => _lights ??= Texture(_car.Def.AssetFile("lights"), linear: true, full: true);
     public Texture2D Mask => _mask ??= Texture(_car.Def.AssetFile("mask"), linear: true);
+
+    /// <summary>Anisotropy of the car textures: the lamps, grille bars and trim are seen at grazing angles.</summary>
+    public const int Aniso = 8;
+
+    /// <summary>
+    /// How every car texture is sampled: trilinear (no hard mip steps across a panel) with <see cref="Aniso"/>.
+    /// <paramref name="full"/>: the albedo and its looks, and the lights: kept at full size whatever the game's texture
+    /// quality (QualitySettings.globalTextureMipmapLimit), because at half size the lamp lenses and small trim of the
+    /// 2048 atlas are a few texels across. AO and the mask follow the game's setting.
+    /// </summary>
+    public static void Sampling(Texture2D t, bool full)
+    {
+        t.filterMode = FilterMode.Trilinear;
+        t.anisoLevel = Aniso;
+        t.wrapMode = TextureWrapMode.Clamp;
+        if (full) t.ignoreMipmapLimit = true;
+    }
 
     /// <summary>The garage icon (&lt;n&gt;_icon.png, optional: null when the build has none).</summary>
     public Texture2D Icon
@@ -164,14 +181,15 @@ internal sealed class CarAssets
     private Texture2D _picture;
     private bool _pictureTried;
 
-    private Texture2D Texture(string name, bool linear)
+    private Texture2D Texture(string name, bool linear, bool full = false)
     {
         var bytes = Read(name) ?? throw new InvalidOperationException($"{name} is missing");
         var t = new Texture2D(2, 2, TextureFormat.RGBA32, true, linear) { name = _car.Def.CarName + "_" + Path.GetFileNameWithoutExtension(name) };
+        if (full) t.ignoreMipmapLimit = true; // before the upload
         // Non-readable: the pixels live on the GPU only (nothing reads them back), which halves the memory they take.
         if (!ImageConversion.LoadImage(t, new Il2CppStructArray<byte>(bytes), true))
             throw new InvalidOperationException($"{name} is not a readable PNG");
-        t.wrapMode = TextureWrapMode.Clamp;
+        Sampling(t, full);
         t.hideFlags = HideFlags.DontUnloadUnusedAsset;
         Object.DontDestroyOnLoad(t);
         return t;

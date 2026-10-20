@@ -58,10 +58,11 @@ internal static partial class ApiRules
                 "biglobbies", "chat", "drivingqol", "graphics", "photo", "serverbrowser", "servercreator",
                 "serverutils",
                 // Round 5.
-                "vera", "camera", "rules", "discord",
-                "realnights", "cockpit", 
+                "vera", "camera", "radio", "horns", "rules", "discord",
+                "liverypacks", "tercel", "trailers", "stacking", "aro", "hilo",
+                "bastion", "hilo22", "realnights", "cockpit", "flares", "drifter", "nomad", "mule", "pixie", "bento", "longhorn", "controllerfeel", "ibex", "marmot",
                 // Round 6.
-                
+                "drover", "limber", "badger", "gemse",
             };
             AddPrivate(ids);
             return _reserved = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);

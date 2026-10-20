@@ -15,6 +15,10 @@ public enum DonorFollow
     /// <summary>Moves to <see cref="DonorObjectRule.Anchors"/> when the model has one, else with the hood slot, else with
     /// the front axle.</summary>
     Hood,
+    /// <summary>Keeps its place against the body: on the donor body's front, rear or a side (the outer third of the length or
+    /// width) it keeps its distance to that face of the model's body; in the middle it keeps its share of the length or
+    /// width. Its height stays (<see cref="CarDonorObjects.BodyFollow"/>).</summary>
+    Body,
     /// <summary>Switched off.</summary>
     Off,
 }
@@ -68,6 +72,10 @@ public static class CarDonorObjects
         DonorObjectRule.AtWheel("Audio/RRWheel", 3),
         DonorObjectRule.AtWheel("Audio/Suspension", 3),
         DonorObjectRule.AtWheel("Audio/Impact", 3),
+        // the dust and splash of a frontal crash (at the donor's bumper) and the water trails along the sides
+        new("Effects/TerrainParticles/FrontCollisionParticleManager", DonorFollow.Body),
+        new("Effects/TerrainParticles/WaterRipplesTrail/Water Ripples Trail_Left", DonorFollow.Body),
+        new("Effects/TerrainParticles/WaterRipplesTrail/Water Ripples Trail_Right", DonorFollow.Body),
     };
 
     /// <summary>The lights CarBody always moved itself (MoveLights): never switched off by the sweep.</summary>
@@ -132,6 +140,22 @@ public static class CarDonorObjects
         return false;
     }
 
+    /// <summary>Where a <see cref="DonorFollow.Body"/> object goes: <paramref name="at"/> against the donor's body box
+    /// (<paramref name="donorMin"/>..<paramref name="donorMax"/>) moved to the same place against the model's, per axis
+    /// x and z; y stays. Car-root space.</summary>
+    public static MeshVec3 BodyFollow(MeshVec3 at, MeshVec3 donorMin, MeshVec3 donorMax, MeshVec3 modelMin, MeshVec3 modelMax) =>
+        new(Along(at.X, donorMin.X, donorMax.X, modelMin.X, modelMax.X), at.Y, Along(at.Z, donorMin.Z, donorMax.Z, modelMin.Z, modelMax.Z));
+
+    private static float Along(float v, float dLo, float dHi, float mLo, float mHi)
+    {
+        float span = dHi - dLo;
+        if (!(span > 1e-4f) || !(mHi - mLo > 1e-4f)) return v;
+        float t = (v - dLo) / span;
+        if (t > 2f / 3f) return mHi + (v - dHi);
+        if (t < 1f / 3f) return mLo + (v - dLo);
+        return mLo + t * (mHi - mLo);
+    }
+
     private static bool Under(string path, string node) =>
         path == node || (path.Length > node.Length && path.StartsWith(node, StringComparison.Ordinal) && path[node.Length] == '/');
 }
@@ -144,6 +168,8 @@ public sealed class DonorObjectOverride
     public DonorObjectOverride(string path, string anchor) { Path = path; Anchor = anchor; }
 }
 
+/// <summary>An extra box collider of a car's body (model space, metres): for a part of the body its collider part doesn't
+/// cover (the Longhorn's frame and deck behind the cab).</summary>
 public sealed class CarBodyBox
 {
     public MeshVec3 Center, Size;
