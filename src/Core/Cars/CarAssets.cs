@@ -145,7 +145,9 @@ internal sealed class CarAssets
         t.filterMode = FilterMode.Trilinear;
         t.anisoLevel = Aniso;
         t.wrapMode = TextureWrapMode.Clamp;
-        if (full) t.ignoreMipmapLimit = true;
+        // Unity refuses to toggle it on a texture whose pixels already live on the GPU only (a UnityException that
+        // stopped the car from being built): the loaders set it while the texture is still readable.
+        if (full && !t.ignoreMipmapLimit && t.isReadable) t.ignoreMipmapLimit = true;
     }
 
     /// <summary>The garage icon (&lt;n&gt;_icon.png, optional: null when the build has none).</summary>
@@ -185,11 +187,14 @@ internal sealed class CarAssets
     {
         var bytes = Read(name) ?? throw new InvalidOperationException($"{name} is missing");
         var t = new Texture2D(2, 2, TextureFormat.RGBA32, true, linear) { name = _car.Def.CarName + "_" + Path.GetFileNameWithoutExtension(name) };
-        if (full) t.ignoreMipmapLimit = true; // before the upload
-        // Non-readable: the pixels live on the GPU only (nothing reads them back), which halves the memory they take.
-        if (!ImageConversion.LoadImage(t, new Il2CppStructArray<byte>(bytes), true))
+        // Loaded readable first: LoadImage may reset ignoreMipmapLimit, and it can only be set again while the texture is
+        // readable. Then Apply makes it non-readable: the pixels live on the GPU only (nothing reads them back), which
+        // halves the memory they take.
+        if (!ImageConversion.LoadImage(t, new Il2CppStructArray<byte>(bytes), false))
             throw new InvalidOperationException($"{name} is not a readable PNG");
+        if (full && !t.ignoreMipmapLimit) t.ignoreMipmapLimit = true;
         Sampling(t, full);
+        t.Apply(false, true);
         t.hideFlags = HideFlags.DontUnloadUnusedAsset;
         Object.DontDestroyOnLoad(t);
         return t;

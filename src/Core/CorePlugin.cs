@@ -17,7 +17,7 @@ public class CorePlugin : BasePlugin
 {
     public const string Guid = "com.oth.core";
     public const string Name = "OTH Mod Manager";
-    public const string Version = "1.3.1";
+    public const string Version = "1.3.2";
 
     internal static ManualLogSource Logger;
     internal static Harmony Harmony;

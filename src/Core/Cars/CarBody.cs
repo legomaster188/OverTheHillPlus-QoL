@@ -95,7 +95,7 @@ internal sealed class CarBody
             var c = parts.GetChild(i);
             if (c.name.EndsWith("_CosmeticParts", StringComparison.Ordinal)) { cosmetics = c; continue; }
             foreach (var mf in c.GetComponentsInChildren<MeshFilter>(true))
-                if (mf != null && mf.name.IndexOf("_body_LOD", StringComparison.OrdinalIgnoreCase) >= 0) bodies.Add(mf);
+                if (mf != null && BodyLodAt(mf.name) >= 0) bodies.Add(mf);
         }
         if (bodies.Count == 0) return "the donor has no body meshes (Parts/*/*_body_LOD*)";
 
@@ -370,12 +370,27 @@ internal sealed class CarBody
         return n == 0 ? 0f : sum / n;
     }
 
+    /// <summary>The body mesh names' marker. The Polyana's are spelt "Polyana_bodu_LOD0" (the game's own typo).</summary>
+    private static readonly string[] BodyMarkers = { "_body_LOD", "_bodu_LOD" };
+
+    /// <summary>Where the LOD number of a donor body mesh's name starts (after "_body_LOD"), or -1 for another mesh.</summary>
+    internal static int BodyLodAt(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return -1;
+        foreach (var m in BodyMarkers)
+        {
+            int at = name.LastIndexOf(m, StringComparison.OrdinalIgnoreCase);
+            if (at >= 0) return at + m.Length;
+        }
+        return -1;
+    }
+
     /// <summary>The donor body's LOD from its name (Parts/*/*_body_LOD2 → 2; 0 when it has no number).</summary>
     private static int BodyLod(string name)
     {
-        int at = name.LastIndexOf("_body_LOD", StringComparison.OrdinalIgnoreCase);
-        if (at < 0) return 0;
-        int lod = 0, i = at + "_body_LOD".Length;
+        int i = BodyLodAt(name);
+        if (i < 0) return 0;
+        int lod = 0;
         for (; i < name.Length && name[i] >= '0' && name[i] <= '9'; i++) lod = lod * 10 + (name[i] - '0');
         return lod;
     }
