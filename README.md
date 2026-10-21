@@ -83,8 +83,6 @@ Every car except the Drifter comes with three liveries in the garage's Liveries 
 They're free and not locked behind kilometres. Some of them are see-through in places, so they sit on top of whatever
 paint you picked. Other players with the car mod see your livery too.
 
-Or use the web livery maker: https://oth-livery-maker.legomaster188.workers.dev
-
 Making your own works like a normal livery mod:
 
 1. Grab the car's template from [`liveries/templates`](liveries/templates) (the README there walks you through it). It's

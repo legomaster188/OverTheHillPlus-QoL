@@ -2,13 +2,10 @@
 
 Never made one before? No problem. This takes about ten minutes.
 
-You can also skip the editor and paint right in your browser with the web livery maker:
-https://oth-livery-maker.legomaster188.workers.dev (nothing gets uploaded, it all stays on your computer).
-
 ## The five steps
 
 1. **Pick your car** from the table below and grab its files from this folder.
-2. **Open the template** in any image editor (Photoshop, GIMP, Krita, Paint.NET, even the web maker above). It's the
+2. **Open the template** in any image editor (Photoshop, GIMP, Krita, Paint.NET). It's the
    car's skin laid out flat, like a cardboard box that's been unfolded. The labels tell you which bit is which: LEFT
    SIDE, RIGHT SIDE, ROOF + HOOD, FRONT, BACK and SMALL PARTS. The arrows show which way the car is facing.
 3. **Paint** on a new layer above it. Colours in the template, so you know where to go:
