@@ -83,11 +83,13 @@ Every car except the Drifter comes with three liveries in the garage's Liveries 
 They're free and not locked behind kilometres. Some of them are see-through in places, so they sit on top of whatever
 paint you picked. Other players with the car mod see your livery too.
 
+Or use the web livery maker: https://oth-livery-maker.legomaster188.workers.dev
+
 Making your own works like a normal livery mod:
 
-1. Grab the car's template from [`liveries/templates`](liveries/templates). It's the car's 2048 x 2048 texture with the
-   paint areas, glass, lamps, a 25 cm grid and labels for each side. The `_guides` version is just the lines, for
-   laying over your work.
+1. Grab the car's template from [`liveries/templates`](liveries/templates) (the README there walks you through it). It's
+   the car's 2048 x 2048 texture with big labels, arrows, and colours for the paint, glass and lamps. The `_guides`
+   version is just the lines, for laying over your work, and the `_base` version is the car's normal paint.
 2. Paint a 2048 PNG on it. Leave parts transparent if you want the player's paint to show through there.
 3. Put it in a folder with a `manifest.json`:
 
