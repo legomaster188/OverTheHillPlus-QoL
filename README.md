@@ -9,21 +9,22 @@ Install all of it or just the bits you want. Anything can be turned off in game.
 
 ### [Download OverTheHillMods-Installer.zip](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/latest/download/OverTheHillMods-Installer.zip)
 
-1. Close the game, unzip the download and double-click `Install.bat`.
-2. It finds the game on its own (if it can't, paste in the game folder) and sets up BepInEx if you don't have it.
-3. Pick `1` for everything or `2` to choose. `3` updates, `4` uninstalls.
+1. Close the game, unzip the download (right-click, Extract All) and double-click `OverTheHillModsInstaller.exe`.
+2. It finds the game on its own (or press Browse) and sets up BepInEx if you don't have it.
+3. Tick the mods you want (or hit Recommended) and press Install. Run it again to update or uninstall.
 4. Start the game. The first launch takes a few minutes. Press **F7** or go to Esc > **MODS**.
 
-No admin rights needed. `Install.ps1` is plain text if you want to read what it does first. Cars get downloaded only if
-you pick them, so the zip itself is tiny.
+No admin rights needed. Windows SmartScreen might say "unknown publisher" because the exe isn't code-signed: click
+More info, then Run anyway. Cars get downloaded only if you pick them, so the zip itself is tiny. Prefer plain text?
+`text-installer/Install.bat` does the same thing in a console window.
 
 **By hand:** install [BepInEx 6 IL2CPP build 788](https://builds.bepinex.dev/projects/bepinex_be/788/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.788%2B5b766a3.zip)
 (newer builds might not work), then unzip `OverTheHillMods-All.zip` from the
 [latest release](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/latest) into the game folder.
 
-**Updating:** run the installer again and pick `3`, or use **AVAILABLE MODS** in game. Every mod list is signed; the installer and the game refuse one that isn't.
+**Updating:** run the installer again and press Update, or use **AVAILABLE MODS** in game. Every mod list is signed; the installer and the game refuse one that isn't.
 
-**Uninstalling:** pick `4`, or delete `BepInEx\plugins\OverTheHillMods\`. Settings live in `BepInEx\config\oth.*`.
+**Uninstalling:** press Uninstall in the installer, or delete `BepInEx\plugins\OverTheHillMods\`. Settings live in `BepInEx\config\oth.*`.
 
 ## Mods
 
@@ -76,6 +77,7 @@ Bought in the garage like any other car, with their own paints and liveries, and
 | <img src="assets/discord/thumb_gemse.jpg" width="64" height="36" alt=""> | Gemse 6x6 | Six-wheel Alpine crawler |
 | <img src="assets/discord/thumb_nomad.jpg" width="64" height="36" alt=""> | Nomad | Huge expedition truck on portal axles |
 | <img src="assets/discord/thumb_longhorn.jpg" width="64" height="36" alt=""> | Longhorn 389 | American semi |
+| <img src="assets/discord/thumb_unreleased.jpg" width="64" height="36" alt=""> | Unreleased Cars | The game's four unfinished cars (Grizzly, Baguette, Brigand, Cordillera) in your garage. Achievements are off while you drive one |
 
 ### Liveries on the new cars
 

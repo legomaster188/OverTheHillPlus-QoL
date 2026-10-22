@@ -39,6 +39,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+# mods.json, mods.json.sig and mods\ sit next to this script, or one folder up (this script is in text-installer\ in the installer zip).
+$Root = $Here
+if (-not (Test-Path -LiteralPath (Join-Path $Here "mods.json"))) { $Root = Split-Path -Parent $Here }
 
 # ---- fixed facts -------------------------------------------------------------------------------------------------
 $AppId = "2929250"
@@ -325,11 +328,11 @@ function ReadManifest([string]$json) {
 }
 
 function ReadBundledManifest {
-    $path = Join-Path $Here "mods.json"
+    $path = Join-Path $Root "mods.json"
     if (-not (Test-Path -LiteralPath $path)) {
-        Fail "mods.json is missing next to Install.ps1. Unzip the whole download first, then run Install.bat."
+        Fail "mods.json is missing next to Install.ps1 (or one folder up). Unzip the whole download first, then run Install.bat."
     }
-    $sigPath = Join-Path $Here "mods.json.sig"
+    $sigPath = Join-Path $Root "mods.json.sig"
     $sigText = ""
     if (Test-Path -LiteralPath $sigPath) { $sigText = [IO.File]::ReadAllText($sigPath) }
     AssertSigned ([IO.File]::ReadAllBytes($path)) $sigText
@@ -348,7 +351,7 @@ function ParseVersion([string]$v) {
 
 # Bytes of a mod DLL for an entry: the file in this download if it matches, else downloaded and checked.
 function GetModBytes($entry) {
-    $local = Join-Path (Join-Path $Here "mods") $entry.File
+    $local = Join-Path (Join-Path $Root "mods") $entry.File
     if (Test-Path -LiteralPath $local) {
         $bytes = [IO.File]::ReadAllBytes($local)
         if ((Sha256OfBytes $bytes) -eq $entry.Sha256) { return $bytes }
