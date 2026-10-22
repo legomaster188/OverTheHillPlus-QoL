@@ -260,6 +260,38 @@ function EnsureBepInEx([string]$game) {
 # ---- the mod list ------------------------------------------------------------------------------------------------
 function IsModFile([string]$file) { return ($file -cmatch '^[Oo][Tt][Hh]\.[A-Za-z0-9_-][A-Za-z0-9._-]*\.dll$') -and -not $file.Contains("..") }
 
+# Every mods.json comes with a mods.json.sig: ECDSA P-256 / SHA-256 (base64 of r||s) by the mod author's release key.
+# Nothing from a list that isn't signed by it is used, whoever hosts it.
+$ReleaseKeyX = "7899edbd54e007a6612a2b2c1fd9c8718d686c1f4ca2e8ee597e9ab77c985dc8"
+$ReleaseKeyY = "83f55936171f02333f54e588395d8ec416603749d8a82c9eb8d61623148da29e"
+$NotSigned = "The mod list isn't signed by the mod author, so nothing was installed."
+
+function HexBytes([string]$hex) {
+    $b = New-Object byte[] ($hex.Length / 2)
+    for ($i = 0; $i -lt $b.Length; $i++) { $b[$i] = [Convert]::ToByte($hex.Substring($i * 2, 2), 16) }
+    return $b
+}
+
+function AssertSigned([byte[]]$data, [string]$sigText) {
+    $ok = $false
+    try {
+        $sig = [Convert]::FromBase64String($sigText.Trim())
+        if ($sig.Length -eq 64) {
+            # ECCPublicBlob: magic "ECS1" (0x31534345), key length, X, Y.
+            $blob = New-Object System.Collections.Generic.List[byte]
+            $blob.AddRange([BitConverter]::GetBytes([uint32]0x31534345))
+            $blob.AddRange([BitConverter]::GetBytes([uint32]32))
+            $blob.AddRange([byte[]](HexBytes $ReleaseKeyX))
+            $blob.AddRange([byte[]](HexBytes $ReleaseKeyY))
+            $key = [System.Security.Cryptography.CngKey]::Import($blob.ToArray(), [System.Security.Cryptography.CngKeyBlobFormat]::EccPublicBlob)
+            $ecdsa = New-Object System.Security.Cryptography.ECDsaCng($key)
+            $ecdsa.HashAlgorithm = [System.Security.Cryptography.CngAlgorithm]::Sha256
+            $ok = $ecdsa.VerifyData($data, $sig)
+        }
+    } catch { $ok = $false }
+    if (-not $ok) { Fail $NotSigned }
+}
+
 # Reads a mods.json (schema 1) with the same checks as the mod manager in the game: nothing from a bad list is used.
 function ReadManifest([string]$json) {
     $doc = $json.TrimStart([char]0xFEFF) | ConvertFrom-Json
@@ -297,6 +329,10 @@ function ReadBundledManifest {
     if (-not (Test-Path -LiteralPath $path)) {
         Fail "mods.json is missing next to Install.ps1. Unzip the whole download first, then run Install.bat."
     }
+    $sigPath = Join-Path $Here "mods.json.sig"
+    $sigText = ""
+    if (Test-Path -LiteralPath $sigPath) { $sigText = [IO.File]::ReadAllText($sigPath) }
+    AssertSigned ([IO.File]::ReadAllBytes($path)) $sigText
     return ReadManifest ([IO.File]::ReadAllText($path, [Text.Encoding]::UTF8))
 }
 
@@ -459,7 +495,11 @@ function UpdateMods([string]$game, $bundled) {
     if (-not $Offline) {
         try {
             Say "Looking for newer versions..."
-            $remote = ReadManifest ([Text.Encoding]::UTF8.GetString((DownloadBytes $ManifestUrl)))
+            $remoteBytes = DownloadBytes $ManifestUrl
+            $remoteSig = ""
+            try { $remoteSig = [Text.Encoding]::ASCII.GetString((DownloadBytes ($ManifestUrl + ".sig"))) } catch { }
+            AssertSigned $remoteBytes $remoteSig
+            $remote = ReadManifest ([Text.Encoding]::UTF8.GetString($remoteBytes))
             # Take the newer of the online list and this download for each mod.
             $merged = New-Object System.Collections.Generic.List[object]
             foreach ($r in $remote) {
@@ -468,6 +508,7 @@ function UpdateMods([string]$game, $bundled) {
             }
             $source = $merged
         } catch {
+            if ($_.Exception.Message -eq $NotSigned) { Fail $NotSigned }
             Warn ("Could not reach GitHub (" + $_.Exception.Message + "). Using the files in this download instead.")
         }
     }

@@ -454,10 +454,14 @@ internal static class AvailableTab
         Background.Run(FetchManifest, (m, e) => CheckDone(m, e == null ? null : e is ManifestException ? e.Message : HttpFetch.Describe(e)));
     }
 
-    /// <summary>Worker thread: downloads and parses mods.json.</summary>
+    /// <summary>Worker thread: downloads mods.json and its signature, checks the signature, then parses it.</summary>
     private static async Task<Manifest> FetchManifest()
     {
         var bytes = await HttpFetch.Get(Manifest.Url).ConfigureAwait(false);
+        string sig = null;
+        try { sig = Encoding.ASCII.GetString(await HttpFetch.Get(Manifest.SigUrl).ConfigureAwait(false)); }
+        catch (Exception) { } // missing signature: refused below
+        if (!ReleaseKey.Verify(bytes, sig)) throw new ManifestException(ReleaseKey.NotSignedMessage);
         return Manifest.Parse(Encoding.UTF8.GetString(bytes));
     }
 

@@ -21,7 +21,7 @@ you pick them, so the zip itself is tiny.
 (newer builds might not work), then unzip `OverTheHillMods-All.zip` from the
 [latest release](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/latest) into the game folder.
 
-**Updating:** run the installer again and pick `3`, or use **AVAILABLE MODS** in game.
+**Updating:** run the installer again and pick `3`, or use **AVAILABLE MODS** in game. Every mod list is signed; the installer and the game refuse one that isn't.
 
 **Uninstalling:** pick `4`, or delete `BepInEx\plugins\OverTheHillMods\`. Settings live in `BepInEx\config\oth.*`.
 

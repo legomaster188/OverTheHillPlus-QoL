@@ -40,6 +40,8 @@ internal sealed class Manifest
 {
     /// <summary>Where the manifest comes from: fixed in core, never user-entered.</summary>
     public const string Url = "https://github.com/legomaster188/OverTheHillPlus-QoL/releases/latest/download/mods.json";
+    /// <summary>The author's signature of <see cref="Url"/>'s bytes (see <see cref="ReleaseKey"/>).</summary>
+    public const string SigUrl = Url + ".sig";
     /// <summary>Every download URL of the manifest must start with this.</summary>
     public const string RepoPrefix = "https://github.com/legomaster188/OverTheHillPlus-QoL/";
 
