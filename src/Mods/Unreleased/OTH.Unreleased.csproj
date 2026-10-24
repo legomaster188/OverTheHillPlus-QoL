@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Unreleased</AssemblyName>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <!-- The Brigand's and Cordillera's pictures (the game has none for them): Liveries/tools/vera/render_picture.py. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\*_picture.png" LogicalName="unreleased/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

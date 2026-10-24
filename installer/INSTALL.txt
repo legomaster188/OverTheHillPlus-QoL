@@ -1,0 +1,21 @@
+Over The Hill mods: manual install
+
+This zip holds the mod DLLs in the folder layout the game needs. The easy way is OverTheHillMods-Installer.zip
+(double-click Install.bat). Use this one if you want to do it yourself.
+
+1. Install BepInEx 6 for IL2CPP, build 788, into the game folder (the folder with "over the hill.exe").
+   Download: https://builds.bepinex.dev/projects/bepinex_be/788/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.788%2B5b766a3.zip
+   Unzip it into the game folder, so that winhttp.dll sits next to "over the hill.exe".
+   Newer or older builds may not work with the mods.
+2. Close the game. Unzip THIS zip into the same game folder. The DLLs end up in
+   BepInEx\plugins\OverTheHillMods\
+3. Start the game. The first start takes a few minutes while BepInEx gets ready.
+4. In the game press F7 (or Esc, then MODS) to open the mods page. Mods can be switched on and off there.
+
+Update: replace the DLLs with the ones from a newer zip, or use the AVAILABLE MODS tab on the MODS page.
+Uninstall: delete the folder BepInEx\plugins\OverTheHillMods\
+
+Problems: look at BepInEx\LogOutput.log in the game folder, and the README on
+https://github.com/legomaster188/OverTheHillPlus-QoL
+
+Fan made, not affiliated with Funselektor.

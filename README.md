@@ -5,22 +5,7 @@ settings, trailers, custom horns and 18 new cars to buy in the garage.
 
 Install all of it or just the bits you want. Anything can be turned off in game.
 
-## Car Pack (MelonLoader)
-
-### [Download OverTheHillCarPack-Installer.zip](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/download/carpack/OverTheHillCarPack-Installer.zip)
-
-All the cars and car stuff in one pack, for **MelonLoader** (what most Over the Hill mods on Nexus use): the 18 new cars,
-the game's 4 unreleased cars, trailers, Gearbox+, tyre pressure, Air Ride, Beams+ (high beams and light bar toggle),
-controller rumble, custom parts (wheels, LED strips, bush cables), cosmetic stacking and livery packs, plus 64 extra paint
-colours on every new car.
-
-Unzip, close the game, double-click `OverTheHillCarPackInstaller.exe`, tick what you want and press Install. It sets up
-MelonLoader for you if you don't have it. Don't run it next to the BepInEx mods below: pick one or the other (the installer
-asks and can switch our BepInEx copies off for you).
-
-The first start takes a few minutes while MelonLoader gets ready.
-
-## Install (BepInEx, all mods)
+## Install
 
 ### [Download OverTheHillMods-Installer.zip](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/latest/download/OverTheHillMods-Installer.zip)
 

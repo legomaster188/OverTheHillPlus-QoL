@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Aro</AssemblyName>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model (aro.mesh, with body_lod1..3) and its textures, made by Liveries/tools/aro/build_aro.py with the
+         shared exporter (Liveries/aro/), read by core's car framework (CarAssets). -->
+    <EmbeddedResource Include="Assets\*.mesh;Assets\*.png" Exclude="Assets\card.png" LogicalName="aro/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

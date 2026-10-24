@@ -1,0 +1,10 @@
+{
+  "liveries": [
+    {
+      "car": "Hilo",
+      "name": "My Livery",
+      "texture": "my_livery.png",
+      "icon": "my_livery_icon.png"
+    }
+  ]
+}

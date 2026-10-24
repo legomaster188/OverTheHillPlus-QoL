@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Marmot</AssemblyName>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model (marmot.mesh, with body_lod1..3) and its textures, made by Liveries/tools/marmot/build_marmot.py with
+         the shared exporter (Liveries/marmot/), read by core's car framework (CarAssets). -->
+    <EmbeddedResource Include="Assets\*.mesh;Assets\*.png" Exclude="Assets\card.png" LogicalName="marmot/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

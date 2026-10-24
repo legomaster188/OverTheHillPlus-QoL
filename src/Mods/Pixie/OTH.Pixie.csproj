@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Pixie</AssemblyName>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model (pixie.mesh, with body_lod1..3) and its textures, made by Liveries/tools/pixie/build_pixie.py with
+         the shared exporter (Liveries/pixie/), read by core's car framework (CarAssets). -->
+    <EmbeddedResource Include="Assets\*.mesh;Assets\*.png" Exclude="Assets\card.png" LogicalName="pixie/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
