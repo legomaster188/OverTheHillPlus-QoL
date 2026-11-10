@@ -25,6 +25,9 @@ internal static class LampRules
         {
             string id = item.Substring(CustomPrefix.Length);
             if (Has(id, "tail") || Has(id, "rear") || Has(id, "brake") || Has(id, "reverse")) return LampKind.None;
+            // glowing strings and strips (string and Christmas lights, rock lights, LED strips) and the rear light poles
+            // light up through Custom Cosmetics' own small lights: no forward beam from them
+            if (Has(id, "string") || Has(id, "xmas") || Has(id, "rock_light") || Has(id, "_led_") || Has(id, "pole")) return LampKind.None;
             if (Has(id, "beacon")) { tint = TintOf(id, LampTint.Amber); return LampKind.Beacon; }
             return Has(id, "light") || Has(id, "lamp") || Has(id, "spot") || Has(id, "bullbar") || Has(id, "bull_bar") || Has(id, "beam")
                 ? LampKind.Forward : LampKind.None;

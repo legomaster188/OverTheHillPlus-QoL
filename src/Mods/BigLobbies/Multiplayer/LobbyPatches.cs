@@ -1,6 +1,15 @@
+#if MELON
+using GameLobby = Il2Cpp.Lobby;
+#else
+using GameLobby = global::Lobby;
+#endif
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using UnityEngine;
 using OverTheHillPlus.BigLobbies;
@@ -117,10 +126,10 @@ internal static class MeasureCapacityPatch
 
 // ---- graceful degradation above capacity ----
 
-[HarmonyPatch(typeof(global::Lobby), nameof(global::Lobby.GetSpawnPoint))]
+[HarmonyPatch(typeof(GameLobby), nameof(GameLobby.GetSpawnPoint))]
 internal static class SpawnPointPatch
 {
-    private static Exception Finalizer(Exception __exception, global::Lobby __instance, PlayerRef playerRef,
+    private static Exception Finalizer(Exception __exception, GameLobby __instance, PlayerRef playerRef,
         ref int spawnPointIndex, ref SpawnPoint __result)
     {
         if (!BigLobbiesConfig.LobbyGuards.Value) return __exception;

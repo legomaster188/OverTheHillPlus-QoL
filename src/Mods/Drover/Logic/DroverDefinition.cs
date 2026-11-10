@@ -20,7 +20,7 @@ public static class DroverDefinition
     /// <summary>CarInfo.name and the livery car name ("car": "Drover" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Drover";
     public const string Guid = "73b362c3afff4d21a1bcf4a493fe43a6";
-    public const int Protocol = 1;
+    public const int Protocol = 2;
 
     public static CarDefinition Create() => new()
     {
@@ -35,6 +35,8 @@ public static class DroverDefinition
         FusionGuid = Guid,
         RegistryKey = "drover",
         Protocol = Protocol,
+        // fitfix: the game items these bodies can't carry (floating over the cab, sunk in the bed floor or the body)
+        HiddenItems = new[] { "Visual/Bed/Boat Bed", "Visual/Bed/Camper_Bed", "Visual/Bed/Canoe_Bed", "Visual/Bed/Christmas_Bed", "Visual/Bed/Fisher_Bed", "Visual/Bed/Overlander_Bed", "Visual/Bed/Party_Bed", "Visual/Bed/Rescue_Bed", "Visual/Bed/Tent_Bed", "Visual/Bed/Wintersports_Bed" },
         // The Blast Wagon, the stock work truck (3.31 m wheelbase against the Drover's 3.38 m, 1.70 m track, 0.48 m tyres
         // against 0.415 m, a cab and an open bed): its skeleton, garage data (vehicle class, upgrades) and cosmetic slots
         // (Liveries/drover/README.md). Its A-pillar spotlight flares stay off (the Drover has no pillar lamps).

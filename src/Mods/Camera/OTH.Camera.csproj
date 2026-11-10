@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <AssemblyName>OTH.Camera</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonFullPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.CameraPlus.CameraPlugin</OthPluginClass>
     <RootNamespace>OverTheHillPlus</RootNamespace>
   </PropertyGroup>
 

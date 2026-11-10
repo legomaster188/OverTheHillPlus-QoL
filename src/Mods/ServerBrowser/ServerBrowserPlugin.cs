@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.ServerBrowser;
@@ -13,9 +15,13 @@ using OverTheHillPlus.Core.Manager;
 /// Server Browser+: colour-coded rows with server age, smoother list refreshes, favourites, filters, the quick bar,
 /// All regions, friends' servers, auto refresh, and rejoining the last server after a disconnect.
 /// </summary>
+#if MELON
+public class ServerBrowserPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class ServerBrowserPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.serverbrowser";
     public const string Name = "Server Browser+";
@@ -24,7 +30,7 @@ public class ServerBrowserPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.serverbrowser.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "serverbrowser";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

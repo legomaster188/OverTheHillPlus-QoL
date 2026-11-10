@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Features.Public.PlayerList;
 using OverTheHillPlus.Multiplayer;
 using UnityEngine;

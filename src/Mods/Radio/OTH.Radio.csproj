@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <AssemblyName>OTH.Radio</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonFullPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.Radio.RadioPlugin</OthPluginClass>
     <RootNamespace>OverTheHillPlus</RootNamespace>
   </PropertyGroup>
 

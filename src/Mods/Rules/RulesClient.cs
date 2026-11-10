@@ -1,5 +1,9 @@
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Features.Public.Filter;
 using OverTheHillPlus.Multiplayer;
 using UnityEngine;

@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.ServerCreator;
@@ -14,9 +16,13 @@ using OverTheHillPlus.Core.Manager;
 /// <see cref="ServerSettings"/>), typing the server name right there, server name colours and styles, the join
 /// message, player names in the server listing, and the PLUS LOBBY SETTINGS button.
 /// </summary>
+#if MELON
+public class ServerCreatorPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class ServerCreatorPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.servercreator";
     public const string Name = "Server Creator+";
@@ -25,7 +31,7 @@ public class ServerCreatorPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.servercreator.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "servercreator";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

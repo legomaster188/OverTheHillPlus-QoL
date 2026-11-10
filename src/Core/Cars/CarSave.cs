@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using BepInEx;
 using OverTheHillPlus.Core.Shared;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Cars;
 
@@ -180,7 +180,7 @@ internal sealed class CarSave
     }
 
     private string SidecarPath(string profile) =>
-        Path.Combine(Paths.ConfigPath, "oth." + _car.Id + "." + CarSidecar.FileKey(profile) + ".sidecar");
+        Path.Combine(OthLoader.ConfigDir, "oth." + _car.Id + "." + CarSidecar.FileKey(profile) + ".sidecar");
 
     // ---------------------------------------------------------------- loading
 
@@ -265,6 +265,8 @@ internal sealed class CarSave
     public void Grant()
     {
         if (!_car.Ready || _disabled || _toRestore != null) return;
+        // In a career cars are bought (Api.Career.Dealer, or the game's merchant at the career's price): never free.
+        if (Api.Career.Active) return;
         try
         {
             var inv = PlayerInventoryManager.Instance?.Inventory;

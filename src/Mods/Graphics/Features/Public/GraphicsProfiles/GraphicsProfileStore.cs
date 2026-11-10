@@ -5,7 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using BepInEx;
+using OverTheHillPlus.Loader;
 using OverTheHillPlus.Graphics;
 
 namespace OverTheHillPlus.Features.Public.GraphicsProfiles;
@@ -79,7 +79,7 @@ internal static class GraphicsProfileStore
         public DateTime Modified;
     }
 
-    public static string Folder => System.IO.Path.Combine(Paths.ConfigPath, "OverTheHillPlus.graphics");
+    public static string Folder => System.IO.Path.Combine(OthLoader.ConfigDir, "OverTheHillPlus.graphics");
 
     private static List<Entry> _cache = new();
     private static float _nextScan = -1f;

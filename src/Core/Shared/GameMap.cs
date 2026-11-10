@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using Il2CppInterop.Runtime;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -153,6 +157,11 @@ internal static class GameMap
         // No map network manager: the pin flare in the world. Ours by input authority; solo, also the only one around.
         try
         {
+            // This is the search of the whole world that ran twice a second through every load (no manager yet): a few
+            // times at most now, the last answer standing in between.
+            if (Time.unscaledTime < _nextFlareSearch) { pin = _flare; return _flareFound; }
+            _nextFlareSearch = Time.unscaledTime + 3f;
+            _flareFound = false;
             bool solo;
             try { var r = GameState.Runner; solo = r == null || r.IsSinglePlayer; } catch (Exception ex) { DebugLog.Error("core", ex, "GameMap.TryGetGamePin"); solo = false; }
             WorldSpacePinpoint only = null;
@@ -168,17 +177,21 @@ internal static class GameMap
                     var no = wp.networkObject;
                     if (no != null && me.HasValue && no.InputAuthority.PlayerId == me.Value.PlayerId)
                     {
-                        pin = wp.transform.position;
-                        return true;
+                        pin = _flare = wp.transform.position;
+                        return _flareFound = true;
                     }
                 }
                 catch (Exception ex) { DebugLog.Error("core", ex, "GameMap.TryGetGamePin"); }
             }
-            if (solo && count == 1 && only != null) { pin = only.transform.position; return true; }
+            if (solo && count == 1 && only != null) { pin = _flare = only.transform.position; return _flareFound = true; }
         }
         catch (Exception e) { DebugLog.Error("core", e, "GameMap.TryGetGamePin"); LogOnce("pinflare", "pin flare: " + e.Message); }
         return false;
     }
+
+    private static float _nextFlareSearch;
+    private static bool _flareFound;
+    private static Vector3 _flare;
 
     /// <summary>Like <see cref="TryGetGamePin"/> but re-read at most twice a second (for menus, overlays and ticks).</summary>
     public static bool TryGetGamePinCached(out Vector3 pin)
@@ -235,6 +248,23 @@ internal static class GameMap
         }
         catch (Exception e) { DebugLog.Error("core", e, "GameMap.TryTerrainHeight"); LogOnce("terrain", "terrain height: " + e.Message); }
         return false;
+    }
+
+    /// <summary>The box the loaded terrains cover (their union), for mods that scan the ground. False when no terrain is loaded.</summary>
+    public static bool TryTerrainBounds(out float minX, out float minZ, out float maxX, out float maxZ)
+    {
+        minX = minZ = float.MaxValue;
+        maxX = maxZ = float.MinValue;
+        TryTerrainHeight(float.MinValue, float.MinValue, out _); // re-lists the terrains when they are old
+        for (int i = 0; i < _terrains.Length; i++)
+        {
+            ref var ti = ref _terrains[i];
+            minX = Mathf.Min(minX, ti.X);
+            minZ = Mathf.Min(minZ, ti.Z);
+            maxX = Mathf.Max(maxX, ti.X + ti.SizeX);
+            maxZ = Mathf.Max(maxZ, ti.Z + ti.SizeZ);
+        }
+        return _terrains.Length > 0 && maxX > minX && maxZ > minZ;
     }
 
     /// <summary>Flat (ground-plane) distance.</summary>

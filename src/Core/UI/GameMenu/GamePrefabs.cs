@@ -1,7 +1,15 @@
 using System;
+#if MELON
+using Il2CppFunCore.Managers;
+#else
 using FunCore.Managers;
+#endif
 using Il2CppInterop.Runtime;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -21,6 +29,8 @@ internal static class GamePrefabs
     internal const string HudPath = "Prefabs/UI/Menus/Settings/HUDSettingsMenu";
     internal const string AudioPath = "Prefabs/UI/Menus/Settings/AudioSettingsMenu";
     internal const string CameraPath = "Prefabs/UI/Menus/Settings/CameraSettingsMenu";
+    internal const string BrowserPath = "Prefabs/UI/Menus/LiveryMods/LiveryModsMenu";
+    internal const string SettingsPath = "Prefabs/UI/Menus/Settings/SettingsMenu";
 
     /// <summary>Template copies (inactive, under <see cref="Holder"/>).</summary>
     internal static GameObject Option, Slider, Button, Label;
@@ -41,78 +51,18 @@ internal static class GamePrefabs
         catch (Exception e) { Core.CorePlugin.Logger?.LogWarning("[Core] MODS pages: copying the browser's search field failed: " + e.Message); }
     }
 
-    /// <summary>A copy of the MOD BROWSER's mod cell (StateLiveryModsMenu.modCellPrefab, a ContextUIModCell), the
-    /// template of the MODS lists' cards; null until a browser opened, or when it wasn't found.</summary>
+    /// <summary>A copy of the MOD BROWSER's mod cell (a ContextUIModCell), the template of card rows. The MODS screen
+    /// lists mods as buttons, so no card is made any more: null, and <see cref="CardsReady"/> is false.</summary>
     internal static GameObject ModCell;
 
-    /// <summary>The browser's grid: its cell size and spacing (zero when its grid has no GridLayoutGroup) and columns.</summary>
+    /// <summary>The browser's grid: its cell size and spacing and columns (for card rows, unused while there are none).</summary>
     internal static Vector2 CellSize, CellSpacing;
     internal static int GridColumns = 4;
 
-    private static bool _cellBroken, _cellLogged;
+    private static bool _cellBroken;
 
     /// <summary>True when the MODS lists show cards (the cell was copied and no card failed to be made).</summary>
     internal static bool CardsReady => ModCell != null && !_cellBroken;
-
-    /// <summary>
-    /// Copies the browser's mod cell once (StateLiveryModsMenu.Open): its prefab, else one of the cells in its grid.
-    /// Not found: logged once, the MODS lists keep their rows.
-    /// </summary>
-    internal static void TakeModCell(StateLiveryModsMenu state, ContextUILiveryModsMenu ctx)
-    {
-        if (ModCell != null || _cellBroken || state == null) return;
-        try
-        {
-            OverTheHillPlus.CrashTrail.Mark("MODS cards: copying the MOD BROWSER's mod cell");
-            GameObject source = null;
-            string from = "modCellPrefab";
-            try
-            {
-                var prefab = state.modCellPrefab;
-                if (prefab != null && prefab.GetComponent<ContextUIModCell>() != null) source = prefab;
-            }
-            catch { }
-            if (source == null && ctx != null && ctx.Content != null)
-            {
-                var cell = ctx.Content.GetComponentInChildren<ContextUIModCell>(true);
-                if (cell != null)
-                {
-                    source = cell.gameObject;
-                    from = "a cell of the grid";
-                }
-            }
-            try { GridColumns = CardGrid.Columns(StateLiveryModsMenu.GridColumns); } catch { GridColumns = 4; }
-            var grid = ctx != null && ctx.Content != null ? ctx.Content.GetComponent<UnityEngine.UI.GridLayoutGroup>() : null;
-            if (grid != null)
-            {
-                CellSize = grid.cellSize;
-                CellSpacing = grid.spacing;
-            }
-            if (source == null)
-            {
-                if (!_cellLogged) Core.CorePlugin.Logger?.LogWarning("[Core] MODS cards: the MOD BROWSER's mod cell was not found; the MODS lists show rows");
-                _cellLogged = true;
-                return;
-            }
-            if (grid == null || CellSize.x < 1f)
-            {
-                var rt = source.GetComponent<RectTransform>();
-                CellSize = rt != null ? rt.rect.size : Vector2.zero;
-                if (CellSize.x < 1f && rt != null) CellSize = rt.sizeDelta;
-                if (CellSpacing == Vector2.zero) CellSpacing = new Vector2(16f, 16f);
-            }
-            EnsureHolder();
-            ModCell = Copy(source, "OTH_ModCell");
-            Core.CorePlugin.Logger?.LogInfo($"[Core] MODS cards: cells are copies of the MOD BROWSER's {from} ({PathOf(source.transform)}), " +
-                                            $"{GridColumns} columns (page size {PageSizeText()}), cell {CellSize} spacing {CellSpacing}" +
-                                            (grid != null ? " from the grid's layout" : " from the cell") + "; cell parts: " + Parts(ModCell.transform, 0));
-        }
-        catch (Exception e)
-        {
-            _cellBroken = true;
-            Core.CorePlugin.Logger?.LogWarning("[Core] MODS cards: copying the MOD BROWSER's mod cell failed (the MODS lists show rows): " + e.Message);
-        }
-    }
 
     /// <summary>A card could not be made from the cell: logged once, the lists show rows from now on.</summary>
     internal static void DropModCell(string why)
@@ -122,48 +72,21 @@ internal static class GamePrefabs
         Core.CorePlugin.Logger?.LogWarning("[Core] MODS cards: " + why + "; the MODS lists show rows");
     }
 
-    private static string PageSizeText()
-    {
-        try { return StateLiveryModsMenu.PageSize.ToString(); }
-        catch { return "?"; }
-    }
+    /// <summary>A copy of one of the Settings menu's own buttons (GRAPHICS, AUDIO ...): the MODS screen's list of mods
+    /// on the left is made of these, so it looks like the Settings menu itself. Null until the Settings menu opened.</summary>
+    internal static GameObject MenuButton;
 
-    /// <summary>The cell's objects and their parts, for the log (a game update that moves them shows here).</summary>
-    private static string Parts(Transform t, int depth)
+    /// <summary>Copies a button of the Settings menu once (StateSettingsMenu.Open), as the template of the mod list.</summary>
+    internal static void TakeMenuButton(UIButtonSelector button)
     {
-        if (t == null || depth > 3) return "";
-        var sb = new System.Text.StringBuilder(t.name);
         try
         {
-            var kinds = new System.Collections.Generic.List<string>();
-            foreach (var c in t.GetComponents<Component>())
-            {
-                if (c == null) continue;
-                string n = c.GetIl2CppType().Name;
-                if (n != "RectTransform" && n != "CanvasRenderer") kinds.Add(n);
-            }
-            if (kinds.Count > 0) sb.Append('<').Append(string.Join(",", kinds)).Append('>');
-            if (t.childCount > 0)
-            {
-                sb.Append(" [");
-                for (int i = 0; i < t.childCount; i++)
-                {
-                    if (i > 0) sb.Append("; ");
-                    sb.Append(Parts(t.GetChild(i), depth + 1));
-                }
-                sb.Append(']');
-            }
+            if (MenuButton != null || button == null) return;
+            EnsureHolder();
+            MenuButton = Copy(button.gameObject, "OTH_MenuButton");
+            Core.CorePlugin.Logger?.LogInfo("[Core] MODS screen: the list of mods is made of copies of the Settings menu's " + Name(button));
         }
-        catch { }
-        return sb.ToString();
-    }
-
-    private static string PathOf(Transform t)
-    {
-        string path = t.name;
-        var p = t.parent;
-        for (int i = 0; i < 3 && p != null; i++, p = p.parent) path = p.name + "/" + path;
-        return path;
+        catch (Exception e) { Core.CorePlugin.Logger?.LogWarning("[Core] MODS screen: copying the Settings menu's button failed (the list uses the settings' button row): " + e.Message); }
     }
 
     /// <summary>True when <paramref name="field"/> is one of our text boxes (made from <see cref="TextField"/>).</summary>
@@ -189,7 +112,16 @@ internal static class GamePrefabs
     {
         try
         {
-            if (Ready) return true;
+            if (Ready && ((TextField != null && MenuButton != null) || _textTried)) return true;
+            if (Ready)
+            {
+                // The rows are there; text boxes and the Settings menu's button once more from the game's prefabs (the
+                // settings' rows and buttons stand in for them otherwise).
+                _textTried = true;
+                FindTextField();
+                FindMenuButton();
+                return true;
+            }
             if (Time.unscaledTime < _nextTry) return false;
             _nextTry = Time.unscaledTime + 5f;
             Find();
@@ -230,6 +162,9 @@ internal static class GamePrefabs
             Pick(Load(CameraPath)?.GetComponentInChildren<ContextUICameraSettingsMenu>(true), ref option, ref slider, ref button, ref from, CameraPath);
         }
 
+        FindTextField();
+        FindMenuButton();
+
         EnsureHolder();
         if (Option == null && option != null) Option = Copy(option.gameObject, "OTH_OptionRow");
         if (Slider == null && slider != null) Slider = Copy(slider.gameObject, "OTH_SliderRow");
@@ -239,9 +174,36 @@ internal static class GamePrefabs
             var text = GameRow.LabelOf(Option);
             if (text != null) Label = Copy(text.gameObject, "OTH_Label");
         }
-        Summary = $"option row {Name(option)}, slider row {Name(slider)}, button row {Name(button)}, label {(Label != null ? "from the option row" : "missing")}" +
+        Summary = $"option row {Name(option)}, slider row {Name(slider)}, button row {Name(button)}, label {(Label != null ? "from the option row" : "missing")}, text box {(TextField != null ? "found" : "missing")}" +
                   (from.Length > 0 ? " (from " + from.TrimEnd(',', ' ') + ")" : "") +
                   (_routes.Length > 0 ? "; prefabs: " + _routes : "");
+    }
+
+    private static bool _textTried;
+
+    /// <summary>The Settings menu's button (the MODS screen's list), from its prefab when the menu wasn't opened yet (a
+    /// mod's own button opened the screen straight away).</summary>
+    private static void FindMenuButton()
+    {
+        if (MenuButton != null) return;
+        try
+        {
+            var menu = First<ContextUISettingsMenu>() ?? Load(SettingsPath)?.GetComponentInChildren<ContextUISettingsMenu>(true);
+            if (menu != null) TakeMenuButton(menu.GraphicsButton);
+        }
+        catch (Exception e) { Core.CorePlugin.Logger?.LogDebug("[Core] MODS pages: the Settings menu's button: " + e.Message); }
+    }
+
+    /// <summary>Text boxes: a copy of the MOD BROWSER's search field, from its prefab (the browser itself never needs to open).</summary>
+    private static void FindTextField()
+    {
+        if (TextField != null) return;
+        try
+        {
+            var browser = First<ContextUILiveryModsMenu>() ?? Load(BrowserPath)?.GetComponentInChildren<ContextUILiveryModsMenu>(true);
+            if (browser != null) TakeTextField(browser.SearchField);
+        }
+        catch (Exception e) { Core.CorePlugin.Logger?.LogDebug("[Core] MODS pages: the MOD BROWSER's search field: " + e.Message); }
     }
 
     private static void Pick(Component context, ref UIOptionSelector option, ref UISliderSelector slider, ref UIButtonSelector button, ref string from, string where)

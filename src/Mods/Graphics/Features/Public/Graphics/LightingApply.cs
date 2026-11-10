@@ -1,6 +1,11 @@
 using System;
+#if MELON
+using Il2CppHorizonBasedAmbientOcclusion.Universal;
+using Il2CppTND.Upscaling.Framework;
+#else
 using HorizonBasedAmbientOcclusion.Universal;
 using TND.Upscaling.Framework;
+#endif
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using C = OverTheHillPlus.Features.Public.Gfx.GraphicsLighting;

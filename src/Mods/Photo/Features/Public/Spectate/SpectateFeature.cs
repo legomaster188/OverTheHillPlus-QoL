@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -22,7 +22,7 @@ internal sealed class SpectateFeature : IFeature
     public void Register()
     {
         var f = PhotoModConfig.File;
-        ToggleKey = f.Bind(Section, "ToggleKey", Key.Home, "Starts watching another player / goes back to your car. Key.None disables the hotkey.");
+        ToggleKey = f.Bind(Section, "ToggleKey", Key.Pause, "Starts watching another player / goes back to your car. Key.None disables the hotkey.");
         NextKey = f.Bind(Section, "NextKey", Key.RightBracket, "While watching: next player.");
         PrevKey = f.Bind(Section, "PrevKey", Key.LeftBracket, "While watching: previous player.");
         Handbrake = f.Bind(Section, "Handbrake", true, "Put your car's handbrake on while you watch (released by the game when you give throttle again).");
@@ -32,7 +32,7 @@ internal sealed class SpectateFeature : IFeature
             "Switching to a car farther than this (metres) cuts the camera instead of gliding over.", new AcceptableValueRange<float>(0f, 2000f)));
 
         Registry.OnTick(Tick);
-        Registry.OnGui(DrawOverlay);
+        Registry.OnGui(DrawOverlay, wants: () => SpectateCamera.Active && ShowOverlay.Value, repaintOnly: true);
         Registry.Section(Registry.PlusMode, Menu.LobbyTab, DrawCard, 20);
     }
 
@@ -140,22 +140,34 @@ internal sealed class SpectateFeature : IFeature
     {
         if (!SpectateCamera.Active || !ShowOverlay.Value) return;
         if (Photo.PhotoCapture.CleanViewActive) return;
-        if (Event.current == null || Event.current.type != EventType.Repaint) return;
-
-        Theme.Ensure();
-        float scale = Mathf.Max(1f, Screen.height / 1080f);
-        GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
-        float sw = Screen.width / scale;
-
-        string title = "Watching  " + Trim(SpectateCamera.TargetName);
-        string info = $"{SpectateCamera.Index} / {SpectateCamera.Count}   ·   {SpectateCamera.SpeedKmh:0} km/h   ·   {Distance(SpectateCamera.DistanceToOwnCar)} from your car";
-        string keys = $"{KeyName(PrevKey.Value)} / {KeyName(NextKey.Value)} switch   ·   {KeyName(ToggleKey.Value)} back to your car   ·   mouse orbits, wheel zooms";
-
-        var r = new Rect(sw / 2f - 260f, 18f, 520f, 70f);
-        Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.82f), 10);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), Theme.Accent, 2);
-        GUI.Label(new Rect(r.x + 16f, r.y + 6f, r.width - 24f, 22f), title, Theme.Label);
-        GUI.Label(new Rect(r.x + 16f, r.y + 28f, r.width - 24f, 18f), info, Theme.Small);
-        GUI.Label(new Rect(r.x + 16f, r.y + 46f, r.width - 24f, 18f), keys, Theme.Small);
+        if (!UI.HudKit.HudDraw.Repaint) return;
+        // The screen layer: spectating runs on the game's free camera, where the driving layer is away.
+        if (!UI.HudKit.HudDraw.Begin("spectate", UI.HudKit.HudLayer.Screen)) return;
+        try
+        {
+            Theme.Ensure();
+            var screen = HudLayout.Begin();
+            // The words a few times a second, not every frame.
+            if (_title == null || Time.unscaledTime >= _nextWords)
+            {
+                _nextWords = Time.unscaledTime + 0.2f;
+                _title = "Watching  " + Trim(SpectateCamera.TargetName);
+                _info = $"{SpectateCamera.Index} / {SpectateCamera.Count}   ·   {SpectateCamera.SpeedKmh:0} km/h   ·   {Distance(SpectateCamera.DistanceToOwnCar)} from your car";
+                _keys = $"{KeyName(PrevKey.Value)} / {KeyName(NextKey.Value)} switch   ·   {KeyName(ToggleKey.Value)} back to your car   ·   mouse orbits, wheel zooms";
+            }
+            var r = new Rect(screen.x / 2f - 260f, 18f, 520f, 70f);
+            var inner = Shared.WorldOverlay.PanelBox(r, Theme.Accent);
+            UI.HudKit.HudDraw.Label(new Rect(inner.x + 4f, r.y + 6f, inner.width - 6f, 22f), _title, Theme.Label);
+            UI.HudKit.HudDraw.Label(new Rect(inner.x + 4f, r.y + 28f, inner.width - 6f, 18f), _info, Theme.Small);
+            UI.HudKit.HudDraw.Label(new Rect(inner.x + 4f, r.y + 46f, inner.width - 6f, 18f), _keys, Theme.Small);
+        }
+        finally
+        {
+            HudLayout.End();
+            UI.HudKit.HudDraw.End();
+        }
     }
+
+    private static string _title, _info, _keys;
+    private static float _nextWords;
 }

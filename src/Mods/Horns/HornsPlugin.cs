@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Horns;
@@ -14,9 +16,13 @@ using OverTheHillPlus.Core.Manager;
 /// every player with this mod hears it when you honk. Synced over the mod network as a horn id; custom files go in
 /// chunks with a 256 KB cap. A Server mod: its networked part runs only where the session runs it too.
 /// </summary>
+#if MELON
+public class HornsPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class HornsPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.horns";
     public const string Name = "Horns+";
@@ -25,7 +31,7 @@ public class HornsPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.horns.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "horns";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

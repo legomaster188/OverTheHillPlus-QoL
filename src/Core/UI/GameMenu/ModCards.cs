@@ -35,8 +35,14 @@ internal sealed class CardInfo
     /// <summary>How finished the mod is (Unknown: no label, e.g. another creator's plugin).</summary>
     public MaturityLevel Maturity { get; set; }
 
+    /// <summary>A PNG file to show instead (a career slot's picture); its time stamp is part of the key, so a new picture
+    /// shows. Null: the mod's own image or a generated one.</summary>
+    public string ImageFile { get; set; }
+    public long ImageStamp { get; set; }
+
     /// <summary>The key the image is cached by.</summary>
-    public string ImageKey => !string.IsNullOrEmpty(ModId) ? "mod:" + ModId.ToLowerInvariant() : "art:" + (Seed ?? "") + "|" + (Title ?? "");
+    public string ImageKey => !string.IsNullOrEmpty(ImageFile) ? "file:" + ImageFile + "|" + ImageStamp
+        : !string.IsNullOrEmpty(ModId) ? "mod:" + ModId.ToLowerInvariant() : "art:" + (Seed ?? "") + "|" + (Title ?? "");
 }
 
 /// <summary>The words on the cards. Pure logic, unit tested.</summary>

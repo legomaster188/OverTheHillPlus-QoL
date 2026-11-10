@@ -38,6 +38,27 @@ public static class PixieDefinition
         DefaultDonor = "Car_Boar",
         DefaultGarageBase = "Boar",
         AssetName = "pixie",
+        // The novelty roof items on their own anchors (they stood 9-14 cm into the rounded roof). A cab-over has no bonnet:
+        // the vents, the bonnet spare wheel and the bush cables would hang on the windscreen, and the under-bumper bash
+        // bar and skid plates sit inside the fascia, so those are hidden.
+        ItemAnchors = new[]
+        {
+            new CosmeticItemAnchor("cosm_i_Hotdog", "Visual/Roof/Hotdog"), new CosmeticItemAnchor("cosm_i_IceCream", "Visual/Roof/IceCream"),
+            new CosmeticItemAnchor("cosm_i_Rocket", "Visual/Roof/Rocket"), new CosmeticItemAnchor("cosm_i_RearWing", "Visual/Roof/RearWing"),
+            // the Boar's rear gear stands on a long raked tail: on the van's upright tail each needs its own place
+            new CosmeticItemAnchor("cosm_i_Bike", "Visual/Rear/Bike"), new CosmeticItemAnchor("cosm_i_BullHorns", "Visual/Hood/BullHorns"),
+        },
+        HiddenItems = new[]
+        {
+            "Visual/Hood/Vents", "Visual/Hood/VentsOval", "Visual/Hood/Sparewheel", "Visual/Hood/Bushcables",
+            "Visual/Front_Bumper/BashBar_02", "Visual/Front_Bumper/SkidPlate_01", "Visual/Front_Bumper/SkidPlate_02",
+            // raked for the Boar's tail, they touch this upright one at a single point and hang 30 cm off it below (Custom
+            // Cosmetics' tailgate spare and rear ladder fit the van)
+            "Visual/Rear/SpareWheel", "Visual/Rear/MountedGrill", "Visual/Rear/Guitar", "Visual/Rear/Ladder",
+            // the pan and the lantern hang from a roof rack's overhang this roof hasn't got; the garlands are cut for the Boar's
+            // wider bumper and sills and stand 10 to 12 cm off these
+            "Visual/Rear/Pan", "Visual/Rear/CampingLantern", "Visual/Rear_Bumper/Christmas_Rear", "Visual/Side_Step/Christmas_Side",
+        },
         // Gears and diffs: the real car's gearbox and differentials (a kei 5-speed, part-time 4WD).
         GearSet = "kei5",
         Diffs = new byte[] { 1, 1, 3 },

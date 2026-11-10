@@ -387,6 +387,9 @@ colours) the framework puts first. They become real livery parts of your car, af
 garage's Liveries tab lists, buys (free) and mounts them, the game syncs the mounted one, and saves never keep them (the
 sidecar does). An opaque PNG replaces the paint; transparent pixels show the player's paint and trim. The ids and their
 order are part of your car's network layout (players with another set are refused at connect), so only append.
+Under the liveries the same tab lists the car's paints, the shared palette (`CarPalette`) and every trim as colour chips
+(`GaragePaintMenu`, pure parts in `GarageSwatches`): tiles only, no game items, and picking one sets `[Look] Paint` /
+`Trim` like the MODS page does.
 `Liveries/tools/modded_kit.py` (template, design, build, render) and `Liveries/LIVERIES_MODDED.md` show how they are
 made.
 
@@ -404,6 +407,36 @@ if (Mods.IsEnabled("mytruck"))
     string why = Cars.AddCar(car, typeof(MyPlugin).Assembly, Log); // null: the car is on its way
 }
 ```
+
+### WorldPlaces (the map's named places, routes and waters)
+
+Map mods publish what is on their map; everyone else reads it without knowing the map. All positions are world
+coordinates (Unity axes, metres). Lists are sorted by owner, then id, so every player sees the same order. Main thread
+only.
+
+| Member | What it does |
+|---|---|
+| `WorldPlaces.Publish(owner, places, routes, waters)` | Replaces everything `owner` (your mod id) published. |
+| `WorldPlaces.Clear(owner)` | Takes it all back (your map went away). |
+| `WorldPlaces.OfKind(kind)` | Places of a kind, as their own `Kind` or one of their `Also` kinds. Never null. |
+| `WorldPlaces.Find(id)`, `Nearest(kind, x, z, max)`, `At(kind, x, z)`, `InArea(area)` | Lookups. `At` is the place whose radius you are in. |
+| `WorldPlaces.Routes(kind)`, `FindRoute(id)` | Routes: `road` (with `Surface` `paved`, `gravel`, `dirt`; `Tags` hold its class, `semi` if a semi and a 40 ft trailer get round it, `hard` if it's a 4x4 track), `race`, `plow`, `trail`, `rail` (a rail spur and its sidings, nothing drives on it) and `boat` (a race course of marks on the water). `Points` are x, y, z triplets; `Length`, `Nearest`, `PointAt`, `Spaced`. |
+| `WorldRoads.Metres(ax, az, bx, bz)` | How far it is to drive between two points: the shortest way along the published roads, 4x4 tracks left out, with the walk on and off the road at each end. Falls back to the straight line when a map has no roads. Pay and time limits use this, so a place across a lake pays for the road round it. |
+| `WorldPlaces.Waters`, `WaterAt(x, z, out water, out level)` | Lakes (an outline, a level, `Frozen`) and rivers (a centre line with heights and widths). |
+| `WorldPlaces.SetCleared(routeId, segment, cleared)`, `IsCleared` | Plow routes: clears a stretch on this game (the map mod changes the ground and its grip). Call it on the host; the map mod tells the other players. |
+| `WorldPlaces.ForCareer(kind, own)` | A kind as the career's `Place` list, merged with places it already has (the same spot counts once). |
+| `WorldPlaces.Version`, `Changed` | Goes up, and fires, on every change. |
+
+Place kinds in use (`WorldKinds`): `depot`, `bay` (a trailer bay, its trailer kind as the tag), `shop` and the shop
+kinds `store`, `parts`, `dealer`, `garage` (each also counts as `shop`), `fuel`, `camp`, `lodge`, `town`, `poi`,
+`scenic`, `tower_peak`, `lake`, `boat_ramp` (`Yaw` points down the ramp into the water), `dock`, `fishing` (tag `ice`,
+`boat` or `shore`), `mine`, `quarry`, `logging`, `ranch`, `pickup`, `dropoff`, `spawn`, `arrival`, `hard` (a hard stretch
+of a 4x4 track: tag `rock_steps`, `off_camber`, `descent`, `chute` or `ford`, and the track's id), `expansion` (a spot kept
+for later: tag `road` for a road that stops at a gate or a washout, `plot` for level ground; `toward`, `size` and `note`
+in its props).
+
+Skadi's Hollow publishes its places with ids `skadi.<key>` once its map stands, and takes them back when the area
+unloads.
 
 ### Advantage and TextFilter
 

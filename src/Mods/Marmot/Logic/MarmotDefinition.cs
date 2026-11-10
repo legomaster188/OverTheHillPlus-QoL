@@ -24,8 +24,8 @@ public static class MarmotDefinition
     public const int Protocol = 1;
 
     /// <summary>The Polyana's pan and lantern hang from its roof rack; on the Marmot they hang on the hardtop's rear
-    /// corners beside the rear door (the whip-light poles use core's standard cosm_WhipLights anchor on the rear bumper's
-    /// ends).</summary>
+    /// corners beside the rear door (the whip-light poles stand on the hardtop's rear corners, cosm_WhipLight_L / _R: the
+    /// bumper is too shallow for their feet).</summary>
     public static readonly CosmeticItemAnchor[] OwnItemAnchors =
     {
         new("cosm_Pan", "Visual/Rear/Pan"),

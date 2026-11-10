@@ -28,6 +28,8 @@ internal enum RowKind
     ListItem,
     /// <summary>The title of a card that folds open and shut (Menu.Card).</summary>
     Fold,
+    /// <summary>A strip of small colour squares under a choice row, the current one marked (SimpleMenu.SwatchChoice).</summary>
+    Swatches,
 }
 
 /// <summary>Which of the game's settings widgets shows a row.</summary>
@@ -47,6 +49,8 @@ internal enum WidgetKind
     TextField,
     /// <summary>A mod's card: a copy of the MOD BROWSER's own mod cell (a list row that carries a <see cref="CardInfo"/>).</summary>
     Card,
+    /// <summary>Not selectable: a strip of small colour squares you can click (built from plain UI parts, no template).</summary>
+    Swatches,
 }
 
 /// <summary>What the player did to a row.</summary>
@@ -60,6 +64,8 @@ internal enum RowInputKind
     SetValue,
     /// <summary>A text box now holds <see cref="RowInput.Text"/>.</summary>
     SetText,
+    /// <summary>A swatch was clicked: its index is in <see cref="RowInput.Step"/>.</summary>
+    Pick,
 }
 
 internal readonly struct RowInput
@@ -81,6 +87,7 @@ internal readonly struct RowInput
     public static RowInput Pressed() => new(RowInputKind.Press, 0, 0f);
     public static RowInput Slid(float value) => new(RowInputKind.SetValue, 0, value);
     public static RowInput Typed(string text) => new(RowInputKind.SetText, 0, 0f, text ?? "");
+    public static RowInput Picked(int index) => new(RowInputKind.Pick, index, 0f);
 }
 
 /// <summary>
@@ -114,6 +121,11 @@ internal sealed class RowModel
     public float Min { get; set; }
     public float Max { get; set; }
     public float Number { get; set; }
+    /// <summary>Sliders: the distance between the positions it can take (0: any value). The game's slider then moves in whole
+    /// steps (arrows and the mouse both), so a gamepad's nudge always reaches the next position.</summary>
+    public float Step { get; set; }
+    /// <summary>Swatches: the colours as 0xRRGGBB; <see cref="Index"/> is the marked one (-1: none).</summary>
+    public int[] Colors { get; set; }
     /// <summary>Text boxes: the most characters it takes.</summary>
     public int MaxLength { get; set; } = 64;
     /// <summary>Banners: the colour as 0xRRGGBB.</summary>
@@ -155,6 +167,7 @@ internal static class RowMap
         RowKind.Toggle or RowKind.Choice or RowKind.ListItem => WidgetKind.Option,
         RowKind.Slider => WidgetKind.Slider,
         RowKind.Text => WidgetKind.TextField,
+        RowKind.Swatches => WidgetKind.Swatches,
         _ => WidgetKind.Button, // Button, Fold
     };
 
@@ -262,10 +275,63 @@ internal static class RowMap
         return small.Length == 0 ? label : label + "  <size=70%>" + Alpha("AA", small) + "</size>";
     }
 
-    /// <summary>The text of a text line: key and value for KeyValue rows, the text otherwise.</summary>
-    public static string LineText(RowModel row) => row.Kind == RowKind.KeyValue
-        ? (row.Label ?? "") + "   " + Alpha("FF", row.Value ?? "")
-        : row.Label ?? "";
+    /// <summary>The text of a text line: key and value for KeyValue rows, the text otherwise (a swatch strip that can't be
+    /// drawn as squares is a line of colour blocks in text).</summary>
+    public static string LineText(RowModel row)
+    {
+        if (row.Kind == RowKind.KeyValue) return (row.Label ?? "") + "   " + Alpha("FF", row.Value ?? "");
+        if (row.Kind == RowKind.Swatches) return SwatchText(row);
+        return row.Label ?? "";
+    }
+
+    /// <summary>The colours of a swatch row as coloured blocks in TextMeshPro text (the fallback of the square strip), the
+    /// marked one bold.</summary>
+    public static string SwatchText(RowModel row)
+    {
+        if (row.Colors == null || row.Colors.Length == 0) return "";
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < row.Colors.Length; i++)
+        {
+            string block = ColorText.Swatch((row.Colors[i] & 0xFFFFFF).ToString("X6"));
+            sb.Append(i == row.Index ? "<b>" + block + "</b>" : block).Append(' ');
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>How many positions a stepped slider from <paramref name="min"/> to <paramref name="max"/> has (at least 2); the
+    /// last one is <paramref name="max"/> even when the range isn't a whole number of steps.</summary>
+    public static int Positions(float min, float max, float step)
+    {
+        if (step <= 0f || max <= min) return 2;
+        return Math.Max(2, (int)Math.Ceiling((max - min) / step - 0.001f) + 1);
+    }
+
+    /// <summary>The position number (0 based) nearest to <paramref name="value"/> on a stepped slider.</summary>
+    public static int PositionOf(float value, float min, float max, float step)
+    {
+        if (max < min) (min, max) = (max, min);
+        if (step <= 0f || max <= min) return 0;
+        int n = Positions(min, max, step) - 1;
+        float v = value < min ? min : value > max ? max : value;
+        return Math.Clamp((int)Math.Round((v - min) / step), 0, n);
+    }
+
+    /// <summary>The value of position <paramref name="position"/> on a stepped slider (the last is <paramref name="max"/>).</summary>
+    public static float ValueAt(int position, float min, float max, float step)
+    {
+        if (max < min) (min, max) = (max, min);
+        if (step <= 0f || max <= min) return min;
+        int n = Positions(min, max, step) - 1;
+        return position >= n ? max : min + Math.Max(0, position) * step;
+    }
+
+    /// <summary><paramref name="value"/> moved onto the nearest position of a stepped slider (any value when there is no step).</summary>
+    public static float Snap(float value, float min, float max, float step)
+    {
+        if (max < min) (min, max) = (max, min);
+        float v = value < min ? min : value > max ? max : value;
+        return step <= 0f ? v : ValueAt(PositionOf(v, min, max, step), min, max, step);
+    }
 
     private static string Join(string a, string b)
     {

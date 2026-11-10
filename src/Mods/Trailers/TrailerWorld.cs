@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using UnityEngine;
 
 namespace OverTheHillPlus.Trailers;
@@ -29,8 +33,10 @@ internal static class TrailerWorld
         if (s == null) return;
         if (Live.TryGetValue(s.NetId, out var t))
         {
+            var was = t.State.Boat;
             t.State = s.Clone();
             Sync(t);
+            if (was != s.Boat) BoatNews(t, was);
             return;
         }
         var no = known ?? Find(s.NetId);
@@ -54,6 +60,25 @@ internal static class TrailerWorld
         DebugLog.Verbose(TrailersPlugin.ModId, () => $"trailer {s.NetId} ({s.Kind}) attached to its network object: {List.Count} live, owner {s.Owner}, hitched {s.Hitched}");
         if (GameState.IsAuthority) TrailerHost.AfterAttach(t);
         Sync(t);
+    }
+
+    /// <summary>Tells this game's player what their boat trailer's boat just did, in the game's own notification.</summary>
+    private static void BoatNews(TrailerLive t, BoatPlace was)
+    {
+        try
+        {
+            var r = GameState.Runner;
+            if (r == null || r.LocalPlayer.RawEncoded != t.State.Owner) return;
+            string text = (was, t.State.Boat) switch
+            {
+                (BoatPlace.OnTrailer, BoatPlace.Afloat) => "The boat's off. Pull the trailer up and park, then take the boat.",
+                (BoatPlace.Afloat, BoatPlace.OnTrailer) => "Boat's winched on. Pull out slowly.",
+                _ => null,
+            };
+            if (text == null) return;
+            if (!UI.GameMenu.GameToast.Show(text, Color.white, 6f)) Menu.SetStatus(text);
+        }
+        catch (Exception ex) { DebugLog.Error("trailers", ex, "TrailerWorld.BoatNews"); }
     }
 
     private static bool Awake(NetworkObject no)
@@ -115,7 +140,7 @@ internal static class TrailerWorld
         // force counts it
         if (host || t.Simulated)
         {
-            float mass = t.Spec.Mass + (s.CargoCarId != 0 ? t.Spec.CargoMass : 0f);
+            float mass = BoatRules.Mass(t.Spec, s);
             try { if (Math.Abs(t.Rb.mass - mass) > 0.5f) t.Rb.mass = mass; } catch (Exception ex) { DebugLog.Error("trailers", ex, "TrailerWorld.Sync"); }
         }
 
@@ -146,6 +171,7 @@ internal static class TrailerWorld
         // the coupler head at the height the hitch set, and the load's picture, on every peer
         t.ShowCoupler();
         t.ShowCargo();
+        t.ShowGear();
     }
 
     /// <summary>Tells the towing car how much trailer it pulls (the weight from the spec and the load, the same number on every
@@ -156,7 +182,7 @@ internal static class TrailerWorld
         {
             var vpc = car.GetComponent<VehiclePhysics.VPVehicleController>();
             if (vpc == null) return;
-            float kg = t.Spec.Mass + (t.State.CargoCarId != 0 ? t.Spec.CargoMass : 0f);
+            float kg = BoatRules.Mass(t.Spec, t.State);
             OverTheHillPlus.Cars.CarTowLoads.Report(vpc.Pointer, kg);
         }
         catch (Exception ex) { DebugLog.Error("trailers", ex, "TrailerWorld.ReportTow"); }
@@ -196,6 +222,7 @@ internal static class TrailerWorld
             // the towing car went (despawned, respawned): a joint without its car would pin the trailer to the world
             if (t.JointCar != 0 && t.Joint != null && t.CarRb == null) t.DropJoint();
             try { TrailerPhysics.DrawWheels(t, dt); } catch (Exception e) { DebugLog.Error("trailers", e, "TrailerWorld.Tick"); TrailersPlugin.LogOnce("wheels", "[Trailers] wheels: " + e.Message); }
+            if (t.BoatShown != null) t.FrameBoat(Time.time);
             if (!slow) continue;
             try
             {
@@ -213,7 +240,9 @@ internal static class TrailerWorld
                 {
                     // unhitched: collide with that car again once it has moved clear
                     var car = Find(t.IgnoredCar);
-                    if (car == null || (car.transform.position - t.T.position).magnitude > 9f) t.RestoreCar();
+                    // (a semi-trailer: from its kingpin, so the truck is clear of the nose, not only of the tandem)
+                    Vector3 from = t.Spec.FifthWheel ? t.T.TransformPoint(t.Hitch) : t.T.position;
+                    if (car == null || (car.transform.position - from).magnitude > (t.Spec.FifthWheel ? 7f : 9f)) t.RestoreCar();
                 }
             }
             catch (Exception e) { DebugLog.Error("trailers", e, "TrailerWorld.Tick"); TrailersPlugin.LogOnce("sync", "[Trailers] sync: " + e.Message); }

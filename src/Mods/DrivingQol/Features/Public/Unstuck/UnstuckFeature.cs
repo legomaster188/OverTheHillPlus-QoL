@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -29,7 +29,7 @@ internal sealed class UnstuckFeature : IFeature
 
         Unstuck.RegisterChannel();
         Registry.OnTick(Tick);
-        Registry.OnGui(DrawNotice);
+        Registry.OnGui(DrawNotice, wants: () => ShowNotice.Value && !string.IsNullOrEmpty(Unstuck.LastMessage), repaintOnly: true);
         Registry.Section(Registry.PlusMode, "QoL", DrawCard, 5);
     }
 
@@ -88,12 +88,14 @@ internal sealed class UnstuckFeature : IFeature
         string msg = Unstuck.LastMessage;
         float age = Time.unscaledTime - Unstuck.LastMessageAt;
         if (string.IsNullOrEmpty(msg) || age > 3f || age < 0f) return;
-        if (Event.current == null || Event.current.type != EventType.Repaint) return;
+        if (!UI.HudKit.HudDraw.Repaint) return;
+        // The screen layer: the page's button asks for it too, over the game's menus.
+        if (!UI.HudKit.HudDraw.Begin("unstuck", UI.HudKit.HudLayer.Screen)) return;
         Theme.Ensure();
         if (_toastStyle == null)
         {
             _toastStyle = new GUIStyle(Theme.Label) { alignment = TextAnchor.MiddleCenter, richText = false };
-            _toastStyle.normal.textColor = Theme.Text;
+            _toastStyle.normal.textColor = HudLayout.Cream;
         }
         var c = msg.StartsWith("Failed", StringComparison.Ordinal) ? Theme.Bad
             : msg.StartsWith("Blocked", StringComparison.Ordinal) ? Theme.Warn
@@ -101,12 +103,20 @@ internal sealed class UnstuckFeature : IFeature
             : Theme.Good;
         float alpha = Mathf.Clamp01(3f - age); // fades over the last second
         var prev = GUI.color;
-        GUI.color = new Color(1f, 1f, 1f, alpha);
-        var size = _toastStyle.CalcSize(new GUIContent(msg));
-        var r = new Rect((Screen.width - size.x) / 2f - 14f, 40f, size.x + 28f, 34f);
-        Theme.Fill(r, new Color(0.07f, 0.09f, 0.11f, 0.88f), 8);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), c, 2);
-        GUI.Label(r, msg, _toastStyle);
-        GUI.color = prev;
+        try
+        {
+            var screen = HudLayout.Begin();
+            GUI.color = new Color(1f, 1f, 1f, alpha);
+            var size = UI.HudKit.HudDraw.Measure(msg, _toastStyle);
+            var r = new Rect((screen.x - size.x) / 2f - 14f, 40f, size.x + 28f, 34f);
+            Shared.WorldOverlay.PanelBox(r, c);
+            UI.HudKit.HudDraw.Label(r, msg, _toastStyle);
+        }
+        finally
+        {
+            GUI.color = prev;
+            HudLayout.End();
+            UI.HudKit.HudDraw.End();
+        }
     }
 }

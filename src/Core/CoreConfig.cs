@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using UnityEngine.InputSystem;
 
 namespace OverTheHillPlus;
@@ -12,7 +12,8 @@ namespace OverTheHillPlus;
 /// </summary>
 internal static class CoreConfig
 {
-    /// <summary>Opens / closes MODS ([Core] OpenKey; None turns the shortcut off, the ESC menu entry stays).</summary>
+    /// <summary>A debug key that opens / closes the mods' settings ([Debug] ModsKey, None by default: they live in the
+    /// game's Settings menu, under MODS). Not shown on any page or in the keybind list.</summary>
     public static ConfigEntry<Key> OpenKey;
     /// <summary>Whether a mod's page shows its Advanced fold open.</summary>
     public static ConfigEntry<bool> AdvancedMenu;
@@ -36,11 +37,13 @@ internal static class CoreConfig
         File = cfg;
         // Sliders change values every frame; ConfigAutosave writes the file once things are quiet instead.
         cfg.SaveOnConfigSet = false;
-        OpenKey = cfg.Bind("Core", "OpenKey", Key.F7, "Opens/closes MODS (also in the ESC menu and in the main menu's MOD BROWSER). None turns the shortcut off.");
+        // [Core] OpenKey (F7) is gone: the settings are in Settings > MODS. Its debug stand-in is off by default.
+        OpenKey = cfg.Bind("Debug", "ModsKey", Key.None,
+            "Debug only: a key that opens and closes the mods' settings, e.g. F7. None (the default): open them from the game's Settings menu, under MODS.");
         AdvancedMenu = cfg.Bind("General", "AdvancedMenu", false,
             "MODS page: show each mod's Advanced settings unfolded. Off: a mod's page shows the settings most players use, with Advanced folded under them.");
         GameMenus = cfg.Bind("Core", "GameMenus", true,
-            "MODS opens inside the game's MOD BROWSER (INSTALLED MODS / AVAILABLE MODS), with the game's own settings widgets. " +
+            "Settings > MODS is a settings screen of the game, with the game's own buttons and rows. " +
             "Off: MODS opens in its own window (the full view), as before.");
         // [Debug]: the debug log, the hang watchdog and hook timing (Logging/DebugConfig).
         Logging.DebugConfig.Bind(cfg);

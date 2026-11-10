@@ -63,6 +63,11 @@ internal static partial class ApiRules
                 "bastion", "hilo22", "realnights", "gearbox", "cockpit", "flares", "drifter", "nomad", "mule", "pixie", "bento", "longhorn", "controllerfeel", "ibex", "marmot",
                 // Round 6.
                 "drover", "limber", "badger", "gemse",
+                // Round 7.
+                // The overhaul's vehicles.
+                "marten", "ermine", "grayling", "meerkat", "jackal", "mastiff", "stoat",
+                // The overhaul.
+                
             };
             AddPrivate(ids);
             return _reserved = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);

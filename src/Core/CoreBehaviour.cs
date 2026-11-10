@@ -50,6 +50,16 @@ public class CoreBehaviour : MonoBehaviour
 
     /// <summary>Drawn in OnGUI after the features' overlays and before the MODS page (e.g. the driving HUD).</summary>
     internal static Action AfterGuis;
+
+    /// <summary>
+    /// <c>AfterGuis += draw</c> for an overlay that can say when it has nothing to do (see <see cref="Features.Registry.OnGui"/>:
+    /// <paramref name="wants"/> is a pure managed check, <paramref name="repaintOnly"/> for a draw that starts with a Repaint check).
+    /// </summary>
+    internal static void AddAfterGui(Action draw, Func<bool> wants = null, bool repaintOnly = false)
+    {
+        if (wants != null || repaintOnly) Logging.HookTiming.AddGate(draw, new Logging.GuiGate(wants, repaintOnly));
+        AfterGuis += draw;
+    }
     /// <summary>Runs when the game quits, after the config is saved. Each subscriber runs in its own try/catch.</summary>
     internal static Action OnQuit;
 
@@ -74,6 +84,7 @@ public class CoreBehaviour : MonoBehaviour
     // Trail steps around core's per-frame work: a hang or crash after an "end of" step is outside every hook of ours
     // (in the game's own code, physics, rendering, or an unguarded Harmony patch).
     private const string UpdateDone = "end of core's Update", OnGuiDone = "end of core's OnGUI";
+    private const string GameStateStep = "core: game state";
     private const string ModsBrowserStep = "core: MOD BROWSER keys", ModsRecordStep = "core: MODS page rows", ModsDrawStep = "core: MODS page draw";
 
     private void Update()
@@ -95,6 +106,7 @@ public class CoreBehaviour : MonoBehaviour
     {
         // Every plugin's Load (and its patching) has run by the first frame.
         PatchReport.LogSummaryOnce();
+        Logging.BootReport.Mark("first frame");
         // Also on the first frame: the mod map, the session header and the crash report of an unclean last session.
         Logging.SessionReport.FirstFrame();
 
@@ -104,25 +116,31 @@ public class CoreBehaviour : MonoBehaviour
 
         try
         {
-            GameState.Tick();
+            TickGameState();
             // One by one: a mod's hook that throws must not skip the other mods' hooks or the features' ticks.
             // Each subscriber marks the crash trail with its own step and is timed (Logging/HookTiming).
             Logging.HookTiming.InvokeEach(BeforeFeatureTicks, "before ticks", e => LogThrottled("CoreBehaviour.Update BeforeFeatureTicks", e));
             Features.Registry.RunTicks();
             Logging.HookTiming.InvokeEach(AfterFeatureTicks, "after ticks", e => LogThrottled("CoreBehaviour.Update AfterFeatureTicks", e));
             UI.GameUiButtons.Tick();
+            // After the mods' ticks: a screenshot asked for this frame already finds the HUD layer off.
+            UI.HudKit.HudCanvas.Tick();
         }
         catch (Exception e) { DebugLog.Error("core", e, "CoreBehaviour.Tick"); LogThrottled("CoreBehaviour.Update ticks", e); }
 
-        // MODS in the MOD BROWSER: its keys (Esc / B back to the list, Tab for Advanced), keeping the liveries hidden.
+        // The MODS screen of the Settings menu: its keys (Esc / B back to the list, Tab for Advanced); our pop-ups.
         CrashTrail.Mark(ModsBrowserStep);
-        try { UI.GameMenu.GameModsScreen.Tick(); }
+        try
+        {
+            UI.GameMenu.GameModsScreen.Tick();
+            UI.GameMenu.GameModal.Tick();
+        }
         catch (Exception e) { DebugLog.Error("core", e, "CoreBehaviour.Tick"); LogThrottled("CoreBehaviour.Update MOD BROWSER", e); }
 
         // Separate from the ticks above: a tick that keeps failing must not also take the page's keys with it.
         try
         {
-            // A close asked for by the page (its x, a prompt's Close): the full view if it is open, else the MOD BROWSER.
+            // A close asked for by the page (its x, a prompt's Close): the full view if it is open, else the MODS screen.
             if (Menu.CloseRequested)
             {
                 Menu.CloseRequested = false;
@@ -135,10 +153,10 @@ public class CoreBehaviour : MonoBehaviour
             bool captured = Features.Public.MenuUx.HotkeysCaptured;
             bool typing = (_menuOpen && Features.Public.MenuUx.Typing) || UI.GameMenu.GameModsTab.Typing;
             bool hotkeys = !captured && !typing;
-            // While the old plugin is loaded (ModManager.Blocked) its own menu answers that key: MODS then opens
-            // from the ESC menu or the main menu's MOD BROWSER only.
+            // [Debug] ModsKey (None by default: MODS is in the Settings menu). While the old plugin is loaded
+            // (ModManager.Blocked) its own menu answers keys: MODS then opens from the Settings menu only.
             var openKey = Core.Manager.ModManager.Blocked || CoreConfig.OpenKey == null ? Key.None : CoreConfig.OpenKey.Value;
-            // A text box of the MOD BROWSER page has the keys: the open key doesn't close the browser under the typing.
+            // A text box of the MODS screen has the keys: the debug key doesn't close the screen under the typing.
             bool boxTyping = UI.GameMenu.GameModsTab.Typing;
             if (kb != null && !captured && !boxTyping && !(typing && Features.Public.MenuUx.IsTextKey(openKey)) && Pressed(kb, openKey))
                 UI.ModsPage.Toggle();
@@ -161,6 +179,18 @@ public class CoreBehaviour : MonoBehaviour
             }
         }
         catch (Exception e) { DebugLog.Error("core", e, "CoreBehaviour.Tick"); LogThrottled("CoreBehaviour.Update input", e); }
+    }
+
+    private static Logging.HookStat _gameStateStat;
+
+    // Timed like a hook: its searches of the world used to run here unseen by the SLOW lines.
+    private static void TickGameState()
+    {
+        CrashTrail.Mark(GameStateStep);
+        if (!DebugLog.On) { GameState.Tick(); return; }
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        GameState.Tick();
+        Logging.HookTiming.Record(_gameStateStat ??= Logging.HookTiming.NewStat("core", "GameState.Tick"), System.Diagnostics.Stopwatch.GetTimestamp() - t0);
     }
 
     private static bool PadBackPressed()
@@ -245,11 +275,17 @@ public class CoreBehaviour : MonoBehaviour
         if (GuiHidden)
         {
             UI.Native.NativeCanvas.Hide();
+            UI.HudKit.HudCanvas.Hide();
             return;
         }
-        Features.Registry.RunGuis();
-        Logging.HookTiming.InvokeEach(AfterGuis, "after overlays", e => LogThrottled("CoreBehaviour.OnGUI overlays", e));
-        // The MOD BROWSER's MODS page: its rows come from the page's draw code, run once a frame (Layout) as a recording pass.
+        // One Event.current for the whole pass: the mods' HUDs ask HudDraw.Repaint instead of making a wrapper each.
+        var ev = Event.current;
+        bool repaint = ev != null && ev.type == EventType.Repaint;
+        UI.HudKit.HudCanvas.FrameStart(repaint);
+        Features.Registry.RunGuis(repaint);
+        Logging.HookTiming.InvokeGuis(AfterGuis, "after overlays", repaint, e => LogThrottled("CoreBehaviour.OnGUI overlays", e));
+        UI.HudKit.HudCanvas.FrameEnd(repaint);
+        // The MODS screen: its rows come from the page's draw code, run once a frame (Layout) as a recording pass.
         CrashTrail.Mark(ModsRecordStep);
         try { UI.GameMenu.GameModsTab.Record(); }
         catch (Exception e) { DebugLog.Error("core", e, "CoreBehaviour.DrawGui"); LogThrottled("CoreBehaviour.OnGUI MOD BROWSER", e); }

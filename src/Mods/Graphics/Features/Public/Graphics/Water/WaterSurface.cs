@@ -2,8 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+#if MELON
+using Il2Cppsc.modeling.river.runtime;
+#else
 using sc.modeling.river.runtime;
+#endif
+#if MELON
+using Il2CppStylizedWater3;
+#else
 using StylizedWater3;
+#endif
 using UnityEngine;
 using UnityEngine.Rendering;
 using OverTheHillPlus.Graphics;
@@ -45,7 +53,7 @@ internal static class WaterSurface
     };
 
     private static readonly Dictionary<IntPtr, Mat> Mats = new();
-    private static float _nextScan;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer ScanPace = WorldScan.Pace("water", 4f);
     private static int _applied = -1;
     private static bool _active;
     private static bool? _ssrOriginal;
@@ -55,7 +63,7 @@ internal static class WaterSurface
     public static string Supported { get; private set; } = "";
     public static string SsrState { get; private set; } = "not checked";
 
-    public static void ForceRescan() => _nextScan = 0f;
+    public static void ForceRescan() => ScanPace.Again();
 
     public static void Tick()
     {
@@ -65,12 +73,7 @@ internal static class WaterSurface
             return;
         }
 
-        float now = Time.unscaledTime;
-        if (now >= _nextScan)
-        {
-            _nextScan = now + 4f;
-            if (Scan()) _applied = -1;
-        }
+        if (WorldScan.Due(ScanPace, Time.unscaledTime) && Scan()) _applied = -1;
         if (_applied != WaterCfg.Version)
         {
             _applied = WaterCfg.Version;
@@ -287,7 +290,7 @@ internal static class WaterSurface
         if (_ssrApplied != "Game") ApplySsr("Game");
         _active = false;
         _applied = -1;
-        _nextScan = 0f;
+        ScanPace.Again();
     }
 
     /// <summary>Writes every property of the first water shader to the log, to help tune the property lists.</summary>
@@ -314,7 +317,7 @@ internal static class WaterSurface
                 sb.Append($"\n  {name} ({type}) {val}");
             }
             GraphicsPlugin.Logger.LogInfo(sb.ToString());
-            return $"Logged {n} water shader properties to the BepInEx log";
+            return $"Logged {n} water shader properties to the {OverTheHillPlus.Loader.LoaderText.LoaderName} log";
         }
         catch (Exception ex) { DebugLog.Error("graphics", ex, "WaterSurface.LogShaderProperties"); return "Failed: " + ex.Message; }
     }

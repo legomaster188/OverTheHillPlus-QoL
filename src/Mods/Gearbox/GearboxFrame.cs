@@ -1,4 +1,5 @@
 using System;
+using OverTheHillPlus.UI.HudKit;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -14,7 +15,7 @@ internal static class GearboxFrame
     {
         CoreBehaviour.BeforeFeatureTicks += Tick;
         CoreBehaviour.Hotkeys += Hotkeys;
-        CoreBehaviour.AfterGuis += Draw;
+        CoreBehaviour.AddAfterGui(Draw, GearboxHud.Wanted, repaintOnly: true);
     }
 
     private static void Tick()
@@ -61,6 +62,10 @@ internal static class GearboxFrame
                 GearboxPlugin.Logger.LogError("Gearbox+ draw (retrying every 5 s, further errors not logged): " + e);
             }
         }
-        finally { HudLayout.End(); }
+        finally
+        {
+            HudLayout.End();
+            HudDraw.End();
+        }
     }
 }

@@ -1,7 +1,9 @@
-using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using System;
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Stacking;
@@ -15,9 +17,13 @@ using OverTheHillPlus.Core.Manager;
 /// fitted one takes only that one off. A hint line at the bottom of the screen says so. The stack is the game's own
 /// per-car "in use" flags, saved and sent as usual, so everyone sees it (also players without the mod). Local only.
 /// </summary>
+#if MELON
+public class StackingPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class StackingPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.stacking";
     public const string Name = "Stacking+";
@@ -26,7 +32,7 @@ public class StackingPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.stacking.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "stacking";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

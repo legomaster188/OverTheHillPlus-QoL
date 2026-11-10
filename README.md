@@ -1,18 +1,43 @@
 # Over The Hill Plus
 
-A pack of mods for **over the hill**. Bigger lobbies, a better server browser, chat, extra cameras, more graphics
-settings, trailers, custom horns and 18 new cars to buy in the garage.
+Mods for **Over the Hill**: 25 new vehicles to buy in the garage, trailers, car parts and liveries, bigger lobbies, a
+better server browser, chat, extra cameras, more graphics settings and custom horns. Each set comes with a one-click
+installer: the Car Pack for MelonLoader, or everything for BepInEx.
 
 Install all of it or just the bits you want. Anything can be turned off in game.
 
-## Install
+## Car Pack (MelonLoader)
+
+### [Download OverTheHillCarPack-Installer.zip](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/download/carpack-1.5.5/OverTheHillCarPack-Installer.zip)
+
+All the cars and car stuff in one pack, for **MelonLoader** (what most Over the Hill mods on Nexus use): 25 new vehicles
+(cars, pickups, vans, trucks, a sand rail, a side-by-side, a snowmobile and a boat), the game's 4 unreleased cars, trailers,
+Gearbox+, tyre pressure, Air Ride, stronger headlights with a light bar toggle, controller rumble, custom parts (wheels,
+LED strips, bush cables, roof racks and more), cosmetic stacking and livery packs, plus 64 extra paint colours on every
+new car.
+
+Unzip, close the game, double-click `OverTheHillCarPackInstaller.exe`, tick what you want and press Install. It sets up
+MelonLoader for you if you don't have it. Don't run it next to the BepInEx mods below: pick one or the other (the installer
+asks and can switch our BepInEx copies off for you).
+
+The first start takes a few minutes while MelonLoader gets ready. The installer finds updates by itself. Every car pack
+version has its own release page: [all car pack releases](https://github.com/legomaster188/OverTheHillPlus-QoL/releases?q=carpack&expanded=true).
+
+### New Cars only
+
+Just the cars: all 25 new vehicles, Trailers+ and Custom Cosmetics, nothing else. Grab **OverTheHill-NewCars-1.5.5.zip**
+from the [car pack release](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/tag/carpack-1.5.5), close the game and copy its `Mods` folder into the game folder. You
+need MelonLoader 0.7.x. Everyone you play with needs the same version of the pack; if yours doesn't match the host's, the
+game tells you which cars differ.
+
+## Install (BepInEx, all mods)
 
 ### [Download OverTheHillMods-Installer.zip](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/latest/download/OverTheHillMods-Installer.zip)
 
 1. Close the game, unzip the download (right-click, Extract All) and double-click `OverTheHillModsInstaller.exe`.
 2. It finds the game on its own (or press Browse) and sets up BepInEx if you don't have it.
 3. Tick the mods you want (or hit Recommended) and press Install. Run it again to update or uninstall.
-4. Start the game. The first launch takes a few minutes. Press **F7** or go to Esc > **MODS**.
+4. Start the game. The first launch takes a few minutes. Open **Settings** > **MODS**.
 
 No admin rights needed. Windows SmartScreen might say "unknown publisher" because the exe isn't code-signed: click
 More info, then Run anyway. Cars get downloaded only if you pick them, so the zip itself is tiny. Prefer plain text?
@@ -50,7 +75,8 @@ More info, then Run anyway. Cars get downloaded only if you pick them, so the zi
 | <img src="assets/discord/thumb_flares.jpg" width="64" height="36" alt=""> | Flares+ | See friends' names from far off and shoot a flare |
 | <img src="assets/discord/thumb_stacking.jpg" width="64" height="36" alt=""> | Stacking+ | Shift + click to put more than one cosmetic in a slot |
 | <img src="assets/discord/thumb_liverypacks.jpg" width="64" height="36" alt=""> | Liveries+ | Load liveries from a folder instead of mod.io |
-| <img src="assets/discord/thumb_trailers.jpg" width="64" height="36" alt=""> | Trailers+ | Tow a trailer, camper, car hauler or boat |
+| <img src="assets/discord/thumb_trailers.jpg" width="64" height="36" alt=""> | Trailers+ | Tow a trailer, camper, car hauler, boat or a semi flatbed |
+| <img src="assets/discord/thumb_customcosmetics.jpg" width="64" height="36" alt=""> | Custom Cosmetics | Extra garage parts for the new cars: bumpers, racks, light bars, wheels and more |
 | <img src="assets/discord/thumb_gearbox.jpg" width="64" height="36" alt=""> | Gearbox+ | More gears or the real car's gearbox, a real neutral, and diff locks (K) |
 
 ## Cars
@@ -77,6 +103,13 @@ Bought in the garage like any other car, with their own paints and liveries, and
 | <img src="assets/discord/thumb_gemse.jpg" width="64" height="36" alt=""> | Gemse 6x6 | Six-wheel Alpine crawler |
 | <img src="assets/discord/thumb_nomad.jpg" width="64" height="36" alt=""> | Nomad | Huge expedition truck on portal axles |
 | <img src="assets/discord/thumb_longhorn.jpg" width="64" height="36" alt=""> | Longhorn 389 | American semi |
+| <img src="assets/discord/thumb_mastiff.jpg" width="64" height="36" alt=""> | Mastiff | 4x4 wrecker with a twin-boom crane |
+| <img src="assets/discord/thumb_stoat.jpg" width="64" height="36" alt=""> | Stoat | 60s walk-in step van |
+| <img src="assets/discord/thumb_meerkat.jpg" width="64" height="36" alt=""> | Meerkat | Lifted little roadster with pop-up lamps |
+| <img src="assets/discord/thumb_jackal.jpg" width="64" height="36" alt=""> | Jackal | Two-seat sand rail |
+| <img src="assets/discord/thumb_marten.jpg" width="64" height="36" alt=""> | Marten | Two-seat side-by-side with a tipping bed |
+| <img src="assets/discord/thumb_ermine.jpg" width="64" height="36" alt=""> | Ermine | Trail snowmobile |
+| <img src="assets/discord/thumb_grayling.jpg" width="64" height="36" alt=""> | Grayling | 14 ft fishing boat. It floats |
 | <img src="assets/discord/thumb_unreleased.jpg" width="64" height="36" alt=""> | Unreleased Cars | The game's four unfinished cars (Grizzly, Baguette, Brigand, Cordillera) in your garage. Achievements are off while you drive one |
 
 ### Liveries on the new cars
@@ -98,7 +131,8 @@ Making your own works like a normal livery mod:
    ```
 
    `car` is the car's name in the game: `Vera`, `Terrier`, `Carpati`, `Ibex`, `Marmot`, `Hilo`, `Hilo22`, `Drover`,
-   `Mule`, `Bastion`, `Pixie`, `Bento`, `Limber`, `Badger`, `Gemse`, `Nomad` or `Longhorn`.
+   `Mule`, `Bastion`, `Pixie`, `Bento`, `Limber`, `Badger`, `Gemse`, `Nomad`, `Longhorn`, `Mastiff`, `Stoat`, `Meerkat`,
+   `Jackal`, `Marten`, `Ermine` or `Grayling`.
 4. To try it, drop the folder in `Documents\My Games\over the hill\LocalLiveries\` and pick it in the garage's Livery
    Mods tab (turn on "Show local mods"). It also shows on the car's page in MODS, under Skin.
 
@@ -108,8 +142,8 @@ too.
 
 With Liveries+ you can also keep livery packs in `BepInEx\config\oth.liveries\` and skip mod.io entirely.
 
-Everyone in the lobby needs the same car mods (and Trailers+) as the host. If you get "banned from this session" when
-joining, that's why. Option `1` in the installer gets you everything.
+Everyone in the lobby needs the same car mods (and Trailers+) as the host, at the same version. If they don't match,
+the game tells you which ones when the join fails. Option `1` in the installer gets you everything.
 
 ## Problems
 

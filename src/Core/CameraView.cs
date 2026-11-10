@@ -15,6 +15,9 @@ internal static class CameraView
     private static bool _photo, _cutscene, _driving = true, _drivingOnTop = true;
     private static bool _loggedError;
 
+    /// <summary>Frames after launch in which a missing input stack is expected and not worth a log line.</summary>
+    private const int StartupFrames = 300;
+
     /// <summary>True while the game's photo mode or free camera is active.</summary>
     internal static bool PhotoOrFreeCamera
     {
@@ -97,9 +100,12 @@ internal static class CameraView
         }
         catch (Exception e)
         {
-            DebugLog.Error("core", e, "CameraView.Compute");
             // Without the input stack, behave as before it was asked: driving unless photo mode says otherwise.
             _driving = _drivingOnTop = !_photo;
+            // The mods tick on frame 1 of the entry scene, before the game has built its GameInput (GetActiveMaps reads
+            // it and throws a NullReferenceException until then). Not an error: ask again next frame.
+            if (Time.frameCount < StartupFrames) return;
+            DebugLog.Error("core", e, "CameraView.Compute");
             if (_loggedError) return;
             _loggedError = true;
             Core.CorePlugin.Logger?.LogWarning("[CameraView] reading the game's input maps failed: " + e.Message);

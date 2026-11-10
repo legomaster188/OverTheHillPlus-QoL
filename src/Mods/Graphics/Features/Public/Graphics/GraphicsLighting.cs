@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.UI;
+#if MELON
+using Il2CppTND.Upscaling.Framework;
+#else
 using TND.Upscaling.Framework;
+#endif
 using UnityEngine;
 using A = OverTheHillPlus.Features.Public.Gfx.LightingApply;
 using S = OverTheHillPlus.Features.Public.Gfx.LightingScene;

@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -590,6 +594,7 @@ internal static class NativeCanvas
         '×' => "x",
         '·' => "-",
         '•' => "*",
+        '●' => "*",
         '—' => "-",
         '–' => "-",
         '…' => "...",
@@ -614,7 +619,7 @@ internal static class NativeCanvas
         _ => "?",
     };
 
-    private static string Sanitize(string s, TMP_FontAsset font)
+    internal static string Sanitize(string s, TMP_FontAsset font)
     {
         if (s == null || font == null) return s;
         bool any = false;

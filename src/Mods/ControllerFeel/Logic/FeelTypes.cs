@@ -30,6 +30,8 @@ internal struct FeelInput
     public int Wheels, Grounded;
     /// <summary>Share of the grounded wheels on each <see cref="Surface"/> (sums to 1 when any wheel is down); null = none known.</summary>
     public float[] SurfaceShare;
+    /// <summary>0 to 1: extra rattle from the car's tyres (snow chains clattering on the road), set by another mod through core's RumbleHints. Played with the surface.</summary>
+    public float Rattle;
     /// <summary>Biggest suspension speed any wheel saw since the last frame (m/s, either direction).</summary>
     public float SuspensionPeak;
     /// <summary>0 to 1: how far into its bump stop the deepest wheel went since the last frame.</summary>

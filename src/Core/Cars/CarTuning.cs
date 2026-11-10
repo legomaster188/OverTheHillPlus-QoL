@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 using Object = UnityEngine.Object;
 
 namespace OverTheHillPlus.Cars;
@@ -54,6 +58,7 @@ internal sealed class CarTuning
     public CarTuning(RuntimeCar car)
     {
         _car = car;
+        _next = car.Beat;
         _profile = (car.Def.Tuning ?? new CarTuningProfile()).Clamped();
     }
 
@@ -94,10 +99,11 @@ internal sealed class CarTuning
         float wheelMass = CarPhysicsFit.WheelMassScale(p, lay.DonorTyreRadius, lay.TyreRadius);
         float bump = CarPhysicsFit.BumpStopScale(p);
         WheelValues first = null;
+        float midZ = (lay.FrontZ + lay.RearZ) * 0.5f;
         foreach (var wc in tpl.GetComponentsInChildren<VPFunselektor3DRaycastWheelCollider>(true))
         {
             if (wc == null) continue;
-            if (radius) wc.radius = lay.TyreRadius;
+            if (radius) wc.radius = tpl.transform.InverseTransformPoint(wc.transform.position).z < midZ ? lay.RearTyreRadius : lay.TyreRadius;
             wc.suspensionTravel *= p.SuspensionTravel;
             wc.springRate *= p.SpringRate;
             wc.damperRate *= p.DamperRate;
@@ -134,10 +140,16 @@ internal sealed class CarTuning
 
     private bool Allowed => _car.Ready && (GameState.PhysicsAllowed || ModManager.ServerModActive(_car.Id));
 
+    /// <summary>The cars a modded car's tuning handles right now (every modded car type together).</summary>
+    private static readonly ClaimBook ModdedTuned = new();
+
+    /// <summary>True while a modded car's tuning handles this car (it multiplies the car's upgrade layers in itself).</summary>
+    internal static bool IsModdedTuned(IntPtr car) => ModdedTuned.IsHeld(car.ToInt64(), Time.unscaledTime);
+
     public void Tick()
     {
         if (Time.unscaledTime < _next) return;
-        _next = Time.unscaledTime + 1f;
+        _next = _car.NextBeat(1f);
         if (!Allowed)
         {
             if (_cars.Count > 0) RestoreAll();
@@ -158,6 +170,8 @@ internal sealed class CarTuning
             var car = fp.GetComponent<VPVehicleController>();
             if (car == null || !car.isActiveAndEnabled) continue;
             seen.Add(car.Pointer);
+            // A modded car's upgrade layers go in here: core's stock-car tuner leaves it alone.
+            ModdedTuned.Hold(car.Pointer.ToInt64(), Time.unscaledTime);
             // Another mod is setting these values by hand: stand back without letting go of the slots (see ClaimBook), so the
             // two never feed each other's writes back in.
             if (CarTuneClaims.IsHeld(car.Pointer)) continue;
@@ -171,7 +185,9 @@ internal sealed class CarTuning
                 };
             }
             float load = _profile.TowKg > 0f ? CarTowLoads.Of(car.Pointer) : 0f;
-            rec.Apply(_profile, TowRules.PowerFactor(load, _profile.TowKg), TowRules.SpeedFactor(load, _profile.TowKg), Fit);
+            // The car's upgrade layers (a career's engine stages, lift, winch...) go on top of its own tuning.
+            rec.Apply(_profile, TowRules.PowerFactor(load, _profile.TowKg), TowRules.SpeedFactor(load, _profile.TowKg), Fit,
+                CarTuneLayers.For(car.Pointer));
             if (CarPhysicsProbe.Enabled) CarPhysicsProbe.Watch(_car, fp, car);
         }
         List<IntPtr> gone = null;

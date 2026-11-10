@@ -18,6 +18,16 @@ public static class CarPhysicsFit
     /// <summary>The game's fixed step (Time.fixedDeltaTime 0.02 s) split in VPP's 2 solver substeps.</summary>
     public const float SolverStep = 0.01f;
 
+    /// <summary>
+    /// The longest physical wheelbase (metres, front axle to the rear wheel colliders) a modded car is built with. Measured
+    /// in the game on 2026-11-09 with the brakes on, on flat ground: a heavy truck stands still up to about 3.9 m and
+    /// beyond that the tyres rock it from side to side at about 12 Hz (the Longhorn at 4.0 m and over, the Mastiff stretched
+    /// to 4.25 m), and neither the body's inertia (x6), the springs, the dampers, the brakes, the tyre grip (x1.6) nor the
+    /// solver's substeps change that: only a shorter wheelbase does. The stock cars stop at 3.31 m (the Blast Wagon).
+    /// A longer car keeps its visible wheels where the model has them with <see cref="CarDefinition.PhysicalRearShift"/>.
+    /// </summary>
+    public const float MaxStableWheelbase = 3.65f;
+
     /// <summary>The ratio of a tyre's radius to the donor's (1 when the model's radius is not used, see
     /// <see cref="CarWheelFit.Applies"/>).</summary>
     public static float RadiusRatio(float donorRadius, float modelRadius) =>
@@ -85,6 +95,15 @@ public static class CarPhysicsFit
 
     /// <summary>Most a body collider's bottom is lifted above the body's lowest point.</summary>
     public const float MaxColliderLift = 0.15f, MinColliderLift = 0.05f;
+
+    /// <summary>A boat's collider starts this far over its keel: a hull has no sills to skim rocks with, and ashore it
+    /// should rest on them, not sink its bottom into them (its hidden wheels stand 2 cm under the keel).</summary>
+    public const float BoatColliderLift = 0.01f;
+
+    /// <summary>The lift for a vehicle of this kind: a boat's <see cref="BoatColliderLift"/>, otherwise
+    /// <see cref="ColliderLift(float, float, float)"/>.</summary>
+    public static float ColliderLift(VehicleKind kind, float donorLift, float donorRadius, float modelRadius) =>
+        kind == VehicleKind.Boat ? BoatColliderLift : ColliderLift(donorLift, donorRadius, modelRadius);
 
     /// <summary>
     /// How far above the body's lowest point its collider starts. The game's cars keep theirs 0.08 to 0.23 m above their

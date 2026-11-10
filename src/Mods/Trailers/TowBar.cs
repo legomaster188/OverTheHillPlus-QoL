@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using UnityEngine;
 
 namespace OverTheHillPlus.Trailers;
@@ -8,7 +12,9 @@ namespace OverTheHillPlus.Trailers;
 /// <summary>
 /// Finds a car's mounted tow bar (the game's cosmetic item <c>TowBar</c> under the rear bumper slot, active only while
 /// mounted) and the hitch ball on it. Read from the live object, so it follows wherever the car framework placed the
-/// slot on a modded car, and a car that dismounts the bar loses its hitch at once.
+/// slot on a modded car, and a car that dismounts the bar loses its hitch at once. In a career the part is not needed:
+/// the game prices the bar at 0 with no level or DLC, but nothing shows a new profile owns it, so a car without it
+/// still hitches on the spot where it would sit (the bar stays unmounted and nothing is drawn).
 /// </summary>
 internal static class TowBar
 {
@@ -21,16 +27,19 @@ internal static class TowBar
         if (car == null) return false;
         try
         {
-            Transform bar = null;
+            Transform bar = null, unmounted = null;
             foreach (var t in car.GetComponentsInChildren<Transform>(true))
             {
                 if (t == null || t.name != TowHitch.PartName) continue;
                 if (t.gameObject.activeInHierarchy) { bar = t; break; }
+                unmounted ??= t;
             }
-            if (bar == null) return false;
+            bool mounted = bar != null;
+            if (!TowHitch.Accepts(mounted, unmounted != null, OverTheHillPlus.Api.Career.Playing)) return false;
+            bar ??= unmounted;
             var ct = car.transform;
             MeshFilter best = null;
-            foreach (var mf in bar.GetComponentsInChildren<MeshFilter>(false))
+            foreach (var mf in bar.GetComponentsInChildren<MeshFilter>(!mounted))
             {
                 if (mf == null || mf.sharedMesh == null) continue;
                 if (best == null || mf.name.EndsWith("LOD0", StringComparison.Ordinal)) best = mf;

@@ -43,7 +43,7 @@ internal static class RadioSimple
         SimpleMenu.Toggle(RadioConfig.DuckForGameMusic, "Turn down for the game's music", "The radio gets quieter while the game's own music plays.");
         SimpleMenu.Button("Read the folder again", $"{list?.Stations.Count ?? 0} stations, {RadioPlayer.TrackCount} tracks",
             "Picks up files you added while the game runs.", () => RadioPlayer.Rescan(announce: true));
-        SimpleMenu.Note("Put mp3, ogg or wav files in BepInEx/config/oth.radio. Files in a sub-folder make a station named after it.");
+        SimpleMenu.Note("Put mp3, ogg or wav files in " + OverTheHillPlus.Loader.LoaderText.ConfigDir + "/oth.radio. Files in a sub-folder make a station named after it.");
     }
 
     private static string KeyHint(Key key) => key == Key.None ? "" : $" Key: {KeybindEditor.KeyName(key)}.";

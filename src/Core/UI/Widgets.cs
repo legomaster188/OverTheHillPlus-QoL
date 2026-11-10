@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.Features.Public;
 using OverTheHillPlus.UI;
 using OverTheHillPlus.UI.GameMenu;

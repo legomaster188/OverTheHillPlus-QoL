@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 
 namespace OverTheHillPlus.Logging;
 

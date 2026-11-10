@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Cockpit;
@@ -13,9 +15,13 @@ using OverTheHillPlus.Core.Manager;
 /// Cockpit: a first-person view from the driver's seat, with a dashboard, wheel, gauges and pillars built at runtime to
 /// fit each car, free look and head sway. Your view only; nothing is sent to anyone.
 /// </summary>
+#if MELON
+public class CockpitPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class CockpitPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.cockpit";
     public const string Name = "Cockpit+";
@@ -24,7 +30,7 @@ public class CockpitPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.cockpit.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "cockpit";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

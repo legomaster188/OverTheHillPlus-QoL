@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFunCore.Managers;
+#else
 using FunCore.Managers;
+#endif
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 using OverTheHillPlus.ServerUtils;

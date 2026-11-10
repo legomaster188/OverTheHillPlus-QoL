@@ -1,7 +1,9 @@
-using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using System;
+using OverTheHillPlus.Loader;
 using OverTheHillPlus.Cars;
 
 namespace OverTheHillPlus.Longhorn;
@@ -16,19 +18,23 @@ using OverTheHillPlus.Core.Manager;
 /// the garage entry (free), the saves (never named in them), the join rules, the tuning, paint, skins and engine sound
 /// and their sync. The tandem drive axle is one physical rear axle drawn twice (core's CarTandem).
 /// </summary>
+#if MELON
+public class LonghornPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 // Core 1.1.0 has the car framework (an older core can't load this mod).
 [BepInDependency(Core.CorePlugin.Guid, ">=1.1.0")]
 public class LonghornPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.longhorn";
     public const string Name = "Longhorn 389";
-    public const string Version = "1.0.0";
+    public const string Version = "1.0.3";
 
     /// <summary>Mod id: names the config file (oth.longhorn.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = LonghornDefinition.Id;
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
 
     public override void Load()
     {
@@ -71,6 +77,6 @@ internal static class LonghornCar
 
     public static void DrawPage() => ModdedCars.DrawPage(Def);
 
-    public static string Start(System.Reflection.Assembly assets, BepInEx.Configuration.ConfigFile config, ManualLogSource log) =>
+    public static string Start(System.Reflection.Assembly assets, OverTheHillPlus.Config.ConfigFile config, ModLog log) =>
         ModdedCars.Start(Def, assets, config, log);
 }

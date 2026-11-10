@@ -1,4 +1,4 @@
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using UnityEngine.InputSystem;
 
 namespace OverTheHillPlus.Flares;

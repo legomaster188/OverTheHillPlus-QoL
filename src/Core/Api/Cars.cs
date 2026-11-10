@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using OverTheHillPlus.Shared;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Api;
 
@@ -194,7 +195,11 @@ public static class Cars
     {
         try
         {
+#if MELON
+            var service = global::Il2Cpp.ModManager.Instance?.Liveries;
+#else
             var service = global::ModManager.Instance?.Liveries;
+#endif
             if (service == null) return;
             var found = service.GetLiveriesForCar(car.LiveryCar);
             if (found == null) return;
@@ -310,7 +315,7 @@ public static class Cars
     /// it is refused. Ask for a key to be added in a Mod Manager release.</para>
     /// </summary>
     public static string AddCar(OverTheHillPlus.Cars.CarDefinition definition, System.Reflection.Assembly assets,
-        BepInEx.Logging.ManualLogSource log = null)
+        OverTheHillPlus.Loader.ModLog log = null)
     {
         string problem = definition == null ? "no car definition" : ApiGuard.Problem(definition.Id);
         var mod = problem == null ? Core.Manager.ModManager.Find(definition.Id) : null;
@@ -324,6 +329,9 @@ public static class Cars
         }
         return OverTheHillPlus.Cars.ModdedCars.Start(definition, assets, Core.Manager.ModManager.ConfigFor(definition.Id), log);
     }
+
+    /// <summary>True when the car object is a modded car that counts as a wrecker (the career takes it for the car hauler).</summary>
+    public static bool IsWrecker(UnityEngine.GameObject car) => OverTheHillPlus.Cars.CarAnchors.Of(car)?.Def.Wrecker == true;
 
     /// <summary>The car's rows for your page (its state, "Drive the &lt;car&gt;", the garage switch, paint, trim, engine
     /// sound and skin): call it from your ModInfo.DrawSimple.</summary>
@@ -346,7 +354,7 @@ public static class Cars
                 catch (Exception ex) { DebugLog.Error("core", ex, "Cars.SkinFolders"); }
             }
             if (!string.IsNullOrEmpty(local)) list.Add(local);
-            list.Add(Path.Combine(BepInEx.Paths.ConfigPath, "oth.liveries"));
+            list.Add(Path.Combine(OthLoader.ConfigDir, "oth.liveries"));
             return list;
         }
     }

@@ -95,7 +95,8 @@ public static class CarPaint
         foreach (var p in paints)
             if (string.Equals(p.Name, paint, StringComparison.OrdinalIgnoreCase)) return p.Rgb;
         if (string.Equals(paint, Custom, StringComparison.OrdinalIgnoreCase) && CarRgb.TryParse(customHex, out var c)) return c;
-        return paints[0].Rgb;
+        var shared = CarPalette.FindPaint(paint);
+        return shared != null ? shared.Rgb : paints[0].Rgb;
     }
 
     /// <summary>The trim colour for a trim setting (a body-colour trim = <paramref name="main"/>); the first (default)
@@ -105,6 +106,8 @@ public static class CarPaint
         foreach (var t in trims)
             if (string.Equals(t.Name, trim, StringComparison.OrdinalIgnoreCase)) return t.BodyColour ? main : t.Rgb;
         if (string.Equals(trim, Custom, StringComparison.OrdinalIgnoreCase) && CarRgb.TryParse(customHex, out var c)) return c;
+        var shared = CarPalette.FindTrim(trim);
+        if (shared != null) return shared.BodyColour ? main : shared.Rgb;
         return trims[0].BodyColour ? main : trims[0].Rgb;
     }
 

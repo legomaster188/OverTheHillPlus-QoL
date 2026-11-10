@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using UnityEngine;
 using Net = OverTheHillPlus.Features.Public.ModNet.ModNet;
 
@@ -25,6 +29,9 @@ internal static class TrailerNet
     public static float LastMessageAt { get; private set; } = -100f;
     public static bool Waiting => _pendingSince >= 0f;
 
+    // States a late joiner is still owed: the receiver's budget was used up by other channels, so they go out on the next ticks.
+    private static readonly List<(PlayerRef to, TrailerLive trailer)> Replay = new();
+
     public static void Register()
     {
         Net.Register(Net.Channels.Trailers, new Net.ChannelOptions
@@ -40,13 +47,18 @@ internal static class TrailerNet
         Net.OnPeerReady(p =>
         {
             if (!Net.IsHost || !Net.PeerHas(p, Net.Channels.Trailers)) return;
-            foreach (var t in TrailerWorld.All)
-                Net.SendTo(p, Net.Channels.Trailers, TrailerMessages.State, TrailerMessages.EncodeState(t.State));
+            foreach (var t in TrailerWorld.All) Replay.Add((p, t));
+            DrainReplay();
         });
-        Net.OnPeerGone(TrailerHost.PeerGone);
+        Net.OnPeerGone(p =>
+        {
+            Replay.RemoveAll(r => r.to == p);
+            TrailerHost.PeerGone(p);
+        });
         Net.OnSessionReset(() =>
         {
             _pendingSince = -1f;
+            Replay.Clear();
             TrailerWorld.Clear();
         });
     }
@@ -91,8 +103,30 @@ internal static class TrailerNet
         }
     }
 
+    private static void DrainReplay()
+    {
+        while (Replay.Count > 0)
+        {
+            var (to, t) = Replay[0];
+            // A trailer that went away while the replay waited (rate limit) is skipped: the late joiner never saw it, and
+            // its state would sit in the joiner's pending list for good, waiting for an object that never comes.
+            if (!StillInWorld(t)) { Replay.RemoveAt(0); continue; }
+            if (Net.SendTo(to, Net.Channels.Trailers, TrailerMessages.State, TrailerMessages.EncodeState(t.State)) == Net.SendResult.RateLimited) return;
+            Replay.RemoveAt(0);
+        }
+    }
+
+    private static bool StillInWorld(TrailerLive t)
+    {
+        if (t == null) return false;
+        foreach (var live in TrailerWorld.All)
+            if (ReferenceEquals(live, t)) return true;
+        return false;
+    }
+
     public static void Tick()
     {
+        DrainReplay();
         if (_pendingSince >= 0f && Time.unscaledTime - _pendingSince > ReplyTimeout)
         {
             _pendingSince = -1f;
@@ -106,6 +140,10 @@ internal static class TrailerNet
         LastMessage = s;
         LastMessageAt = Time.unscaledTime;
         try { Menu.SetStatus(s); } catch (Exception ex) { DebugLog.Error("trailers", ex, "TrailerNet.Report"); }
+        // a refusal (no tow bar, moving, no free bay) has to reach a driver with no menu open
+        if (s.StartsWith("Blocked", StringComparison.Ordinal) || s.StartsWith("Failed", StringComparison.Ordinal))
+            try { OverTheHillPlus.UI.GameMenu.GameToast.Show(s, OverTheHillPlus.UI.GameMenu.GameToast.Warning, 4f); }
+            catch (Exception ex) { DebugLog.Error("trailers", ex, "TrailerNet.Report toast"); }
         TrailersPlugin.Logger.LogInfo("[Trailers] " + s);
     }
 
@@ -138,6 +176,7 @@ internal static class TrailerNet
             case TrailerReply.Busy: return "Blocked: busy, try again";
             case TrailerReply.BallTaken: return "Blocked: your car already tows a trailer (unhitch it first)";
             case TrailerReply.NoTowHitch: return "Blocked: " + TowHitch.Need;
+            case TrailerReply.NoFifthWheel: return "Blocked: " + TowHitch.NeedFifthWheel;
             default: return "Failed: the host couldn't do it";
         }
     }

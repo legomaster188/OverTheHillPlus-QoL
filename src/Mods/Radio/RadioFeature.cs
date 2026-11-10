@@ -1,8 +1,14 @@
 using System;
+using OverTheHillPlus.Shared;
+using OverTheHillPlus.UI.HudKit;
 using OverTheHillPlus.Features;
 using OverTheHillPlus.Features.Public;
 using OverTheHillPlus.UI;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -80,7 +86,7 @@ internal sealed class RadioFeature : IFeature
 
     private static void DrawCard()
     {
-        Menu.Card("Radio", "Your own music while you drive: mp3, ogg and wav files in BepInEx/config/oth.radio, one station per sub-folder. Only you hear it.", () =>
+        Menu.Card("Radio", "Your own music while you drive: mp3, ogg and wav files in " + OverTheHillPlus.Loader.LoaderText.ConfigDir + "/oth.radio, one station per sub-folder. Only you hear it.", () =>
         {
             Menu.KeyValue("Now", RadioPlayer.Status);
             Menu.KeyValue("Folder", RadioPlayer.Root ?? "?");
@@ -104,25 +110,32 @@ internal sealed class RadioFeature : IFeature
         string msg = RadioPlayer.Notice;
         float age = Time.unscaledTime - RadioPlayer.NoticeAt;
         if (string.IsNullOrEmpty(msg) || age > 3.5f || age < 0f) return;
-        if (CoreBehaviour.CleanView) return;
-        if (Event.current == null || Event.current.type != EventType.Repaint) return;
+        if (CoreBehaviour.CleanView || !HudDraw.Repaint) return;
+        if (!HudDraw.Begin("radio")) return;
         Theme.Ensure();
         if (_toastStyle == null)
         {
             // Plain text: file names never get to apply rich-text tags.
             _toastStyle = new GUIStyle(Theme.Label) { alignment = TextAnchor.MiddleCenter, richText = false, wordWrap = false, clipping = TextClipping.Clip };
-            _toastStyle.normal.textColor = Theme.Text;
+            _toastStyle.normal.textColor = HudLayout.Cream;
         }
         float alpha = Mathf.Clamp01(3.5f - age);
         var prev = GUI.color;
-        GUI.color = new Color(1f, 1f, 1f, alpha);
-        var content = new GUIContent(msg);
-        var size = _toastStyle.CalcSize(content);
-        float w = Mathf.Min(size.x + 28f, Screen.width * 0.6f);
-        var r = new Rect((Screen.width - w) / 2f, Screen.height - 120f, w, 34f);
-        Theme.Fill(r, new Color(0.07f, 0.09f, 0.11f, 0.88f), 8);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), Theme.Accent, 2);
-        GUI.Label(r, content, _toastStyle);
-        GUI.color = prev;
+        try
+        {
+            var screen = HudLayout.Begin();
+            GUI.color = new Color(1f, 1f, 1f, alpha);
+            var size = HudDraw.Measure(msg, _toastStyle);
+            float w = Mathf.Min(size.x + 28f, screen.x * 0.6f);
+            var r = new Rect((screen.x - w) / 2f, screen.y - 120f, w, 34f);
+            WorldOverlay.PanelBox(r, Theme.Accent);
+            HudDraw.Label(r, msg, _toastStyle);
+        }
+        finally
+        {
+            GUI.color = prev;
+            HudLayout.End();
+            HudDraw.End();
+        }
     }
 }

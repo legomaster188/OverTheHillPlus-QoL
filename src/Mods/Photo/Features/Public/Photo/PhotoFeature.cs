@@ -21,7 +21,7 @@ internal sealed class PhotoFeature : IFeature
         PhotoModeLimits.Install();
 
         Registry.OnTick(Tick);
-        Registry.OnGui(PhotoCapture.DrawOverlays);
+        Registry.OnGui(PhotoCapture.DrawOverlays, wants: PhotoCapture.OverlaysWanted, repaintOnly: true);
         Registry.Section(Registry.PlusMode, "Photo", DrawScreenshots, 0);
         Registry.Section(Registry.PlusMode, "Photo", DrawCleanView, 10);
         Registry.Section(Registry.PlusMode, "Photo", DrawCinematic, 20);
@@ -142,7 +142,7 @@ internal sealed class PhotoFeature : IFeature
         });
     }
 
-    private static void Slider(BepInEx.Configuration.ConfigEntry<float> entry, string label, float min, float max, string fmt, string suffix, bool enabled)
+    private static void Slider(OverTheHillPlus.Config.ConfigEntry<float> entry, string label, float min, float max, string fmt, string suffix, bool enabled)
     {
         float before = entry.Value;
         Menu.SliderRow(entry, label, min, max, fmt, suffix, enabled);
@@ -186,7 +186,7 @@ internal sealed class PhotoFeature : IFeature
         });
     }
 
-    private static bool SliderChanged(BepInEx.Configuration.ConfigEntry<float> entry, string label, float min, float max, string fmt, string suffix, bool enabled)
+    private static bool SliderChanged(OverTheHillPlus.Config.ConfigEntry<float> entry, string label, float min, float max, string fmt, string suffix, bool enabled)
     {
         float before = entry.Value;
         Menu.SliderRow(entry, label, min, max, fmt, suffix, enabled);

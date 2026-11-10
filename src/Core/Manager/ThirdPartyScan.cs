@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using BepInEx;
-using BepInEx.Unity.IL2CPP;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Core.Manager;
 
@@ -20,20 +19,20 @@ internal static class ThirdPartyScan
     private static List<ThirdPartyPlugin> _list;
 
     /// <summary>BepInEx/plugins.</summary>
-    internal static string PluginsRoot => Paths.PluginPath;
+    internal static string PluginsRoot => OthLoader.PluginsDir;
 
     /// <summary>Where the queue lives (BepInEx/plugins/OverTheHillMods).</summary>
     internal static string PluginDir => CorePlugin.PluginDir;
 
     /// <summary>Called by core's Load with the plugins loaded so far and every plugin found in BepInEx/plugins.</summary>
-    internal static void NoteStartup(IEnumerable<PluginInfo> loadedSoFar, IEnumerable<PluginInfo> found)
+    internal static void NoteStartup(IEnumerable<LoadedPlugin> loadedSoFar, IEnumerable<LoadedPlugin> found)
     {
         try
         {
             if (loadedSoFar != null)
                 foreach (var p in loadedSoFar)
                 {
-                    string guid = p?.Metadata?.GUID;
+                    string guid = p?.Guid;
                     if (guid != null && !string.Equals(guid, CorePlugin.Guid, StringComparison.OrdinalIgnoreCase)) BeforeCore.Add(guid);
                 }
             if (found != null)
@@ -74,18 +73,21 @@ internal static class ThirdPartyScan
 
     private static List<ThirdPartyPlugin> Build()
     {
+#if MELON
+        // Under MelonLoader the list stays empty: other creators' melons are switched on and off in MelonLoader itself.
+        return new List<ThirdPartyPlugin>();
+#else
         var loaded = new List<PluginFacts>();
         var errors = new List<string>();
         var disabled = new List<PluginFacts>();
         try
         {
-            var chain = IL2CPPChainloader.Instance;
-            foreach (var kv in chain.Plugins)
+            foreach (var kv in OthLoader.Plugins)
             {
                 var f = Facts(kv.Value);
                 if (f != null) loaded.Add(f);
             }
-            if (chain.DependencyErrors != null) errors.AddRange(chain.DependencyErrors);
+            errors.AddRange(OthLoader.DependencyErrors);
         }
         catch (Exception e) { DebugLog.Error("core", e, "ThirdPartyScan.Build"); CorePlugin.Logger?.LogWarning("[Core] could not list the loaded plugins: " + e.Message); }
         try
@@ -104,21 +106,12 @@ internal static class ThirdPartyScan
             CorePlugin.Logger?.LogWarning("[Core] could not list other creators' plugins: " + e.Message);
             return new List<ThirdPartyPlugin>();
         }
+#endif
     }
 
-    private static PluginFacts Facts(PluginInfo p)
+    private static PluginFacts Facts(LoadedPlugin p)
     {
-        var meta = p?.Metadata;
-        if (meta == null || string.IsNullOrEmpty(meta.GUID)) return null;
-        return new PluginFacts { Guid = meta.GUID, Name = meta.Name, Version = VersionText(meta), Location = p.Location };
-    }
-
-    // BepInPlugin.Version is a SemanticVersioning type, which core doesn't reference: read it as an object.
-    private static readonly System.Reflection.PropertyInfo VersionProp = typeof(BepInPlugin).GetProperty("Version");
-
-    private static string VersionText(BepInPlugin meta)
-    {
-        try { return VersionProp?.GetValue(meta)?.ToString(); }
-        catch (Exception ex) { DebugLog.Error("core", ex, "ThirdPartyScan.VersionText"); return null; }
+        if (p == null || string.IsNullOrEmpty(p.Guid)) return null;
+        return new PluginFacts { Guid = p.Guid, Name = p.Name, Version = p.Version, Location = p.Location };
     }
 }

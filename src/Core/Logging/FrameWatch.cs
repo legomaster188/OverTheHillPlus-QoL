@@ -19,11 +19,13 @@ internal static class FrameWatch
     private static long _beat;
     private static int _frame;
     private static int _seqAtBeat;
-    private static double _nextSecond, _nextMinute, _nextLogSummary;
+    private static double _nextSecond, _nextMinute, _nextLogSummary, _nextScans;
+    // Frames since the last SCANS line, and those a driver can feel: the stutter in numbers, from any session's log.
+    private static long _frames, _over25, _over50, _over100;
     private static readonly RateLimiter Spikes = new(2.0, 400);
     /// <summary>The lengths of the last frames (the diagnostics snapshot's frame rate).</summary>
     internal static readonly FrameHistory Frames = new(2048);
-    private static readonly List<TrailRow> SpikeRows = new(64);
+    private static readonly List<TrailRow> SpikeRows = new(512);
     private static Thread _thread;
     private static double _hangSeconds = 3;
     private static double _spikeMs = 250;
@@ -56,6 +58,13 @@ internal static class FrameWatch
             double ms = (now - prev) * 1000.0 / Freq;
             Frames.Add(ms / 1000.0);
             Lifecycle.OnBeat(ms);
+            _frames++;
+            if (ms >= 25.0)
+            {
+                _over25++;
+                if (ms >= 50.0) _over50++;
+                if (ms >= 100.0) _over100++;
+            }
             if (DebugLog.On && _spikeMs > 0 && ms >= _spikeMs && frame > 30) Spike(ms, prev, now, _seqAtBeat, seq, frame - 1);
         }
         _seqAtBeat = seq;
@@ -99,6 +108,14 @@ internal static class FrameWatch
                 }
             }
             if (DebugLog.IsInfo) DebugLog.Write("STATS", "-", HookTiming.Table(60)); // once a minute: which mods cost frame time
+            // Every 5 minutes: how often the world was searched (it should stand still while nothing comes or goes), and
+            // how many frames were long.
+            if (now >= _nextScans)
+            {
+                _nextScans = now + 300;
+                DebugLog.Write("SCANS", "-", $"{_frames} frames, {_over25} over 25 ms, {_over50} over 50 ms, {_over100} over 100 ms; " + WorldScan.Report());
+                _frames = _over25 = _over50 = _over100 = 0;
+            }
         }
         catch { }
     }
@@ -111,7 +128,7 @@ internal static class FrameWatch
         if (!Spikes.Allow(frameEnd / Freq)) return;
         try
         {
-            int skipped = CrashTrail.Recent(seqFrom, seqTo, 60, SpikeRows);
+            int skipped = CrashTrail.Recent(seqFrom, seqTo, 500, SpikeRows);
             string text = ReportText.SpikeText(ms, _spikeMs, frame, SpikeRows, skipped, frameStart, frameEnd, Freq, ModMap.ModOfStep,
                                                Spikes.TakeSuppressed());
             string mod = null;

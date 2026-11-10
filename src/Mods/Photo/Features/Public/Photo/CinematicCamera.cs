@@ -1,5 +1,9 @@
 using System;
+#if MELON
+using Il2CppCinemachine;
+#else
 using Cinemachine;
+#endif
 using Il2CppInterop.Runtime;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -45,7 +49,6 @@ internal static class CinematicCamera
 
     private static CameraSettingsInitializer _init;
     private static ExtraCameraControls _zoom;
-    private static float _nextFind;
 
     // Baselines (the game's values before we changed anything), per instance.
     private static IntPtr _zoomPtr;
@@ -104,12 +107,13 @@ internal static class CinematicCamera
         }
     }
 
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer FindPace = WorldScan.Pace("zoom camera", 1f);
+
     private static void Find()
     {
         // Unity's == null also catches destroyed objects (scene changes), so we only search when something is missing.
         if (_init != null && _zoom != null) return;
-        if (Time.unscaledTime < _nextFind) return;
-        _nextFind = Time.unscaledTime + 1f;
+        if (!WorldScan.Due(FindPace, Time.unscaledTime)) return;
 
         if (_init == null) _init = Object.FindObjectOfType<CameraSettingsInitializer>();
         if (_zoom == null)
@@ -223,7 +227,7 @@ internal static class CinematicCamera
         _fovTouched = false;
         // Driving+'s FOV override (if set, read through core) re-applies itself next frame; otherwise go back to
         // the game setting.
-        if (CoreConfig.Find("QoL", "FovOverride") is BepInEx.Configuration.ConfigEntry<float> fov && fov.Value > 0f) return;
+        if (CoreConfig.Find("QoL", "FovOverride") is OverTheHillPlus.Config.ConfigEntry<float> fov && fov.Value > 0f) return;
         try
         {
             int game = _init != null ? _init.currentFOV : 0;

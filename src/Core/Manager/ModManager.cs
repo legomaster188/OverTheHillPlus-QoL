@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using BepInEx;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Core.Manager;
 
@@ -18,8 +18,50 @@ internal static class ModManager
 
     public static IReadOnlyList<ModInfo> All => Mods;
 
+    /// <summary>What the MODS page lists: everything but the career's own parts (while a career mod runs to hold them).</summary>
+    public static List<ModInfo> Listed => Mods.FindAll(m => !IsCareerPart(m));
+
+    /// <summary>The career mod's id and file: only to tell whether it is there, core never references it.</summary>
+    internal const string CareerId = "career", CareerFile = "";
+
+    private static bool? _careerHostsParts;
+
+    /// <summary>
+    /// The career mod is installed and switched on, so the mods marked <see cref="ModInfo.CareerPart"/> are parts of it:
+    /// always on, off the MODS list, their pages on the CAREER screen. Without it (the cars-only pack, or the career
+    /// switched off) they are ordinary mods with their own MODS row, switch and page: Trailers stood hidden with no page
+    /// to open in a game without the career. Decided once from the career's file and switch, so it never depends on which
+    /// plugin loads first.
+    /// </summary>
+    public static bool CareerHostsParts
+    {
+        get
+        {
+            if (_careerHostsParts is bool known) return known;
+            bool on = false;
+            try
+            {
+                string dir = OthLoader.ModsDir;
+                // (an edition without the career has no file name here at all: tools/export_qol.py blanks it)
+                on = !Blocked && CareerFile.Length > 0 && !string.IsNullOrEmpty(dir) && File.Exists(Path.Combine(dir, CareerFile)) && Enabled.Get(CareerId);
+            }
+            catch (Exception e) { DebugLog.Error("core", e, "ModManager.CareerHostsParts"); }
+            _careerHostsParts = on;
+            DebugLog.Info("core", on
+                ? "the career mod is installed and on: its parts (trailers, ...) live on the CAREER screen"
+                : "no career mod runs: its parts (trailers, ...) are ordinary mods with a MODS row and a switch");
+            return on;
+        }
+    }
+
+    /// <summary>A part of the career right now (see <see cref="CareerHostsParts"/>).</summary>
+    public static bool IsCareerPart(ModInfo m) => m != null && m.CareerPart && CareerHostsParts;
+
+    /// <summary>Tests: decide <see cref="CareerHostsParts"/> again (null: from the files on the next read).</summary>
+    internal static void SetCareerHostsPartsForTests(bool? value) => _careerHostsParts = value;
+
     private static EnabledStore Enabled =>
-        _enabled ??= new EnabledStore(Path.Combine(Paths.ConfigPath, "oth.core.enabled.txt"));
+        _enabled ??= new EnabledStore(Path.Combine(OthLoader.ConfigDir, "oth.core.enabled.txt"));
 
     /// <summary>The assembly that registered each mod (its card image, card.png, is an embedded resource of it).</summary>
     private static readonly Dictionary<string, Assembly> Sources = new(StringComparer.OrdinalIgnoreCase);
@@ -38,7 +80,7 @@ internal static class ModManager
         if (source != null) Sources[info.Id] = source;
         else Sources.Remove(info.Id);
         // Settings migrated from OverTheHillPlus while this mod wasn't installed: hand them over before it binds.
-        try { ConfigMigration.ApplyPending(Paths.ConfigPath, info.Id); }
+        try { ConfigMigration.ApplyPending(OthLoader.ConfigDir, info.Id); }
         catch (Exception e) { CorePlugin.Logger?.LogError($"[{info.Id}] could not take its migrated settings: {e.Message}"); }
     }
 
@@ -60,7 +102,7 @@ internal static class ModManager
     /// </summary>
     public static bool IsEnabled(string id)
     {
-        bool on = !Blocked && Enabled.Get(id);
+        bool on = !Blocked && (IsCareerPart(Find(id)) || Enabled.Get(id));
         if (EnabledLogged.Add(id ?? "?"))
             DebugLog.Info(id ?? "?", on ? "enabled: loading" : Blocked ? "off: blocked by the old plugin" : "off: switched off on the MODS page, nothing of it runs");
         return on;
@@ -154,7 +196,7 @@ internal static class ModManager
     {
         if (!Configs.TryGetValue(id, out var file))
         {
-            string path = Path.Combine(Paths.ConfigPath, $"oth.{id}.cfg");
+            string path = Path.Combine(OthLoader.ConfigDir, $"oth.{id}.cfg");
             // The file's text, before the mod binds and saves it: the start-up self-checks look for lines BepInEx could not read.
             Logging.StartupChecks.CaptureConfig(path);
             file = new ConfigFile(path, true);

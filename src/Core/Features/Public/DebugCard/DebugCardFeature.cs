@@ -31,7 +31,7 @@ internal sealed class DebugCardFeature : IFeature
     private static void DrawCard()
     {
         Menu.Card("Debug log and diagnostics",
-            "What the mods write for finding problems: the debug log (BepInEx/oth-debug), crash reports and snapshots (BepInEx/oth-reports).", () =>
+            "What the mods write for finding problems: the debug log (" + OverTheHillPlus.Loader.LoaderText.DataDir + "/oth-debug), crash reports and snapshots (" + OverTheHillPlus.Loader.LoaderText.DataDir + "/oth-reports).", () =>
             {
                 if (DebugConfig.Level != null)
                 {
@@ -40,7 +40,7 @@ internal sealed class DebugCardFeature : IFeature
                         (int)DebugConfig.Level.Value, LevelNames, i => DebugConfig.Level.Value = (DebugLevel)i);
                 }
                 SimpleMenu.Button("Write a diagnostics snapshot", KeyText(),
-                    "Writes BepInEx/oth-reports/snapshot-<time>.txt: every mod's state and last error, hook timing, recent errors, the session, " +
+                    "Writes " + OverTheHillPlus.Loader.LoaderText.DataDir + "/oth-reports/snapshot-<time>.txt: every mod's state and last error, hook timing, recent errors, the session, " +
                     "players and car, the mod network, memory, frame rate and the last 200 steps. Send it with a bug report.",
                     () => Menu.SetStatus(Snapshot.Write("MODS page button")));
                 string last = Snapshot.LastPath;

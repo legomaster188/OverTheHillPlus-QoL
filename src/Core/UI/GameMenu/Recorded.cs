@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using UnityEngine;
 
 namespace OverTheHillPlus.UI.GameMenu;
@@ -13,7 +13,7 @@ namespace OverTheHillPlus.UI.GameMenu;
 internal static class Recorded
 {
     // Heights as on the drawn page (SimpleMenu rows are 42 + a gap of 5, list rows 52 + 5).
-    internal const float RowH = 47f, ListH = 57f, LineH = 24f, HeadingH = 32f, SwitchH = 32f, SliderH = 30f, BannerH = 50f, TextRowH = 34f;
+    internal const float RowH = 47f, ListH = 57f, LineH = 24f, HeadingH = 32f, SwitchH = 32f, SliderH = 30f, BannerH = 50f, TextRowH = 34f, SwatchesH = 40f;
 
     private static RowRecorder R => RowRecorder.Current;
 
@@ -69,9 +69,9 @@ internal static class Recorded
         if (next != index && next >= 0) set(next);
     }
 
-    internal static bool Button(string label, string value, string hint, Action action, bool enabled, string id = null)
+    internal static bool Button(string label, string value, string hint, Action action, bool enabled, string id = null, CardInfo card = null)
     {
-        var input = Row(new RowModel { Kind = RowKind.Button, Label = label ?? "", Value = value, Hint = hint, Enabled = enabled, Id = id }, RowH);
+        var input = Row(new RowModel { Kind = RowKind.Button, Label = label ?? "", Value = value, Hint = hint, Enabled = enabled, Card = card, Id = id }, RowH);
         if (input == null || !enabled || input.Value.Kind != RowInputKind.Press) return false;
         action?.Invoke();
         return true;
@@ -105,14 +105,24 @@ internal static class Recorded
         return i.Kind == RowInputKind.Press;
     }
 
-    internal static float Slider(string label, float value, float min, float max, string shown, bool enabled, string hint)
+    internal static float Slider(string label, float value, float min, float max, string shown, bool enabled, string hint, float step = 0f)
     {
         var input = Row(new RowModel
         {
-            Kind = RowKind.Slider, Label = label ?? "", Value = shown, Min = min, Max = max, Number = value, Enabled = enabled, Hint = hint,
+            Kind = RowKind.Slider, Label = label ?? "", Value = shown, Min = min, Max = max, Number = value, Enabled = enabled, Hint = hint, Step = step,
         }, SliderH);
         if (input == null || !enabled || input.Value.Kind != RowInputKind.SetValue) return value;
-        return Mathf.Clamp(input.Value.Value, Mathf.Min(min, max), Mathf.Max(min, max));
+        return RowMap.Snap(Mathf.Clamp(input.Value.Value, Mathf.Min(min, max), Mathf.Max(min, max)), min, max, step);
+    }
+
+    /// <summary>A strip of colour squares (0xRRGGBB) with the one at <paramref name="index"/> marked; a click on one calls
+    /// <paramref name="set"/> with its index.</summary>
+    internal static void Swatches(string label, int[] colors, int index, Action<int> set, bool enabled)
+    {
+        var input = Row(new RowModel { Kind = RowKind.Swatches, Label = label ?? "", Colors = colors, Index = index, Enabled = enabled }, SwatchesH);
+        if (input == null || !enabled || input.Value.Kind != RowInputKind.Pick) return;
+        int pick = input.Value.Step;
+        if (colors != null && pick >= 0 && pick < colors.Length && pick != index) set(pick);
     }
 
     /// <summary>A card's title row; returns whether its body shows (pressing the row folds it open or shut).</summary>

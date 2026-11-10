@@ -1,4 +1,4 @@
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.ServerUtils;
 
 namespace OverTheHillPlus.Features.Public.NetPerf;

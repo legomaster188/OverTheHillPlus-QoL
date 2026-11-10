@@ -18,7 +18,7 @@ public static class HiloDefinition
     /// <summary>CarInfo.name and the livery car name ("car": "Hilo" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Hilo";
     public const string Guid = "a1f149567da64dd7a9820d455a6fd8a7";
-    public const int Protocol = 3;
+    public const int Protocol = 4;
 
     public static CarDefinition Create() => new()
     {
@@ -33,6 +33,8 @@ public static class HiloDefinition
         FusionGuid = Guid,
         RegistryKey = "hilo",
         Protocol = Protocol,
+        // fitfix: the game items these bodies can't carry (floating over the cab, sunk in the bed floor or the body)
+        HiddenItems = new[] { "Visual/Bed/Camper_Bed", "Visual/Bed/Canoe_Bed", "Visual/Bed/Christmas_Bed", "Visual/Bed/Fisher_Bed" },
         // The Burro, the stock pickup (2.94 m wheelbase against the Hilo's 2.80 m, 5.0 m long against 4.70 m, a regular
         // cab and an open bed): its skeleton, garage data (vehicle class, upgrades) and cosmetic slots (Liveries/hilo/README.md).
         DefaultDonor = "Car_Burro",

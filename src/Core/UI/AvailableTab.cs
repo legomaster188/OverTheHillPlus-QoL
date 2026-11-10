@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using BepInEx.Configuration;
-using BepInEx.Unity.IL2CPP;
+using OverTheHillPlus.Config;
+using OverTheHillPlus.Loader;
 using OverTheHillPlus.Core.Install;
 using OverTheHillPlus.UI.Native;
 using UnityEngine;
@@ -139,7 +139,7 @@ internal static class AvailableTab
             file = null;
             try
             {
-                var plugins = IL2CPPChainloader.Instance?.Plugins;
+                var plugins = OthLoader.Plugins;
                 if (plugins != null && plugins.TryGetValue("com.oth." + m.Id, out var info) && !string.IsNullOrEmpty(info.Location))
                 {
                     string full = Path.GetFullPath(info.Location);
@@ -437,7 +437,7 @@ internal static class AvailableTab
             if (m == null || !m.Private) continue;
             try
             {
-                var plugins = IL2CPPChainloader.Instance?.Plugins;
+                var plugins = OthLoader.Plugins;
                 if (plugins != null && plugins.TryGetValue("com.oth." + m.Id, out var info) && !string.IsNullOrEmpty(info.Location))
                     files.Add(Path.GetFileName(info.Location));
             }
@@ -449,6 +449,13 @@ internal static class AvailableTab
     private static void StartCheck()
     {
         if (_checking) return;
+        if (!OthLoader.CanInstall)
+        {
+            // Our release lists BepInEx builds: nothing on it can be installed into MelonLoader's Mods folder.
+            _manifestError = "Installing and updating mods from this page works with the BepInEx version only. " +
+                             "Get new versions of the MelonLoader mods from the page you downloaded them from.";
+            return;
+        }
         _checking = true;
         _manifestError = null;
         Background.Run(FetchManifest, (m, e) => CheckDone(m, e == null ? null : e is ManifestException ? e.Message : HttpFetch.Describe(e)));

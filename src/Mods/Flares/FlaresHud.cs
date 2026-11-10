@@ -1,5 +1,7 @@
 using System;
+using OverTheHillPlus.Shared;
 using OverTheHillPlus.UI;
+using OverTheHillPlus.UI.HudKit;
 using UnityEngine;
 
 namespace OverTheHillPlus.Flares;
@@ -20,27 +22,30 @@ internal static class FlaresHud
 
     internal static void Draw()
     {
-        var ev = Event.current;
-        if (ev == null || ev.type != EventType.Repaint || string.IsNullOrEmpty(_text)) return;
+        if (!HudDraw.Repaint || string.IsNullOrEmpty(_text)) return;
         float age = Time.unscaledTime - _at;
         if (age > ShownFor || CameraView.HudHidden || CoreBehaviour.CleanView) return;
+        if (!HudDraw.Begin(FlaresPlugin.ModId)) return;
         try
         {
             Theme.Ensure();
             _style ??= new GUIStyle(Theme.Label) { fontSize = 13, alignment = TextAnchor.MiddleCenter, richText = false };
-            _style.normal.textColor = Theme.Text;
+            _style.normal.textColor = HudLayout.Cream;
             var screen = HudLayout.Begin();
             var r = HudLayout.Place(HudCorner.BottomRight, screen, W, H);
             r.x = (screen.x - W) / 2f;
             r.y = screen.y * 0.78f;
             var prev = GUI.color;
             GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01((ShownFor - age) / 0.4f));
-            Theme.Fill(r, new Color(0.07f, 0.09f, 0.11f, 0.86f), 8);
-            Theme.Fill(new Rect(r.x, r.y, 4f, r.height), Theme.Accent, 2);
-            GUI.Label(r, _text, _style);
+            WorldOverlay.PanelBox(r, Theme.Accent);
+            HudDraw.Label(r, _text, _style);
             GUI.color = prev;
         }
         catch (Exception e) { DebugLog.Error(FlaresPlugin.ModId, e, "FlaresHud.Draw"); }
-        finally { HudLayout.End(); }
+        finally
+        {
+            HudLayout.End();
+            HudDraw.End();
+        }
     }
 }

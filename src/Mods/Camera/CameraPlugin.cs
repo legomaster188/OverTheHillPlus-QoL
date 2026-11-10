@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.CameraPlus;
@@ -13,9 +15,13 @@ using OverTheHillPlus.Core.Manager;
 /// Camera+: hood, bumper, chase-far and drone cameras, a field of view per camera, and a key to cycle them. Your view
 /// only; nothing is sent to anyone.
 /// </summary>
+#if MELON
+public class CameraPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class CameraPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.camera";
     public const string Name = "Camera+";
@@ -24,7 +30,7 @@ public class CameraPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.camera.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "camera";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

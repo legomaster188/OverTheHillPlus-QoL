@@ -38,6 +38,22 @@ public static class CarWheelFit
     public static float Drop(float donorRadius, float modelRadius) =>
         Applies(donorRadius, modelRadius) ? donorRadius - modelRadius : 0f;
 
+    /// <summary>The most a rear tyre's radius may differ from the front's and still be taken for another size; under
+    /// <see cref="MinRise"/> the two are the same tyre (a dual pair's mesh).</summary>
+    public const float MaxRise = 0.15f, MinRise = 0.004f;
+
+    /// <summary>
+    /// Metres the rear hubs stand above the front ones when a model has a rear tyre of its own size (a sand rail's big paddles
+    /// behind thin ribs): the rear wheels and colliders go up by that much and take the rear radius, so all four tyres stand on
+    /// the ground with the body level. 0 for one size all round, or a rear tyre out of range.
+    /// </summary>
+    public static float RearRise(float frontRadius, float rearRadius)
+    {
+        if (!Usable(frontRadius) || !Usable(rearRadius)) return 0f;
+        float d = rearRadius - frontRadius;
+        return Math.Abs(d) < MinRise || Math.Abs(d) > MaxRise ? 0f : d;
+    }
+
     /// <summary>A tyre part's radius: half its largest extent across the wheel (y or z, after its rotation and scale; the
     /// tyre's axis is x). 0 for no part.</summary>
     public static float TyreRadius(MeshPart tyre)
@@ -52,6 +68,22 @@ public static class CarWheelFit
             z0 = Math.Min(z0, v.Z); z1 = Math.Max(z1, v.Z);
         }
         return Math.Max(y1 - y0, z1 - z0) * 0.5f;
+    }
+
+    /// <summary>Half of a tyre part's height (y, after its rotation and scale): how far its lowest point is under its centre.
+    /// Under <see cref="TyreRadius"/> for a tyre drawn as a polygon with a flat under it (the Jackal's rear paddles: 0.363 m of
+    /// 0.381 m). 0 for no part.</summary>
+    public static float TyreHalfHeight(MeshPart tyre)
+    {
+        if (tyre == null || tyre.Positions == null || tyre.Positions.Length < 3) return 0f;
+        var m = MeshFrames.PartMatrix(tyre);
+        float y0 = float.MaxValue, y1 = float.MinValue;
+        for (int i = 0; i + 2 < tyre.Positions.Length; i += 3)
+        {
+            var v = MeshFrames.Apply(m, new MeshVec3(tyre.Positions[i], tyre.Positions[i + 1], tyre.Positions[i + 2]));
+            y0 = Math.Min(y0, v.Y); y1 = Math.Max(y1, v.Y);
+        }
+        return (y1 - y0) * 0.5f;
     }
 
     /// <summary>The model's tyre radius (the tyre part, by name or kind).</summary>

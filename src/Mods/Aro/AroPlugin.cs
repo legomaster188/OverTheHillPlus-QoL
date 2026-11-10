@@ -1,7 +1,9 @@
-using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using System;
+using OverTheHillPlus.Loader;
 using OverTheHillPlus.Cars;
 
 namespace OverTheHillPlus.Aro;
@@ -15,19 +17,23 @@ using OverTheHillPlus.Core.Manager;
 /// skeleton and does everything else as for the Vera and the Terrier: the garage entry (free), the saves (never named in
 /// them), the join rules, the tuning, paint, skins and engine sound and their sync.
 /// </summary>
+#if MELON
+public class AroPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 // Core 1.1.0 has the car framework (an older core can't load this mod).
 [BepInDependency(Core.CorePlugin.Guid, ">=1.1.0")]
 public class AroPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.aro";
     public const string Name = "Carpați 24";
-    public const string Version = "1.0.0";
+    public const string Version = "1.0.2";
 
     /// <summary>Mod id: names the config file (oth.aro.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = AroDefinition.Id;
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
 
     public override void Load()
     {
@@ -69,6 +75,6 @@ internal static class AroCar
 
     public static void DrawPage() => ModdedCars.DrawPage(Def);
 
-    public static string Start(System.Reflection.Assembly assets, BepInEx.Configuration.ConfigFile config, ManualLogSource log) =>
+    public static string Start(System.Reflection.Assembly assets, OverTheHillPlus.Config.ConfigFile config, ModLog log) =>
         ModdedCars.Start(Def, assets, config, log);
 }

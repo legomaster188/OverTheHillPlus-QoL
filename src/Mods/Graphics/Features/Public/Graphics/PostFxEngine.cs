@@ -5,7 +5,11 @@ using Il2CppInterop.Runtime;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+#if MELON
+using BeautifyFx = Il2CppBeautify.Universal.Beautify;
+#else
 using BeautifyFx = Beautify.Universal.Beautify;
+#endif
 using Object = UnityEngine.Object;
 using OverTheHillPlus.Graphics;
 
@@ -46,6 +50,10 @@ internal static class PostFxEngine
 
     private static bool _dirty = true;
     private static float _nextScan, _nextApply;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer ListPace = WorldScan.Pace("post fx volumes and wheels", 2f);
+    // What the searches found: read every two seconds as before, searched for only when the world changed.
+    private static readonly List<Volume> KnownVolumes = new();
+    private static readonly List<WheelTransformUpdater> KnownWheels = new();
     private static bool _photoModeActive;
     private static int _gameLayer;
     private static float _gamePriority;
@@ -326,6 +334,24 @@ internal static class PostFxEngine
 
     // ---- scanning the game's volumes (throttled, read-only) ----
 
+    private static bool AnyWheelInPhotoMode()
+    {
+        try
+        {
+            foreach (var w in KnownWheels)
+            {
+                if (w == null) continue;
+#if MELON
+                if (w.isPhotoModeActive) return true;
+#else
+                return false; // the old game has no such flag; its photo profile is found by name
+#endif
+            }
+        }
+        catch (Exception e) { DebugLog.Error("graphics", e, "PostFxEngine.AnyWheelInPhotoMode"); LogOnce("wheels", e); }
+        return false;
+    }
+
     private static void Scan()
     {
         try
@@ -345,9 +371,23 @@ internal static class PostFxEngine
             }
             catch (Exception e) { DebugLog.Error("graphics", e, "PostFxEngine.Scan"); LogOnce("scene refs", e); }
 
-            foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<Volume>()))
+            if (WorldScan.Due(ListPace, Time.unscaledTime))
             {
-                var v = o.TryCast<Volume>();
+                KnownVolumes.Clear();
+                foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<Volume>()))
+                {
+                    var found = o.TryCast<Volume>();
+                    if (found != null) KnownVolumes.Add(found);
+                }
+                KnownWheels.Clear();
+                foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<WheelTransformUpdater>()))
+                {
+                    var w = o.TryCast<WheelTransformUpdater>();
+                    if (w != null) KnownWheels.Add(w);
+                }
+            }
+            foreach (var v in KnownVolumes)
+            {
                 if (v == null || v == _volume) continue;
                 VolumeProfile prof = null;
                 try { prof = v.HasInstantiatedProfile() ? v.profile : v.sharedProfile; } catch (Exception ex) { DebugLog.Error("graphics", ex, "PostFxEngine.Scan"); }
@@ -365,7 +405,8 @@ internal static class PostFxEngine
                 };
                 GameVolumes.Add(info);
 
-                bool isPhoto = profName.IndexOf("Photo", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isPhoto = profName.IndexOf("Photo", StringComparison.OrdinalIgnoreCase) >= 0
+                               || info.Name.IndexOf("Photo", StringComparison.OrdinalIgnoreCase) >= 0;
                 if (isPhoto && info.Enabled && info.Weight > 0f) photo = true;
                 if (!info.Enabled) continue;
                 if (!isPhoto && info.Priority > maxPriority) maxPriority = info.Priority;
@@ -375,6 +416,10 @@ internal static class PostFxEngine
                 }
                 if (layer < 0 && info.Global) layer = info.Layer;
             }
+
+            // Since the 2026-10-30 update photo mode builds its own runtime profile (StatePhotoModeMenu.CreatePhotoModeProfile),
+            // whose name no longer has to say "Photo"; the wheels know when photo mode is on.
+            if (!photo) photo = AnyWheelInPhotoMode();
 
             if (layer >= 0) _gameLayer = layer;
             _gamePriority = maxPriority;

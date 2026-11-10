@@ -1,0 +1,75 @@
+{
+  "id": "bed_toolbox",
+  "name": "Crossover Toolbox",
+  "cosmeticType": "Bed",
+  "slot": "Visual/Bed",
+  "price": 20,
+  "paintable": false,
+  "fits": {
+    "Hilo": {
+      "pos": [
+        0.0,
+        1.1071,
+        -0.656
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Hilo22": {
+      "pos": [
+        0.0,
+        1.2765,
+        -1.351
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Bento": {
+      "pos": [
+        0.0,
+        0.9211,
+        0.144
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Drover": {
+      "pos": [
+        0.0,
+        1.36,
+        -0.571
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Nomad": {
+      "pos": [
+        0.0,
+        1.801,
+        -0.596
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    }
+  }
+}

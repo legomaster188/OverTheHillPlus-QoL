@@ -1,9 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BepInEx.Logging;
+using OverTheHillPlus.Loader;
+#if MELON
+using Il2CppFunCore.Managers;
+using Il2CppFusion;
+#else
 using FunCore.Managers;
 using Fusion;
+#endif
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using OverTheHillPlus.Core.Shared;
 using OverTheHillPlus.Shared;
@@ -35,7 +40,7 @@ internal sealed class RuntimeCar
 {
     public readonly CarDefinition Def;
     public readonly CarHooks Hooks;
-    public readonly ManualLogSource Logger;
+    public readonly ModLog Logger;
     public readonly Assembly AssetAssembly;
     /// <summary>"[Vera]": the start of every log line.</summary>
     public readonly string Tag;
@@ -65,6 +70,9 @@ internal sealed class RuntimeCar
     public GameObject Template { get; private set; }
     public GameObject Dummy { get; private set; }
     public CarLayout Layout { get; private set; }
+    /// <summary>The garage model's own layout: its wheels stand at another height than the template's (each stock garage
+    /// model is its own prefab) and its drop comes from its tyre meshes, so it can't be worked out from <see cref="Layout"/>.</summary>
+    public CarLayout GarageLayout { get; private set; }
 
     public string PrefabAddress { get; private set; }
     public string DummyAddress { get; private set; }
@@ -77,8 +85,19 @@ internal sealed class RuntimeCar
 
     private static readonly Il2CppStringArray NoTags = new(0);
 
-    public RuntimeCar(CarDefinition def, CarHooks hooks, ManualLogSource log, Assembly assets, BepInEx.Configuration.ConfigFile cfg)
+    /// <summary>This car's beat within a period (0 to 1): the 25-odd cars' once-a-second checks each get a frame of their
+    /// own, rather than all landing on the same one.</summary>
+    public float Beat { get; }
+
+    /// <summary>The next time this car does something it does every <paramref name="period"/> seconds.</summary>
+    public float NextBeat(float period) => OverTheHillPlus.Core.Shared.Beats.Next(Time.unscaledTime, period, Beat);
+
+    private static int _cars;
+
+    public RuntimeCar(CarDefinition def, CarHooks hooks, ModLog log, Assembly assets, OverTheHillPlus.Config.ConfigFile cfg)
     {
+        Beat = _cars++ % 32 / 32f;
+        _nextTry = Beat;
         Def = def;
         Hooks = hooks ?? new CarHooks();
         Logger = log ?? Core.CorePlugin.Logger;
@@ -100,6 +119,22 @@ internal sealed class RuntimeCar
     public CarLiveryParts Liveries { get; }
 
     public string Id => Def.Id;
+
+    /// <summary>
+    /// Added to a model position to get car-root space on the car (<paramref name="garage"/> false) or on its garage model
+    /// (the place of every part fitted by the model's coordinates, as <see cref="CarLayout.Offset"/> is for the slots). The
+    /// two differ by more than the wheel drop: a stock garage model's wheels don't stand at its prefab's height, by up to
+    /// 8 cm on the Polyana. Zero before the build.
+    /// </summary>
+    public Vector3 ModelOffset(bool garage)
+    {
+        if (garage && GarageLayout != null) return GarageLayout.Offset;
+        var lay = Layout;
+        if (lay == null) return Vector3.zero;
+        var o = lay.Offset;
+        if (garage) o.y -= lay.WheelDrop;
+        return o;
+    }
 
     // ---------------------------------------------------------------- logging
 
@@ -160,9 +195,10 @@ internal sealed class RuntimeCar
     public void Tick()
     {
         if (FailedReason != null || !NetReady) return;
-        if (Time.unscaledTime >= _nextTry)
+        bool second = Time.unscaledTime >= _nextTry;
+        if (second)
         {
-            _nextTry = Time.unscaledTime + 1f;
+            _nextTry = NextBeat(1f);
             if (!Catalog.Registered)
             {
                 TryRegister();
@@ -175,7 +211,7 @@ internal sealed class RuntimeCar
         }
         if (!Ready) return;
         Save.TryRestore();
-        Save.Grant();
+        if (second) Save.Grant();
         Text.Tick();
         Drive.Tick();
         Tuning.Tick();
@@ -191,49 +227,39 @@ internal sealed class RuntimeCar
 
     // ---------------------------------------------------------------- build (asked by core's registry)
 
+    // The build runs as steps over several frames (core's registry asks again each frame while it says Working, and
+    // nothing after it registers in between): the assets it needs load in the background first, and the heavy main-
+    // thread parts (garage data, each texture, the template, the garage model) get a frame each. All of it in one frame
+    // froze the game at start (25 s for the first car, 3.7 s for the Hilo). When a session starts, core asks with
+    // NetPrefabRegistry.Urgent set and every step finishes in that call.
+    private StagedBuild _build;
+    private int _buildIndex = -1;
+    private ResourcesManager _rm;
+    private NetworkPrefabTable _table;
+    private NetworkPrefabId _donorId;
+    private float _loadsSince;
+    private UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle<CarInfo> _infoLoad;
+    private UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle<GameObject> _dummyLoad;
+    private bool _infoLoading, _dummyLoading;
+    /// <summary>Seconds the background loads may take before the build goes on without them (it then loads what is
+    /// still missing itself, at once).</summary>
+    private const float LoadLimit = 60f;
+
+    private static double ClockMs() => System.Diagnostics.Stopwatch.GetTimestamp() * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
     private NetPrefabBuild Build(int index)
     {
         if (FailedReason != null) return NetPrefabBuild.Fail(FailedReason);
         string modFailed = ModManager.FailedReason(Id);
         if (modFailed != null) return NetPrefabBuild.Fail(modFailed); // the plugin's start failed after declaring
-        ResourcesManager rm;
-        try { rm = ResourcesManager.Instance; } catch (Exception ex) { DebugLog.Error("core", ex, "RuntimeCar.Build"); rm = null; }
-        if (rm == null || !rm.AddressablesInitialized()) return NetPrefabBuild.Later(Waiting = "the game's asset system");
-        NetworkPrefabTable table;
-        try { table = NetworkProjectConfig.Global?.PrefabTable; } catch (Exception ex) { DebugLog.Error("core", ex, "RuntimeCar.Build"); table = null; }
-        if (table == null) return NetPrefabBuild.Later(Waiting = "Fusion's project config");
-        Waiting = null;
-        try
+        if (_build == null || _buildIndex != index)
         {
-            _guid = new NetworkObjectGuid(Def.FusionGuid);
-            PrefabAddress = GameConstants.ADDRESSABLES_PATHS.GetCarPrefabAddress(Def.CarName);
-            DummyAddress = GameConstants.ADDRESSABLES_PATHS.GetCarDummyPrefabAddress(Def.CarName);
-
-            CrashTrail.Mark(Id + ": garage data");
-            DebugLog.Verbose(Id, () => $"build: prefab index {index}, donor {Config.Donor.Value}, address {PrefabAddress}");
-            string why = Catalog.Prepare(rm, NoTags);
-            if (why == CarCatalog.NotYet) return NetPrefabBuild.Later(Waiting = "the game's car list");
-            if (why == null)
-            {
-                _holder = new GameObject("OTH_" + Def.CarName + "Templates");
-                _holder.SetActive(false); // nothing below it ever wakes up (no Awake, no OnEnable)
-                _holder.hideFlags = HideFlags.HideAndDontSave;
-                Object.DontDestroyOnLoad(_holder);
-                CrashTrail.Mark(Id + ": build template");
-                why = BuildTemplate(table, index);
-                CrashTrail.Mark(Id + ": build garage model");
-                if (why == null) why = BuildDummy(rm);
-            }
-            if (why != null)
-            {
-                Abandon();
-                Fail(why);
-                return NetPrefabBuild.Fail(why);
-            }
-            CrashTrail.Mark(Id + ": built");
-            DebugLog.Verbose(Id, () => $"built: template {Template?.name}, garage model {Dummy?.name}, garage base {Catalog.BaseName}");
-            return NetPrefabBuild.Done(Template.GetComponent<NetworkObject>());
+            if (_build != null) Abandon(); // asked for another index: start over (the template carries its index)
+            _build = NewBuild(index);
+            _buildIndex = index;
         }
+        BuildProgress p;
+        try { p = _build.Advance(NetPrefabRegistry.Urgent, NetPrefabRegistry.BudgetLeft); }
         catch (Exception e)
         {
             Abandon();
@@ -242,6 +268,156 @@ internal sealed class RuntimeCar
             Error("build failed: " + e);
             return NetPrefabBuild.Fail(e.Message);
         }
+        switch (p)
+        {
+            case BuildProgress.Working:
+                return NetPrefabBuild.Working(_build.LastRan);
+            case BuildProgress.Later:
+                return NetPrefabBuild.Later(Waiting = _build.Text);
+            case BuildProgress.Failed:
+            {
+                string why = _build.Text;
+                Abandon();
+                Fail(why);
+                return NetPrefabBuild.Fail(why);
+            }
+        }
+        CrashTrail.Mark(Id + ": built");
+        string steps = _build.Summary();
+        DebugLog.Info(Id, $"build steps over {_build.Frames} frame(s): {steps}");
+        DebugLog.Verbose(Id, () => $"built: template {Template?.name}, garage model {Dummy?.name}, garage base {Catalog.BaseName}");
+        _build = null;
+        return NetPrefabBuild.Done(Template.GetComponent<NetworkObject>());
+    }
+
+    private StagedBuild NewBuild(int index) => new StagedBuild(ClockMs)
+        .Step("asset system", _ => StepAssetSystem(index))
+        .Step("start loads", _ => StepStartLoads())
+        .Step("loads", StepLoads)
+        .Step("garage data", _ => StepGarageData())
+        .Step("albedo", u => Tex(u, "albedo_base", () => Assets.Albedo))
+        .Step("ao", u => Tex(u, "ao", () => Assets.Ao))
+        .Step("lights", u => Tex(u, "lights", () => Assets.Lights))
+        .Step("mask", u => Tex(u, "mask", () => Assets.Mask))
+        .Step("template", _ => StepTemplate(index))
+        .Step("garage model", _ => StepDummy());
+
+    /// <summary>Makes a texture in a frame of its own; one still being decoded in the background is asked for next frame.</summary>
+    private StepResult Tex(bool urgent, string kind, Func<Texture2D> make)
+    {
+        if (!urgent && !Assets.TextureReady(kind)) return StepResult.Wait;
+        make();
+        return StepResult.Next;
+    }
+
+    private StepResult StepAssetSystem(int index)
+    {
+        CrashTrail.Mark(Id + ": asset system");
+        ResourcesManager rm;
+        try { rm = ResourcesManager.Instance; } catch (Exception ex) { DebugLog.Error("core", ex, "RuntimeCar.Build"); rm = null; }
+        if (rm == null || !rm.AddressablesInitialized()) return StepResult.Later("the game's asset system");
+        NetworkPrefabTable table;
+        try { table = NetworkProjectConfig.Global?.PrefabTable; } catch (Exception ex) { DebugLog.Error("core", ex, "RuntimeCar.Build"); table = null; }
+        if (table == null) return StepResult.Later("Fusion's project config");
+        Waiting = null;
+        _rm = rm;
+        _table = table;
+        _guid = new NetworkObjectGuid(Def.FusionGuid);
+        PrefabAddress = GameConstants.ADDRESSABLES_PATHS.GetCarPrefabAddress(Def.CarName);
+        DummyAddress = GameConstants.ADDRESSABLES_PATHS.GetCarDummyPrefabAddress(Def.CarName);
+        DebugLog.Verbose(Id, () => $"build: prefab index {index}, donor {Config.Donor.Value}, address {PrefabAddress}");
+        return StepResult.Next;
+    }
+
+    /// <summary>Starts the background loads of what the build needs from the game: the donor's network prefab (through
+    /// Fusion's own async load), the garage base car's data (unless the item catalog has it) and its garage model.</summary>
+    private StepResult StepStartLoads()
+    {
+        CrashTrail.Mark(Id + ": start loads");
+        string donor = Config.Donor.Value;
+        _donorId = _table.GetId(donor);
+        if (!_donorId.IsValid) return StepResult.Fail($"the donor prefab {donor} is not in Fusion's table");
+        _table.Load(_donorId, false);
+        _loadsSince = Time.realtimeSinceStartup;
+        string infoKey = Catalog.HasBaseInCatalog() ? null : CarCatalog.FirstKnownKey(CarCatalog.BaseKeys(Config.GarageBaseName));
+        if (infoKey != null)
+            try
+            {
+                _infoLoad = UnityEngine.AddressableAssets.Addressables.LoadAssetAsync<CarInfo>((Il2CppSystem.String)infoKey);
+                _infoLoading = true;
+            }
+            catch (Exception ex) { DebugLog.Error(Id, ex, "RuntimeCar.StepStartLoads info"); _infoLoading = false; }
+        string dummyKey = CarCatalog.FirstKnownKey(CarCatalog.DummyKeys(Config.GarageBaseName));
+        if (dummyKey != null)
+            try
+            {
+                _dummyLoad = UnityEngine.AddressableAssets.Addressables.LoadAssetAsync<GameObject>((Il2CppSystem.String)dummyKey);
+                _dummyLoading = true;
+            }
+            catch (Exception ex) { DebugLog.Error(Id, ex, "RuntimeCar.StepStartLoads dummy"); _dummyLoading = false; }
+        return StepResult.Next;
+    }
+
+    /// <summary>Waits for the background loads (urgent: finishes them now). The handles are kept: the game loads the
+    /// same assets again by key, which then finds them loaded, as the build's old one-frame loads left them.</summary>
+    private StepResult StepLoads(bool urgent)
+    {
+        bool donor;
+        try { donor = _table.Load(_donorId, urgent) != null; } catch (Exception ex) { DebugLog.Error(Id, ex, "RuntimeCar.StepLoads donor"); donor = true; }
+        if (_infoLoading) _infoLoading = !Finished(() => _infoLoad.IsDone, urgent, () => _infoLoad.WaitForCompletion());
+        if (_dummyLoading) _dummyLoading = !Finished(() => _dummyLoad.IsDone, urgent, () => _dummyLoad.WaitForCompletion());
+        bool info = !_infoLoading, dummy = !_dummyLoading;
+        if (donor && info && dummy) return StepResult.Next;
+        if (Time.realtimeSinceStartup - _loadsSince > LoadLimit)
+        {
+            Warn($"background loads still running after {LoadLimit:0} s (donor {(donor ? "in" : "loading")}, garage data {(info ? "in" : "loading")}, " +
+                 $"garage model {(dummy ? "in" : "loading")}): the build loads the rest itself.");
+            return StepResult.Next;
+        }
+        return StepResult.Wait;
+    }
+
+    /// <summary>The load is over (done, failed, or finished now because <paramref name="urgent"/>); a handle that can't
+    /// be asked counts as over (the build then loads by itself what it lacks).</summary>
+    private bool Finished(Func<bool> isDone, bool urgent, Action complete)
+    {
+        try
+        {
+            if (isDone()) return true;
+            if (!urgent) return false;
+            complete();
+        }
+        catch (Exception ex) { DebugLog.Error(Id, ex, "RuntimeCar.Finished"); }
+        return true;
+    }
+
+    private StepResult StepGarageData()
+    {
+        CrashTrail.Mark(Id + ": garage data");
+        string why = Catalog.Prepare(_rm, NoTags);
+        if (why == CarCatalog.NotYet) return StepResult.Later("the game's car list");
+        return why == null ? StepResult.Next : StepResult.Fail(why);
+    }
+
+    private StepResult StepTemplate(int index)
+    {
+        if (_holder == null)
+        {
+            _holder = new GameObject("OTH_" + Def.CarName + "Templates");
+            _holder.SetActive(false); // nothing below it ever wakes up (no Awake, no OnEnable)
+            _holder.hideFlags = HideFlags.HideAndDontSave;
+            Object.DontDestroyOnLoad(_holder);
+        }
+        CrashTrail.Mark(Id + ": build template");
+        string why = BuildTemplate(_table, index);
+        return why == null ? StepResult.Next : StepResult.Fail(why);
+    }
+
+    private StepResult StepDummy()
+    {
+        CrashTrail.Mark(Id + ": build garage model");
+        string why = BuildDummy(_rm);
+        return why == null ? StepResult.Next : StepResult.Fail(why);
     }
 
     private void OnRegistered(int index)
@@ -338,8 +514,9 @@ internal sealed class RuntimeCar
         if (src == null) return $"the garage model of {baseName} could not be loaded (tried {tried})";
         var d = Object.Instantiate(src, _holder.transform);
         d.name = Def.PrefabName + "_Dummy";
-        string why = Body.Apply(d, template: false, out _);
+        string why = Body.Apply(d, template: false, out var garageLayout);
         if (why != null) return "garage model: " + why;
+        GarageLayout = garageLayout;
         // The garage model gets the car's CarInfo too (it kept the base car's): InitParts then registers the car's parts,
         // and the garage's mount check (VehicleCustomizationControllerHelpers.MountDismountPart) uses the car's list, the
         // same list its bitset and the networked car use. Set here, before any copy wakes (the holder is inactive).
@@ -450,6 +627,9 @@ internal sealed class RuntimeCar
         }
     }
 
+    /// <summary>The item ids of the car's own part list.</summary>
+    public HashSet<uint> PartIds() => PartIds(Catalog.Info);
+
     private static HashSet<uint> PartIds(CarInfo info)
     {
         var ids = new HashSet<uint>();
@@ -469,6 +649,15 @@ internal sealed class RuntimeCar
         try { if (_holder != null) Object.Destroy(_holder); } catch (Exception ex) { DebugLog.Error("core", ex, "RuntimeCar.Abandon"); }
         _holder = null;
         Template = Dummy = null;
+        GarageLayout = null;
+        // the build's own background loads (nothing registered holds what they brought)
+        try { if (_infoLoad.IsValid()) _infoLoad.Release(); } catch (Exception ex) { DebugLog.Error("core", ex, "RuntimeCar.Abandon"); }
+        try { if (_dummyLoad.IsValid()) _dummyLoad.Release(); } catch (Exception ex) { DebugLog.Error("core", ex, "RuntimeCar.Abandon"); }
+        _infoLoad = default;
+        _dummyLoad = default;
+        _infoLoading = _dummyLoading = false;
+        _build = null;
+        _buildIndex = -1;
     }
 
     /// <summary>Switches the car off for the session: out of the catalog and the session advert, and the car that the
@@ -538,6 +727,33 @@ public sealed class CarHooks
     /// <summary>After the car's model went onto a copy of the donor (<c>template</c>: the networked template, otherwise
     /// the garage model). Return null, or why the car can't be used (it then stays off).</summary>
     public Func<GameObject, bool, string> AfterBody;
+    /// <summary>Like <see cref="AfterBody"/> (called right after it), with where the model went on the copy
+    /// (<see cref="CarModelPlace"/>): what a vehicle with moving parts needs to put them on their own objects.</summary>
+    public Func<GameObject, bool, CarModelPlace, string> AfterModel;
     /// <summary>After the networked template is complete (model, tuning, engine sound, CarInfo). Null or why not.</summary>
     public Func<GameObject, string> AfterTemplate;
+    /// <summary>Why you can't switch into the vehicle where you are now (shown next to its "Drive" button), or null: a boat
+    /// is taken out at the water's edge, not on a mountain road. Checked on top of the framework's own rules.</summary>
+    public Func<string> DriveBlocker;
+}
+
+/// <summary>Where a car's model went on a copy of its donor (the networked template or the garage model), for
+/// <see cref="CarHooks.AfterModel"/>.</summary>
+public sealed class CarModelPlace
+{
+    /// <summary>Added to every model position to get car-root space (the layout offset; on the garage model it includes
+    /// the drop onto the floor).</summary>
+    public Vector3 Offset;
+    /// <summary>The model (moving parts, anchors).</summary>
+    public MeshBlob Blob;
+    /// <summary>The car's material (the donor's car shader with the car's textures): moving parts drawn with it take the
+    /// livery, paint, dirt, snow and lights like the body, as long as their renderers exist before the copy wakes.</summary>
+    public Material Material;
+    /// <summary>The model's tyre radius and the donor's, metres.</summary>
+    public float TyreRadius, DonorTyreRadius;
+    /// <summary>The networked template (true) or the garage model (false).</summary>
+    public bool Template;
+
+    /// <summary>A model point in car-root space.</summary>
+    public Vector3 ToRoot(MeshVec3 p) => new Vector3(p.X, p.Y, p.Z) + Offset;
 }

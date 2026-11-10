@@ -1,7 +1,9 @@
-using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using System;
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 using OverTheHillPlus.Core.Shared;
 
@@ -11,25 +13,30 @@ namespace OverTheHillPlus.Trailers;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Trailers: four networked trailers (utility, teardrop camper, car hauler, boat) to tow behind your car. Each is its
+/// Trailers: five networked trailers (utility, teardrop camper, car hauler, boat, and a flatbed semi-trailer for a semi
+/// truck's fifth wheel) to tow behind your car. Each is its
 /// own Fusion prefab entry (core's network prefab registry, built at runtime from the game's WinchablePlank physics
 /// prop with this mod's models), spawned by the host with the towing player as its input authority so that player's
 /// game predicts car and trailer together. The hitch is a joint on the host and the owner; wheels, grip and the
 /// overrun brake run in Fusion's physics step. Everyone in the session needs the mod (core refuses joiners without it).
 /// </summary>
+#if MELON
+public class TrailersPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 // Core 1.1.0: the mesh blob reader lives in core (OverTheHillPlus.Cars.MeshBlob).
 [BepInDependency(Core.CorePlugin.Guid, ">=1.1.0")]
 public class TrailersPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.trailers";
     public const string Name = "Trailers+";
-    public const string Version = "1.0.2";
+    public const string Version = "1.1.1";
 
     /// <summary>Mod id: names the config file (oth.trailers.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "trailers";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     private static readonly System.Collections.Generic.HashSet<string> Logged = new();
@@ -47,9 +54,10 @@ public class TrailersPlugin : BasePlugin
         {
             Id = ModId,
             Side = ModSide.Server,
+            CareerPart = true,
             Name = Name,
-            Description = "Tow a trailer behind your car: a utility trailer, a teardrop camper, a car hauler or a boat on " +
-                          "its trailer. Hitch, unhitch and put it back behind you from this page. Everyone in the session needs this mod.",
+            Description = "Tow a trailer behind your car: a utility trailer, a teardrop camper, a car hauler, a boat on " +
+                          "its trailer, or a 40 ft flatbed behind a semi truck. Hitch, unhitch and put it back behind you from this page. Everyone in the session needs this mod.",
             Version = Version,
             DrawSimple = TrailersSimple.Draw,
         });
@@ -68,7 +76,7 @@ public class TrailersPlugin : BasePlugin
                 Logger.LogWarning($"{Name}: {why}. Trailers stay off this session.");
                 return;
             }
-            // The four prefab entries, registered by core in its fixed order (core also runs the join gate).
+            // The five prefab entries, registered by core in its fixed order (core also runs the join gate).
             why = TrailerPrefabs.Declare();
             if (why != null)
             {

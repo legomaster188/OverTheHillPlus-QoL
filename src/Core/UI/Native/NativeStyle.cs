@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 
 namespace OverTheHillPlus.UI.Native;
 
@@ -21,6 +21,7 @@ internal static class NativeStyle
     internal static ConfigEntry<bool> Sounds;
     internal static ConfigEntry<bool> GameSprites;
     internal static ConfigEntry<bool> KeyboardNav;
+    internal static ConfigEntry<MenuStyleKind> HudStyle;
 
     /// <summary>Set when the native renderer failed this session; the menu then uses the classic look.</summary>
     internal static bool Failed { get; private set; }
@@ -32,6 +33,9 @@ internal static class NativeStyle
     internal static bool SoundsOn => Sounds == null || Sounds.Value;
     internal static bool GameSpritesOn => GameSprites == null || GameSprites.Value;
     internal static bool KeyboardNavOn => KeyboardNav == null || KeyboardNav.Value;
+
+    /// <summary>The mods' HUDs use the game-style uGUI layer (UI/HudKit) instead of the old IMGUI overlays.</summary>
+    internal static bool HudWanted => HudStyle != null && HudStyle.Value == MenuStyleKind.Native;
 
     /// <summary>Falls back to the classic look for this session (logged once with the reason).</summary>
     internal static void Fail(string where, Exception e)

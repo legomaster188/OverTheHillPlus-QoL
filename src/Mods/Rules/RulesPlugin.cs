@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Rules;
@@ -14,9 +16,13 @@ using OverTheHillPlus.Core.Manager;
 /// them through core's host notices), timed announcements, and vote kick among the players who run this mod. All text
 /// passes the word filter.
 /// </summary>
+#if MELON
+public class RulesPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class RulesPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.rules";
     public const string Name = "Rules+";
@@ -25,7 +31,7 @@ public class RulesPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.rules.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "rules";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

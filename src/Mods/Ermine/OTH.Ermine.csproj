@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Ermine</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonCarPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.Ermine.ErminePlugin</OthPluginClass>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model (ermine.mesh, with body_lod1..3 and the mv_* moving parts) and its textures, made by
+         Liveries/tools/ermine/build_ermine.py with the shared exporter (Liveries/ermine/), read by core's car framework
+         (CarAssets) and by this mod (ErmineGeometry). -->
+    <EmbeddedResource Include="Assets\*.mesh;Assets\*.png" Exclude="Assets\card.png" LogicalName="ermine/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

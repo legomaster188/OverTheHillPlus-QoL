@@ -4,9 +4,8 @@ using System.IO;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Threading;
-using BepInEx;
-using BepInEx.Configuration;
-using BepInEx.Unity.IL2CPP;
+using OverTheHillPlus.Config;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Logging;
 
@@ -54,7 +53,8 @@ internal static class StartupChecks
         try { problems += Configs(); } catch (Exception e) { DebugLog.Error("core", e, "StartupChecks.Configs"); }
         DebugLog.Info("core", problems == 0 ? "start-up self-checks: patches, types and settings files are fine; the game API check follows" :
                                               $"start-up self-checks: {problems} problem(s), see the lines above");
-        try { StartApiCheck(); } catch (Exception e) { DebugLog.Error("core", e, "StartupChecks.StartApiCheck"); }
+        if (DebugConfig.GameApiCheck != null && DebugConfig.GameApiCheck.Value)
+            try { StartApiCheck(); } catch (Exception e) { DebugLog.Error("core", e, "StartupChecks.StartApiCheck"); }
     }
 
     // ---- patches ----
@@ -111,7 +111,7 @@ internal static class StartupChecks
             if (bad != null)
             {
                 problems++;
-                DebugLog.Error(s.Mod, StartupText.ConfigLine(file, bad + "; BepInEx ignores them and the next save drops them"));
+                DebugLog.Error(s.Mod, StartupText.ConfigLine(file, bad + "; they are ignored and the next save drops them"));
             }
             problems += BadValues(s, file);
         }
@@ -145,12 +145,12 @@ internal static class StartupChecks
     private static void StartApiCheck()
     {
         var assemblies = new List<(string mod, Assembly asm)>();
-        foreach (var kv in IL2CPPChainloader.Instance.Plugins)
+        foreach (var kv in OthLoader.Plugins)
         {
             var info = kv.Value;
-            string id = ModMap.IdOfGuid(info?.Metadata?.GUID);
+            string id = ModMap.IdOfGuid(info?.Guid);
             Assembly asm = null;
-            try { asm = info?.Instance?.GetType().Assembly; } catch (Exception e) { DebugLog.Error("core", e, "StartupChecks.StartApiCheck plugin"); }
+            try { asm = info?.Assembly; } catch (Exception e) { DebugLog.Error("core", e, "StartupChecks.StartApiCheck plugin"); }
             if (asm == null || string.IsNullOrEmpty(id)) continue;
             if (id.StartsWith("com.", StringComparison.OrdinalIgnoreCase)) continue; // another creator's plugin
             assemblies.Add((id, asm));
@@ -164,9 +164,9 @@ internal static class StartupChecks
     {
         try
         {
-            // The game's own assemblies: the interop DLLs BepInEx generated from its IL2CPP code.
+            // The game's own assemblies: the interop DLLs the loader generated from its IL2CPP code.
             var game = new HashSet<string>(StringComparer.Ordinal);
-            string interop = Path.Combine(Paths.BepInExRootPath, "interop");
+            string interop = OthLoader.InteropDir;
             if (Directory.Exists(interop))
                 foreach (var f in Directory.GetFiles(interop, "*.dll")) game.Add(Path.GetFileNameWithoutExtension(f));
             if (game.Count == 0)

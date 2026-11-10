@@ -1,5 +1,9 @@
 using System;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 
 namespace OverTheHillPlus;
 

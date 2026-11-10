@@ -1,6 +1,6 @@
 using System;
 using System.Text;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.UI;
 
 namespace OverTheHillPlus.ControllerFeel;
@@ -14,7 +14,7 @@ internal static class ControllerFeelSimple
     private static string Percent(float v) => (v * 100f).ToString("0") + "%";
 
     private static void Strength(string label, string hint, ConfigEntry<float> entry, bool enabled) =>
-        SimpleMenu.FloatChoice(label, hint, entry.Value, Strengths, Percent, v => entry.Value = v, enabled);
+        SimpleMenu.StepSlider(label, hint, entry.Value, 0f, 2f, 0.25f, Percent, v => entry.Value = v, enabled);
 
     internal static void Draw()
     {

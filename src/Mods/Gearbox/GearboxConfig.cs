@@ -1,4 +1,4 @@
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using UnityEngine.InputSystem;
 
 namespace OverTheHillPlus.GearboxPlus;
@@ -59,7 +59,7 @@ internal static class GearboxConfig
         DiffFront = cfg.Bind("Differentials", "Front", DiffMode.Stock, "Custom: the front axle's differential: Stock (locked), Open, LimitedSlip or Locked.");
         DiffRear = cfg.Bind("Differentials", "Rear", DiffMode.Stock, "Custom: the rear axle's differential.");
         DiffCentre = cfg.Bind("Differentials", "Centre", DiffMode.Stock, "Custom: the differential between the axles. The game's own 4x4 drivetrain joins the axles directly, so this only works on a car that has a centre differential.");
-        DiffLockKey = cfg.Bind("Differentials", "LockKey", Key.K, "Key that locks every differential while it is on (and puts your setting back when pressed again). Does nothing while the source is Stock: the game's differentials are locked already.");
+        DiffLockKey = cfg.Bind("Differentials", "LockKey", Key.RightCtrl, "Key that locks every differential while it is on (and puts your setting back when pressed again). Does nothing while the source is Stock: the game's differentials are locked already.");
         DiffLockPad = cfg.Bind("Differentials", "LockPad", PadButton.None, "Gamepad button for the same.");
         ShowDiffs = cfg.Bind("Indicator", "ShowDifferentials", true, "A second line on the gear indicator with the differentials (F front, R rear, C centre: OPEN, LSD or LOCK) while a differential setting other than Stock is in use.");
 

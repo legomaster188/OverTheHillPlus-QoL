@@ -1,5 +1,6 @@
 using System;
 using OverTheHillPlus.UI;
+using OverTheHillPlus.UI.HudKit;
 using UnityEngine;
 
 namespace OverTheHillPlus.Shared;
@@ -7,7 +8,8 @@ namespace OverTheHillPlus.Shared;
 /// <summary>
 /// Drawing on top of the 3D view from OnGUI (shared by the pin and race mods): a marker with a label at a world spot
 /// (an arrow at the screen edge while it is off screen), and a dotted route along the ground toward a spot. Call from
-/// a Registry.OnGui hook; everything draws only in the Repaint event.
+/// a Registry.OnGui hook; everything draws only in the Repaint event. Inside a mod's HUD group (HudDraw.Begin) it all lands
+/// on the game-style HUD layer, in the game's fonts and panel black.
 /// </summary>
 internal static class WorldOverlay
 {
@@ -42,19 +44,20 @@ internal static class WorldOverlay
     /// <summary>True when this OnGUI call should draw (Repaint, a camera, styles ready).</summary>
     public static bool Begin()
     {
-        if (Event.current == null || Event.current.type != EventType.Repaint) return false;
+        if (!HudDraw.Repaint) return false;
         if (Cam == null) return false;
         Theme.Ensure();
         if (_label == null)
         {
             _label = new GUIStyle(Theme.Small) { alignment = TextAnchor.MiddleCenter, richText = false, fontSize = 12 };
-            _label.normal.textColor = Theme.Text;
+            _label.normal.textColor = HudLayout.Cream;
             _big = new GUIStyle(Theme.Title) { alignment = TextAnchor.MiddleCenter, richText = false, fontSize = 44 };
-            _big.normal.textColor = Theme.Text;
+            _big.normal.textColor = HudLayout.Cream;
             _bigShadow = new GUIStyle(_big);
             _bigShadow.normal.textColor = new Color(0f, 0f, 0f, 0.7f);
         }
         GUI.matrix = Matrix4x4.identity;
+        HudCanvas.Sync();
         return true;
     }
 
@@ -98,14 +101,29 @@ internal static class WorldOverlay
         Theme.Fill(new Rect(p.x - size / 2f - 2f, p.y - size / 2f - 2f, size + 4f, size + 4f), new Color(0f, 0f, 0f, 0.6f), (int)(size / 2f + 2f));
         Theme.Fill(new Rect(p.x - size / 2f, p.y - size / 2f, size, size), color, (int)(size / 2f));
         if (string.IsNullOrEmpty(label)) return;
-        var content = new GUIContent(label);
-        var ls = _label.CalcSize(content);
+        var ls = HudDraw.Measure(label, _label);
         float ly = onScreen ? p.y - size / 2f - 24f : p.y + (p.y > h / 2f ? -size - 22f : size + 4f);
-        var lr = new Rect(Mathf.Clamp(p.x - ls.x / 2f - 6f, 4f, w - ls.x - 16f), ly, ls.x + 12f, 20f);
-        Theme.Fill(lr, new Color(0.07f, 0.09f, 0.11f, 0.78f), 6);
-        Theme.Fill(new Rect(lr.x, lr.y, 3f, lr.height), color, 2);
-        GUI.Label(lr, content, _label);
+        var lr = new Rect(Mathf.Clamp(p.x - ls.x / 2f - 8f, 4f, w - ls.x - 20f), ly, ls.x + 16f, 20f);
+        Theme.Fill(lr, LabelBack, HudLayout.PanelRadius);
+        Theme.Fill(new Rect(lr.x + 3f, lr.y + 4f, 2f, lr.height - 8f), color, 1);
+        HudDraw.Label(new Rect(lr.x + 2f, lr.y, lr.width - 2f, lr.height), label, _label);
     }
+
+    private static readonly System.Collections.Generic.Dictionary<(string, int), string> Named = new();
+
+    /// <summary>"Name  120 m": a marker's label, remembered per metre so pins don't build a string every frame.</summary>
+    public static string WithDistance(string name, float metres)
+    {
+        var key = (name, (int)metres);
+        if (Named.TryGetValue(key, out var text)) return text;
+        if (Named.Count > 512) Named.Clear();
+        text = $"{name}  {GameMap.DistanceText(metres)}";
+        Named[key] = text;
+        return text;
+    }
+
+    // A word over the world has nothing dark behind it: the game's panel black, a little stronger.
+    private static readonly Color LabelBack = new(0f, 0f, 0f, 0.55f);
 
     /// <summary>
     /// A dotted line on the ground from <paramref name="from"/> toward <paramref name="to"/> (the straight line, laid
@@ -194,7 +212,12 @@ internal static class WorldOverlay
     public static void BigText(string text, float y, Color color)
     {
         if (_big == null || string.IsNullOrEmpty(text)) return;
-        var r = new Rect(0f, y, Screen.width, 60f);
+        var r = new Rect(0f, y, Screen.width / Mathf.Max(0.01f, GUI.matrix.m00), 60f); // in the caller's units
+        if (HudDraw.Native)
+        {
+            HudDraw.Label(r, text, _big, new HudText(HudRules.NativeSize(44f), color, TextAnchor.MiddleCenter, HudFont.Black) { Shadow = true });
+            return;
+        }
         GUI.Label(new Rect(r.x + 2f, r.y + 2f, r.width, r.height), text, _bigShadow);
         var prev = _big.normal.textColor;
         _big.normal.textColor = color;
@@ -203,10 +226,19 @@ internal static class WorldOverlay
     }
 
     /// <summary>A small panel with lines of plain text (HUD cards).</summary>
-    public static void Panel(Rect r, Color accent, Action<Rect> body)
+    public static void Panel(Rect r, Color accent, Action<Rect> body) => body?.Invoke(PanelBox(r, accent));
+
+    /// <summary>
+    /// A HUD card: the game's panel with a thin line of the accent colour at its left. Returns the area for its text
+    /// (no closure, for cards drawn every frame).
+    /// </summary>
+    public static Rect PanelBox(Rect r, Color accent) => PanelBox(r, accent, HudLayout.PanelBlack);
+
+    /// <summary><see cref="PanelBox(Rect, Color)"/> with another black (HudLook.PanelStrong for a card to read).</summary>
+    public static Rect PanelBox(Rect r, Color accent, Color back)
     {
-        Theme.Fill(r, new Color(0.07f, 0.09f, 0.11f, 0.86f), 8);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), accent, 2);
-        body?.Invoke(new Rect(r.x + 12f, r.y + 6f, r.width - 18f, r.height - 12f));
+        Theme.Fill(r, back, HudLayout.PanelRadius);
+        Theme.Fill(new Rect(r.x + 4f, r.y + 6f, 2f, r.height - 12f), accent, 1);
+        return new Rect(r.x + 12f, r.y + 6f, r.width - 18f, r.height - 12f);
     }
 }

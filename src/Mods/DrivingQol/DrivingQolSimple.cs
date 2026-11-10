@@ -1,4 +1,4 @@
-using OverTheHillPlus.Features.Public.GarageLift;
+using OverTheHillPlus.Cars;
 using OverTheHillPlus.Features.Public.Unstuck;
 using OverTheHillPlus.UI;
 using UnityEngine.InputSystem;
@@ -21,15 +21,22 @@ internal static class DrivingQolSimple
             DrivingQolConfig.FpsCap.Value, FpsSteps, v => v <= 0 ? "Game" : v + " fps", v => DrivingQolConfig.FpsCap.Value = v);
         SimpleMenu.FloatChoice("Field of view", "Driving camera field of view. Game = the game's own setting.",
             DrivingQolConfig.FovOverride.Value, FovSteps, v => v <= 0f ? "Game" : v.ToString("0"), v => DrivingQolConfig.FovOverride.Value = v);
-        SimpleMenu.Toggle(DrivingQolConfig.AutoHeadlights, "Auto headlights", "Headlights on from 19:00 to 07:00, off in daylight.");
         SimpleMenu.Toggle(DrivingQolConfig.RunInBackground, "Keep running when alt-tabbed", "An alt-tabbed host otherwise freezes the session for everyone.");
         SimpleMenu.Toggle(DrivingQolConfig.SkipSplash, "Skip logo screens", "Straight to the main menu when the game starts.");
         SimpleMenu.Toggle(DrivingQolConfig.HideTutorialHints, "Hide tutorial hints", "No more reminder pop-ups.");
+        // The car's lights group: the switch is here (it is a driving habit), the high beam belongs to the lights mod, one row away.
+        SimpleMenu.Heading(TuneGroups.Lights);
+        SimpleMenu.Toggle(DrivingQolConfig.AutoHeadlights, "Auto headlights", "Headlights on from 19:00 to 07:00, off in daylight.");
+        SimpleMenu.Link("High beam", TuneGroups.BeamsId, "How far the high beam reaches, and its keys.");
         if (GarageLiftFeature.Preview != null)
         {
-            SimpleMenu.Heading("Garage");
-            SimpleMenu.Toggle(GarageLiftFeature.Preview, "Lift preview", "The garage car rises or drops to the suspension stage you highlight, and goes back to the fitted one. Only the garage model moves.");
-            SimpleMenu.Toggle(GarageLiftFeature.ShowText, "Ride height text", "A line such as \"Ride height: +8 cm\" under the stage's description.");
+            SimpleMenu.Heading(TuneGroups.Suspension);
+            // The garage lift preview is core's now; its rows sit on Air Ride's page when that is here (never twice).
+            if (Core.Manager.ModManager.IsLoaded(TuneGroups.AirRideId))
+                SimpleMenu.Link("Garage lift preview", TuneGroups.AirRideId, "Previews a suspension stage's ride height on the car in the garage.");
+            else GarageLiftFeature.DrawRows();
+            // The live ride height (and lean, kneel, hop) is Air Ride's: one row away, not a second copy here.
+            SimpleMenu.Link("Ride height in the car", TuneGroups.AirRideId, "Raise or drop the car while driving, and lean it.");
         }
 
         if (UnstuckFeature.UnstuckKey == null) return;

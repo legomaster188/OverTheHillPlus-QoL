@@ -1,7 +1,9 @@
-using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using System;
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.LiveryPacks;
@@ -13,9 +15,13 @@ using OverTheHillPlus.Core.Manager;
 /// Liveries+: local livery packs from BepInEx/config/oth.liveries/, in the same format as the game's livery mods,
 /// added to the garage's own livery list without mod.io. Only reads inside that folder (see LiveryPackScan).
 /// </summary>
+#if MELON
+public class LiveryPacksPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class LiveryPacksPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.liverypacks";
     public const string Name = "Liveries+";
@@ -24,7 +30,7 @@ public class LiveryPacksPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.liverypacks.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "liverypacks";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

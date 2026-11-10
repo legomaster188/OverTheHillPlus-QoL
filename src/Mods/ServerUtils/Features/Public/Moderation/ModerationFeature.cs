@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using OverTheHillPlus.Features.Public.PlayerList;
 using OverTheHillPlus.UI;
@@ -278,14 +282,14 @@ internal sealed class ModerationFeature : IFeature
 
     private static void DrawLogCard()
     {
-        Menu.Card("Moderation log", "What the AFK watch and join rules did this game (newest first). Also written to the BepInEx log.", () =>
+        Menu.Card("Moderation log", "What the AFK watch and join rules did this game (newest first). Also written to the " + OverTheHillPlus.Loader.LoaderText.LoaderName + " log.", () =>
         {
             var log = ModerationCore.Log;
             if (log.Count == 0) { Menu.Small("Nothing yet."); return; }
             int n = 0;
             for (int i = log.Count - 1; i >= 0 && n < 15; i--, n++)
                 Menu.Small($"{log[i].At:HH:mm}  {(log[i].Bad ? "! " : "")}{log[i].Text}");
-            if (log.Count > 15) Menu.Small($"{log.Count - 15} older line(s) in the BepInEx log.");
+            if (log.Count > 15) Menu.Small($"{log.Count - 15} older line(s) in the {OverTheHillPlus.Loader.LoaderText.LoaderName} log.");
             Menu.Chips(1, ("Clear log", () => { ModerationCore.Log.Clear(); Menu.SetStatus("Moderation log cleared"); }, true));
         });
     }
@@ -296,29 +300,37 @@ internal sealed class ModerationFeature : IFeature
 
     private static void DrawOverlay()
     {
-        if (Event.current == null || Event.current.type != EventType.Repaint) return;
-        if (!ShowNotices.Value) return;
+        if (!UI.HudKit.HudDraw.Repaint || !ShowNotices.Value) return;
         string msg = AfkWatch.LastNotice;
         float age = Time.unscaledTime - AfkWatch.LastNoticeAt;
         const float show = 10f;
         if (string.IsNullOrEmpty(msg) || age > show || age < 0f) return;
         if (CoreBehaviour.CleanView || CoreBehaviour.GuiHidden) return;
+        if (!UI.HudKit.HudDraw.Begin("moderation")) return;
         Theme.Ensure();
         if (_toastStyle == null)
         {
             _toastStyle = new GUIStyle(Theme.Label) { alignment = TextAnchor.MiddleCenter, richText = false, wordWrap = true };
-            _toastStyle.normal.textColor = Theme.Text;
+            _toastStyle.normal.textColor = HudLayout.Cream;
         }
         float alpha = Mathf.Clamp01(show - age);
         var prev = GUI.color;
-        GUI.color = new Color(1f, 1f, 1f, alpha);
-        float w = Mathf.Min(560f, Screen.width - 40f);
-        float th = _toastStyle.CalcHeight(new GUIContent(msg), w - 28f);
-        // Below the ping notice's spot, so both can show at once.
-        var r = new Rect((Screen.width - w) / 2f, 150f, w, th + 16f);
-        Theme.Fill(r, new Color(0.07f, 0.09f, 0.11f, 0.9f), 8);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), AfkWatch.LastNoticeBad ? Theme.Warn : Theme.Good, 2);
-        GUI.Label(new Rect(r.x + 14f, r.y + 8f, w - 28f, th), msg, _toastStyle);
-        GUI.color = prev;
+        try
+        {
+            var screen = HudLayout.Begin();
+            GUI.color = new Color(1f, 1f, 1f, alpha);
+            float w = Mathf.Min(560f, screen.x - 40f);
+            float th = UI.HudKit.HudDraw.Height(msg, _toastStyle, w - 28f);
+            // Below the ping notice's spot, so both can show at once.
+            var r = new Rect((screen.x - w) / 2f, 150f, w, th + 16f);
+            Shared.WorldOverlay.PanelBox(r, AfkWatch.LastNoticeBad ? Theme.Warn : Theme.Good, UI.HudKit.HudLook.PanelStrong);
+            UI.HudKit.HudDraw.Label(new Rect(r.x + 14f, r.y + 8f, w - 28f, th), msg, _toastStyle);
+        }
+        finally
+        {
+            GUI.color = prev;
+            HudLayout.End();
+            UI.HudKit.HudDraw.End();
+        }
     }
 }

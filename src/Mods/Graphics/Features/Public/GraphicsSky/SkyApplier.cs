@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+#if MELON
+using Il2CppDistantLands.Cozy;
+using Il2CppDistantLands.Cozy.Data;
+#else
 using DistantLands.Cozy;
 using DistantLands.Cozy.Data;
+#endif
 using HarmonyLib;
 using Il2CppInterop.Runtime;
 using UnityEngine;
@@ -33,7 +38,7 @@ internal static class SkyApplier
 
     // Last COZY instance seen (from the patch or a throttled search).
     internal static CozyWeather Weather;
-    private static float _nextFind;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer WeatherPace = WorldScan.Pace("sky weather", 2f);
     internal static string LastError;
 
     // Snapshot of the fields we change during one UpdateShaderVariables call.
@@ -58,7 +63,7 @@ internal static class SkyApplier
     // Moon scaling: original local scale per moon transform.
     private sealed class MoonEntry { public Transform T; public Vector3 Orig; public Vector3 LastSet; }
     private static readonly Dictionary<IntPtr, MoonEntry> Moons = new();
-    private static float _nextMoonScan;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer MoonPace = WorldScan.Pace("moons", 2f);
     private static float _appliedMoon = 1f;
 
     private static readonly Color AuroraGreen = new(0.25f, 1f, 0.62f, 1f);
@@ -87,11 +92,7 @@ internal static class SkyApplier
 
         _active = true;
         float now = Time.unscaledTime;
-        if (!Alive(Weather) && now >= _nextFind)
-        {
-            _nextFind = now + 2f;
-            Weather = FindWeather();
-        }
+        if (!Alive(Weather) && WorldScan.Due(WeatherPace, now)) Weather = FindWeather();
         if (!Alive(Weather)) return;
 
         ApplyStyle(Weather);
@@ -343,11 +344,7 @@ internal static class SkyApplier
         bool neutral = Mathf.Abs(mult - 1f) < 0.001f;
         if (neutral && Moons.Count == 0) return;
 
-        if (now >= _nextMoonScan)
-        {
-            _nextMoonScan = now + 2f;
-            if (!neutral) ScanMoons();
-        }
+        if (!neutral && WorldScan.Due(MoonPace, now)) ScanMoons();
         if (neutral) { RestoreMoons(); return; }
 
         List<IntPtr> dead = null;
@@ -408,6 +405,7 @@ internal static class SkyApplier
             catch (Exception ex) { DebugLog.Error("graphics", ex, "SkyApplier.RestoreMoons"); /* destroyed */ }
         }
         Moons.Clear();
+        MoonPace.Again();
         _appliedMoon = 1f;
     }
 

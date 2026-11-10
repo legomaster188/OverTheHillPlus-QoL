@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using HarmonyLib;
 using Il2CppInterop.Runtime;
 using UnityEngine;
+#if MELON
+using Constraints = Il2Cpp.FreeCameraMovement.MovementConstraints;
+#else
 using Constraints = FreeCameraMovement.MovementConstraints;
+#endif
 using OverTheHillPlus.Photo;
 
 namespace OverTheHillPlus.Features.Public.Photo;

@@ -1,13 +1,21 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFunCore.Managers;
+#else
 using FunCore.Managers;
+#endif
 using HarmonyLib;
 using OverTheHillPlus.Features.Public.Rejoin;
 using OverTheHillPlus.ServerBrowser;
 using OverTheHillPlus.UI;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 
 namespace OverTheHillPlus.Features.Public.ServerBrowserPlus;
@@ -20,7 +28,7 @@ internal sealed class AllRegionsFeature : IFeature
         AllRegions.Bind(ServerBrowserConfig.File);
         Registry.Section(Registry.PlusMode, "Servers", DrawMenu, -9);
         Registry.OnTick(AllRegions.Tick);
-        Registry.OnGui(DrawJoinNotice);
+        Registry.OnGui(DrawJoinNotice, wants: () => AllRegions.JoinPending, repaintOnly: true);
     }
 
     private static GUIStyle _notice;
@@ -29,20 +37,22 @@ internal sealed class AllRegionsFeature : IFeature
     private static void DrawJoinNotice()
     {
         string text = AllRegions.JoinNotice;
-        if (text == null || Time.frameCount - Menu.DrawnFrame <= 2) return;
+        if (text == null || Time.frameCount - Menu.DrawnFrame <= 2 || !UI.HudKit.HudDraw.Repaint) return;
+        if (!UI.HudKit.HudDraw.Begin("serverbrowser.join", UI.HudKit.HudLayer.Screen)) return;
         Theme.Ensure();
         _notice ??= new GUIStyle(Theme.Label) { alignment = TextAnchor.MiddleCenter, fontSize = 15, richText = true };
-        var prev = GUI.matrix;
         try
         {
-            float scale = Mathf.Max(1f, Screen.height / 1080f);
-            GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
-            float sw = Screen.width / scale, sh = Screen.height / scale;
-            var r = new Rect((sw - 560f) / 2f, sh - 120f, 560f, 40f);
-            Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.92f), 10);
-            GUI.Label(r, text, _notice);
+            var screen = HudLayout.Begin();
+            var r = new Rect((screen.x - 560f) / 2f, screen.y - 120f, 560f, 40f);
+            Theme.Fill(r, UI.HudKit.HudLook.PanelStrong, HudLayout.PanelRadius);
+            UI.HudKit.HudDraw.Label(r, text, _notice);
         }
-        finally { GUI.matrix = prev; }
+        finally
+        {
+            HudLayout.End();
+            UI.HudKit.HudDraw.End();
+        }
     }
 
     private static void DrawMenu()
@@ -512,6 +522,9 @@ internal static class AllRegions
 
     /// <summary>A join or create is starting: no region visits for a while (switching would pull the runner away).</summary>
     private static void Hold() => _holdUntil = Time.unscaledTime + HoldAfterJoin;
+
+    /// <summary>A join is waiting for its region (a pure managed read: <see cref="JoinNotice"/> builds a string).</summary>
+    public static bool JoinPending => _joinName != null;
 
     /// <summary>What a join waiting for its region is doing (null when none is).</summary>
     public static string JoinNotice

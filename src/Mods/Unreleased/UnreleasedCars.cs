@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+using Il2CppFunCore.Managers;
+#else
 using Fusion;
 using FunCore.Managers;
+#endif
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 using UnityEngine.Localization;
@@ -208,6 +213,11 @@ internal static class UnreleasedCars
             if (car.HasOwnInfo) RegisterShipped(cat, car);
             else RegisterCopy(cat, car);
         }
+        catch (CarGoneException)
+        {
+            // The game update took this car's prefab out of the table: nothing to set up, nothing to complain about.
+            car.Problem = "not in the game any more";
+        }
         catch (Exception e)
         {
             DebugLog.Error("unreleased", e, "UnreleasedCars.Register");
@@ -216,12 +226,15 @@ internal static class UnreleasedCars
         }
     }
 
+    /// <summary>A car whose prefab the game no longer has (it left Fusion's prefab table).</summary>
+    private sealed class CarGoneException : Exception { }
+
     private static GameObject LoadPrefab(UnreleasedCar car)
     {
         var table = NetworkProjectConfig.Global?.PrefabTable;
         if (table == null) throw new InvalidOperationException("Fusion's prefab table isn't loaded");
         var id = table.GetId(car.Prefab);
-        if (!id.IsValid) throw new InvalidOperationException(car.Prefab + " is not in Fusion's prefab table any more");
+        if (!id.IsValid) throw new CarGoneException();
         var no = table.Load(id, true);
         if (no == null) throw new InvalidOperationException(car.Prefab + " did not load");
         return no.gameObject;

@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Chat;
@@ -13,9 +15,13 @@ using OverTheHillPlus.Core.Manager;
 /// Chat: text chat with the other players who run the mods, over core's mod network (through the host), with the
 /// word filter, muting and the on-screen chat box.
 /// </summary>
+#if MELON
+public class ChatPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class ChatPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.chat";
     public const string Name = "Chat+";
@@ -24,7 +30,7 @@ public class ChatPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.chat.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "chat";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

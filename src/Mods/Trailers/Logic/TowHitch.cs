@@ -11,6 +11,12 @@ public static class TowHitch
     public const string PartName = "TowBar";
     /// <summary>What a player is told when they try without one.</summary>
     public const string Need = "Mount a tow hitch on your car to tow trailers";
+    /// <summary>What a player is told when they try a semi-trailer without a fifth wheel.</summary>
+    public const string NeedFifthWheel = "The flatbed goes on a semi truck's fifth wheel";
+
+    /// <summary>Whether a car can tow: its bar is mounted, or (in a career, where the part may not be owned) the bar's
+    /// slot exists on the car, so the ball goes where the bar would put it.</summary>
+    public static bool Accepts(bool mounted, bool slotExists, bool careerPlaying) => mounted || (careerPlaying && slotExists);
 
     /// <summary>The ball's centre in front of the bar mesh's rearmost point, m (a 50 mm ball: its radius).</summary>
     public const float BallFromRear = 0.05f;

@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 
 namespace OverTheHillPlus;
 
@@ -45,7 +49,7 @@ internal static class CarReset
             }
             catch (Exception e) { DebugLog.Error("core", e, "CarReset.Reset"); LogOnce("winch", "[Car reset] detach winches: " + e.Message); }
 
-            car.Reposition(target, rot);
+            OverTheHillPlus.Cars.CarMove.Place(car, target, rot);
 
             try
             {

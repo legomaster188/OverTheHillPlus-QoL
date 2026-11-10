@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <AssemblyName>OTH.Aro</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonCarPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.Aro.AroPlugin</OthPluginClass>
     <RootNamespace>OverTheHillPlus</RootNamespace>
   </PropertyGroup>
 

@@ -20,7 +20,7 @@ public static class BadgerDefinition
     /// <summary>CarInfo.name and the livery car name ("car": "Badger" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Badger";
     public const string Guid = "60e64ac4953e4da3bf4230ad704c72ff";
-    public const int Protocol = 1;
+    public const int Protocol = 2;
 
     public static CarDefinition Create() => new()
     {
@@ -51,10 +51,17 @@ public static class BadgerDefinition
         Cosmetics = CarCosmetics.Build(CarCosmetics.SlotAnchors.Append(("cosm_Bed", "Visual/Bed")), CarCosmetics.ItemAnchors),
         HiddenSlots = new[] { "Visual/Bed", "Visual/Side_Step" },
         // It carries its own spare between the cab and the body; the Rear slot's spare would hang on the canvas.
-        HiddenItems = new[] { "Visual/Rear/SpareWheel" },
+        HiddenItems = new[] { "Visual/Rear/SpareWheel", "Visual/Roof/Canoe", "Visual/Roof/Christmas", "Visual/Roof/Fisher", "Visual/Roof/Rescue" },
         // The tow bar hangs from the slot's spot on the Mammoth's high rear bumper; here it bolts under the frame end
-        // at the pintle hook's height, on its own anchor (the rest of the Rear_Bumper slot sits on the crossmember).
-        ItemAnchors = new[] { new CosmeticItemAnchor("cosm_i_TowBar", "Visual/Rear_Bumper/TowBar") },
+        // at the pintle hook's height, on its own anchor; the shackles hang on the crossmember's face and the toilet seat
+        // on the hook (the rest of the Rear_Bumper slot sits under the body's rear sill); the grill sits on the tailgate.
+        ItemAnchors = new[]
+        {
+            new CosmeticItemAnchor("cosm_i_TowBar", "Visual/Rear_Bumper/TowBar"),
+            new CosmeticItemAnchor("cosm_i_Shackles_Rear", "Visual/Rear_Bumper/Shackles_Rear"),
+            new CosmeticItemAnchor("cosm_i_ToiletSeat", "Visual/Rear_Bumper/ToiletSeat"),
+            new CosmeticItemAnchor("cosm_i_MountedGrill", "Visual/Rear/MountedGrill"),
+        },
         // The real truck's numbers on the Mammoth's skeleton: 3.47 t kerb (x1.085), 43 kW (12.5 kW/t: about half the real
         // 85 kW V8's 24.5 kW/t, the Expedition class's scale), torque a little over the Mammoth's per tonne, a 90 km/h real
         // top speed as a 5.7 m/s limiter, gearing so the limiter comes at 85 % of the revs on the 12.00-18 tyres (radius

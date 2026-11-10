@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using OverTheHillPlus.Features.Public.ModNet;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 
 namespace OverTheHillPlus.GearboxPlus;
 

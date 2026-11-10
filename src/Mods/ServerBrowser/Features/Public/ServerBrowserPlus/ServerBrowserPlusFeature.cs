@@ -187,7 +187,7 @@ internal sealed class ServerBrowserPlusFeature : IFeature
     /// The filter switches on the bar, in order. Both bars (game look and overlay) lay these out in one row and
     /// share the width, so a new filter is one more line here.
     /// </summary>
-    private static (string label, BepInEx.Configuration.ConfigEntry<bool> entry)[] BarToggles() => new[]
+    private static (string label, OverTheHillPlus.Config.ConfigEntry<bool> entry)[] BarToggles() => new[]
     {
         ("Compatible", BrowserPlus.HideIncompatible),
         ("Free slots", BrowserPlus.OnlyFreeSlots),
@@ -197,7 +197,7 @@ internal sealed class ServerBrowserPlusFeature : IFeature
     };
 
     /// <summary>An on/off switch for a setting, drawn by whichever bar is active. Returns true when flipped.</summary>
-    private static bool Toggle(Rect r, string label, BepInEx.Configuration.ConfigEntry<bool> entry)
+    private static bool Toggle(Rect r, string label, OverTheHillPlus.Config.ConfigEntry<bool> entry)
     {
         if (entry == null) return false;
         bool clicked = _drawingNative ? QuickBarNative.Toggle(r, label, entry.Value) : DrawChip(r, label, entry.Value);
@@ -248,10 +248,11 @@ internal sealed class ServerBrowserPlusFeature : IFeature
             float sw = Screen.width / s, sh = 1080f;
             float x = BrowserPlus.BarX.Value >= 0f ? BrowserPlus.BarX.Value : (sw - NW) / 2f;
             float y = BrowserPlus.BarY.Value >= 0f ? BrowserPlus.BarY.Value : 12f;
+            float nh = NH + ModPlayersPanel.Height;
             x = Mathf.Clamp(x, 0f, Mathf.Max(0f, sw - NW));
-            y = Mathf.Clamp(y, 0f, Mathf.Max(0f, sh - NH));
+            y = Mathf.Clamp(y, 0f, Mathf.Max(0f, sh - nh));
 
-            mode = QuickBarNative.Begin(x, y, NW, NH);
+            mode = QuickBarNative.Begin(x, y, NW, nh);
             if (mode == QuickBarNative.Mode.Native)
             {
                 _drawingNative = true;
@@ -301,10 +302,13 @@ internal sealed class ServerBrowserPlusFeature : IFeature
 
         // Row 2: filters.
         var toggles = BarToggles();
-        int n = Mathf.Max(1, toggles.Length);
+        int n = Mathf.Max(1, toggles.Length + 1);
         float w2 = (NGridW - NGap * (n - 1)) / n;
         for (int i = 0; i < toggles.Length; i++)
             Toggle(new Rect(gx + i * (w2 + NGap), NRowH + NGap, w2, NRowH), toggles[i].label, toggles[i].entry);
+        // "Players with the mod" opens under the bar.
+        if (QuickBarNative.Toggle(new Rect(gx + toggles.Length * (w2 + NGap), NRowH + NGap, w2, NRowH), "Mod players", ModPlayersPanel.Open))
+            ModPlayersPanel.Open = !ModPlayersPanel.Open;
 
         // Key prompts, right-aligned like the game's (laid out right to left).
         float right = NW;
@@ -316,6 +320,8 @@ internal sealed class ServerBrowserPlusFeature : IFeature
         if (fk != UnityEngine.InputSystem.Key.None &&
             QuickBarNative.Prompt(ref right, NPromptY, NPromptH, KeyName(fk), selFav ? "Unfavourite" : "Favourite", sel != null))
             BrowserPlus.ToggleFavourite(sel);
+
+        ModPlayersPanel.DrawNative(NPromptY + NPromptH, NW);
     }
 
     // ---------------------------------------------------------------- quick bar: overlay fallback (IMGUI)

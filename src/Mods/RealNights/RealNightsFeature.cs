@@ -59,7 +59,7 @@ internal sealed class RealNightsFeature : IFeature
         });
     }
 
-    private static void Slider(string label, BepInEx.Configuration.ConfigEntry<int> entry, int min, int max, int step)
+    private static void Slider(string label, OverTheHillPlus.Config.ConfigEntry<int> entry, int min, int max, int step)
     {
         float v = RawSlider(label, entry.Value, min, max, entry.Value.ToString(), true);
         int rounded = Mathf.Clamp(Mathf.RoundToInt(v / step) * step, min, max);

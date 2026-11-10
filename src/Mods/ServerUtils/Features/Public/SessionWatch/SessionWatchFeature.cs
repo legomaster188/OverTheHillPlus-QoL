@@ -1,6 +1,10 @@
 using System;
 using System.Text;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using OverTheHillPlus.ServerUtils;
 using UnityEngine;

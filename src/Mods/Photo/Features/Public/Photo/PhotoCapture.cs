@@ -390,17 +390,23 @@ internal static class PhotoCapture
 
     // ---- overlays (never drawn into a shot: the mod draws no IMGUI while Capturing) ----
 
+    /// <summary>False while <see cref="DrawOverlays"/> has no grid or saved-photo toast to show (pure managed reads).</summary>
+    public static bool OverlaysWanted() => PhotoConfig.ThirdsGrid.Value || (PhotoConfig.ShowSavedToast.Value && !string.IsNullOrEmpty(LastInfo));
+
     public static void DrawOverlays()
     {
         if (Capturing) return;
         bool grid = PhotoConfig.ThirdsGrid.Value;
         bool toast = PhotoConfig.ShowSavedToast.Value && Time.unscaledTime - LastAt < 4f && !string.IsNullOrEmpty(LastInfo);
         if (!grid && !toast) return;
-        if (Event.current == null || Event.current.type != EventType.Repaint) return;
+        if (!UI.HudKit.HudDraw.Repaint) return;
+        // The screen layer: the grid is for photo mode, where the driving layer is away. Hidden for a shot like everything else.
+        if (!UI.HudKit.HudDraw.Begin("photo", UI.HudKit.HudLayer.Screen)) return;
 
         var prevMatrix = GUI.matrix;
         var prevColor = GUI.color;
         GUI.matrix = Matrix4x4.identity;
+        UI.HudKit.HudCanvas.Sync();
         try
         {
             if (grid) DrawGrid();
@@ -410,6 +416,7 @@ internal static class PhotoCapture
         {
             GUI.matrix = prevMatrix;
             GUI.color = prevColor;
+            UI.HudKit.HudDraw.End();
         }
     }
 
@@ -417,30 +424,32 @@ internal static class PhotoCapture
     {
         float w = Screen.width, h = Screen.height;
         float t = Mathf.Max(1f, Mathf.Round(h / 1080f));
-        GUI.color = new Color(1f, 1f, 1f, 0.35f);
-        var tex = Texture2D.whiteTexture;
+        var line = new Color(1f, 1f, 1f, 0.35f);
         for (int i = 1; i <= 2; i++)
         {
-            GUI.DrawTexture(new Rect(w * i / 3f - t / 2f, 0f, t, h), tex);
-            GUI.DrawTexture(new Rect(0f, h * i / 3f - t / 2f, w, t), tex);
+            UI.OverlayDraw.Rect(new Rect(w * i / 3f - t / 2f, 0f, t, h), line);
+            UI.OverlayDraw.Rect(new Rect(0f, h * i / 3f - t / 2f, w, t), line);
         }
     }
 
     private static void DrawToast()
     {
         Theme.Ensure();
-        float scale = Mathf.Max(1f, Screen.height / 1080f);
-        GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
-        float sw = Screen.width / scale, sh = Screen.height / scale;
+        var screen = HudLayout.Begin();
         string title = LastFailed ? "Screenshot failed" : "Screenshot saved";
-        string sub = LastFailed ? LastInfo : $"{LastInfo}  ·  {Path.GetFileName(LastFile ?? "")}";
+        if (!ReferenceEquals(_toastFor, LastInfo))
+        {
+            _toastFor = LastInfo;
+            _toastSub = LastFailed ? LastInfo : $"{LastInfo}  ·  {Path.GetFileName(LastFile ?? "")}";
+        }
         float age = Time.unscaledTime - LastAt;
         float alpha = Mathf.Clamp01(4f - age); // fades over the last second
-        var r = new Rect(sw / 2f - 230f, sh - 110f, 460f, 52f);
+        var r = new Rect(screen.x / 2f - 230f, screen.y - 110f, 460f, 52f);
         GUI.color = new Color(1f, 1f, 1f, alpha);
-        Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.9f), 10);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), LastFailed ? Theme.Bad : Theme.Good, 2);
-        GUI.Label(new Rect(r.x + 16f, r.y + 7f, r.width - 24f, 20f), title, Theme.Label);
-        GUI.Label(new Rect(r.x + 16f, r.y + 27f, r.width - 24f, 18f), sub, Theme.Small);
+        var inner = Shared.WorldOverlay.PanelBox(r, LastFailed ? Theme.Bad : Theme.Good);
+        UI.HudKit.HudDraw.Label(new Rect(inner.x + 4f, inner.y + 1f, inner.width - 6f, 20f), title, Theme.Label);
+        UI.HudKit.HudDraw.Label(new Rect(inner.x + 4f, inner.y + 21f, inner.width - 6f, 18f), _toastSub, Theme.Small);
     }
+
+    private static string _toastFor, _toastSub;
 }

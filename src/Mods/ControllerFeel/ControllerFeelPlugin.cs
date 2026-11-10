@@ -1,7 +1,9 @@
-using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using System;
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.ControllerFeel;
@@ -16,9 +18,13 @@ using OverTheHillPlus.Core.Manager;
 /// controller rumble (ControllerVibrationManager) and can replace it. Local only: nothing is sent to anyone. See
 /// <see cref="ControllerFeelCore"/>, <see cref="FeelMixer"/> and <see cref="PadOutput"/>.
 /// </summary>
+#if MELON
+public class ControllerFeelPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class ControllerFeelPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.controllerfeel";
     public const string Name = "Rumble+";
@@ -27,7 +33,7 @@ public class ControllerFeelPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.controllerfeel.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "controllerfeel";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     private static bool _loggedTick;

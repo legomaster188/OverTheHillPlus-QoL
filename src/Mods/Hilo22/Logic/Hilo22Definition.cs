@@ -18,7 +18,7 @@ public static class Hilo22Definition
     /// <summary>CarInfo.name and the livery car name ("car": "Hilo22" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Hilo22";
     public const string Guid = "7406e4e8c15a42ad93263ad63a41bf4b";
-    public const int Protocol = 4;
+    public const int Protocol = 5;
 
     public static CarDefinition Create() => new()
     {
@@ -34,6 +34,8 @@ public static class Hilo22Definition
         FusionGuid = Guid,
         RegistryKey = "hilo22",
         Protocol = Protocol,
+        // fitfix: the game items these bodies can't carry (floating over the cab, sunk in the bed floor or the body)
+        HiddenItems = new[] { "Visual/Bed/Camper_Bed", "Visual/Bed/Canoe_Bed", "Visual/Bed/Christmas_Bed", "Visual/Bed/Fisher_Bed", "Visual/Bed/Overlander_Bed", "Visual/Bed/Party_Bed", "Visual/Bed/Rescue_Bed", "Visual/Front_Bumper/Christmas_Front", "Visual/Front_Bumper/SkidPlate_01", "Visual/Front_Bumper/SkidPlate_02", "Visual/Side/Side_Right" },
         // The Burro, the stock pickup (2.94 m wheelbase against the Hilo 22's 3.08 m, 5.01 m long against 5.33 m, a cab and
         // an open bed): its skeleton, garage data (vehicle class, upgrades) and cosmetic slots (Liveries/hilo22/README.md).
         // The Cumbre (2.96 m, a flatbed truck) has no bed slot and a cab-forward body.

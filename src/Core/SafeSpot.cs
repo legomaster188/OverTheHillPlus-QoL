@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 
 namespace OverTheHillPlus;
 

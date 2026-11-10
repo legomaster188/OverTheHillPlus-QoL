@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -35,6 +36,21 @@ public static class CarLodReport
         }
         return sb.ToString();
     }
+
+    /// <summary>How much of the screen's height an object of <paramref name="size"/> metres takes (Unity's LODGroup
+    /// measure, before the LOD bias): size over the view's height at that distance.</summary>
+    public static float RelativeHeight(float size, float distance, bool orthographic, float fovDegrees, float orthoSize)
+    {
+        if (size <= 0f) return 0f;
+        if (orthographic) return orthoSize > 1e-4f ? size / (2f * orthoSize) : 0f;
+        float view = 2f * Math.Max(distance, 1e-3f) * (float)Math.Tan(fovDegrees * 0.5 * Math.PI / 180.0);
+        return view > 1e-6f ? size / view : 0f;
+    }
+
+    /// <summary>True when a LODGroup's world size and the body it holds disagree by more than 40 % either way (the group
+    /// would switch LODs at the wrong distance).</summary>
+    public static bool SizeOff(float groupSize, float bodySize) =>
+        groupSize > 0f && bodySize > 0f && (groupSize < bodySize * 0.6f || groupSize > bodySize * 1.7f);
 
     private static string Tris(long n) => n >= 10000
         ? (n / 1000).ToString(CultureInfo.InvariantCulture) + "k"

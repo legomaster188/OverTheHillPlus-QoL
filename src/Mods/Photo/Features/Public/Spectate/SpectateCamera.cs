@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using Il2CppInterop.Runtime;
 using OverTheHillPlus.Features.Public.PlayerList;
 using UnityEngine;
@@ -44,8 +48,12 @@ internal static class SpectateCamera
         public string Name;
     }
 
-    private const int MapUiWithCameraOrbit = 3; // GameInput.Map.UIWithCameraZoomAndOrbit
-    private static readonly HashSet<int> PhotoMaps = new() { 7, 8, 9 }; // FreeCamera, PhotoModeFreeCamera, PhotoModeUI
+    // by name, not number: the game's update inserts enum members and shifts the rest
+    private static readonly int MapUiWithCameraOrbit = (int)GameInput.Map.UIWithCameraZoomAndOrbit;
+    private static readonly HashSet<int> PhotoMaps = new()
+    {
+        (int)GameInput.Map.FreeCamera, (int)GameInput.Map.PhotoModeFreeCamera, (int)GameInput.Map.PhotoModeUI,
+    };
 
     public static bool Active { get; private set; }
     public static string Status { get; private set; } = "off";

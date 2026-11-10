@@ -12,7 +12,7 @@ using OverTheHillPlus.Core.Manager;
 /// <summary>The Trailers MODS page: pick a trailer, get it, hitch, put it back, load the car hauler; host limits.</summary>
 internal static class TrailersSimple
 {
-    private static readonly string[] KindLabels = { "Utility trailer", "Teardrop camper", "Car hauler", "Boat trailer" };
+    private static readonly string[] KindLabels = { "Utility trailer", "Teardrop camper", "Car hauler", "Boat trailer", "Flatbed semi-trailer" };
     private static readonly int[] PerPlayerSteps = { 1, 2 };
     private static readonly int[] SessionSteps = { 1, 2, 3, 4, 5, 6, 7, 8 };
 
@@ -22,7 +22,7 @@ internal static class TrailersSimple
 
     internal static void Draw()
     {
-        SimpleMenu.Heading("Trailers");
+        SimpleMenu.Heading("Trailer");
         string failed = TrailerPrefabs.FailedReason ?? ModManager.FailedReason(TrailersPlugin.ModId);
         if (failed != null) SimpleMenu.Note("Trailers are off this session: " + failed + ".");
         else if (!TrailerPrefabs.Ready) SimpleMenu.Note("Getting the trailers ready (waiting for " + (TrailerPrefabs.Waiting ?? "the game") + ").");
@@ -39,13 +39,22 @@ internal static class TrailersSimple
         string noBar = why == null && !CarHasTowHitch() ? "No tow hitch" : null;
         string towWhy = why ?? noBar;
         int mine = TrailersActions.MineCount(out var hitched, out var any);
-        if (noBar != null) SimpleMenu.Note(TowHitch.Need + " (the Tow Bar in your car's upgrades).");
+        if (spec.FifthWheel)
+        {
+            // a semi-trailer goes on a semi truck's fifth wheel, not on a tow bar
+            noBar = why == null && !CarHasFifthWheel() ? "No fifth wheel" : null;
+            towWhy = why ?? noBar;
+            if (noBar != null) SimpleMenu.Note(TowHitch.NeedFifthWheel + ".");
+        }
+        else if (noBar != null) SimpleMenu.Note(TowHitch.Need + " (the Tow Bar in your car's upgrades).");
         SimpleMenu.Button("Get this trailer", towWhy ?? (mine > 0 ? $"{mine} out" : "Ready"),
-            "Spawns it right behind your car's tow hitch, hitched (while stopped).", () => TrailersActions.Spawn(), towWhy == null);
+            spec.FifthWheel ? "Puts it on your semi truck's fifth wheel, hitched (while stopped)." : "Spawns it right behind your car's tow hitch, hitched (while stopped).",
+            () => TrailersActions.Spawn(), towWhy == null);
         bool unhitching = hitched != null;
         string hitchWhy = unhitching ? why : towWhy;
         SimpleMenu.Button(unhitching ? "Unhitch" : "Hitch", hitchWhy ?? (any == null ? "—" : unhitching ? "Hitched" : "Loose"),
-            unhitching ? "Leaves the trailer where it stands, parking brake on." : "Back up until your car's tow hitch is near the trailer's coupler (2.5 m), then hitch.",
+            unhitching ? (any != null && any.Spec.FifthWheel ? "Winds the landing gear down and leaves the trailer where it stands." : "Leaves the trailer where it stands, parking brake on.")
+                       : "Back up until your car's tow hitch (a semi truck's fifth wheel) is near the trailer's coupler or kingpin (2.5 m), then hitch.",
             () => TrailersActions.ToggleHitch(), hitchWhy == null && any != null);
         SimpleMenu.Button("Put it back behind me", towWhy ?? (any == null ? "—" : "Ready"),
             "Moves your trailer right behind your car's tow hitch and hitches it (while stopped): for a trailer on its side or left far away.",
@@ -78,8 +87,22 @@ internal static class TrailersSimple
                 SimpleMenu.Button("Unload", why ?? "Ready", "Empties the deck.", () => TrailersActions.Unload(), why == null);
         }
 
-        SimpleMenu.Note("Hotkeys: hitch / unhitch " + KeyName(TrailersConfig.HitchKey.Value) + ", put it back " +
-                        KeyName(TrailersConfig.ResetKey.Value) + " (set them under Keybinds).");
+        // the boat trailer's boat: where it is, and how to launch and get it back at a ramp
+        foreach (var t in TrailerWorld.All)
+        {
+            if (t.State.Owner != me || t.Kind != TrailerKind.Boat) continue;
+            if (t.State.CargoCarId == 0)
+                SimpleMenu.Note("Boat: the runabout on this trailer is only for show. With the Grayling running, the trailer carries one you can launch.");
+            else
+                SimpleMenu.Note(t.State.Boat switch
+                {
+                    BoatPlace.Out => "Boat: out on the water with you. Come ashore near the trailer and get in your car: it ends up hitched, the boat stays moored.",
+                    BoatPlace.Afloat => "Boat: moored by the ramp. Take it from the garage, or back the trailer in beside it, stop, and it's winched on.",
+                    _ => "Boat: on the trailer. Back down a boat ramp until it floats, stop, and it slides off. Then park the trailer and take the boat.",
+                });
+            break;
+        }
+
         if (!string.IsNullOrEmpty(TrailerNet.LastMessage) && Time.unscaledTime - TrailerNet.LastMessageAt < 8f)
             SimpleMenu.Note(TrailerNet.LastMessage + ".");
 
@@ -92,6 +115,10 @@ internal static class TrailersSimple
         bool host = GameState.Runner != null && GameState.IsAuthority;
         SimpleMenu.Button("Remove all trailers", host ? $"{TrailerWorld.Count} out" : "Host only", "Takes every trailer in the session away.",
             () => Menu.SetStatus($"Removed {TrailerHost.DespawnAll(DespawnReason.Removed)} trailers"), host && TrailerWorld.Count > 0);
+
+        SimpleMenu.Heading("Keys");
+        Menu.KeyValue("Hitch / unhitch", KeyName(TrailersConfig.HitchKey.Value));
+        Menu.KeyValue("Put it back", KeyName(TrailersConfig.ResetKey.Value));
     }
 
     /// <summary>Why the buttons can't be used right now (null: they can).</summary>
@@ -114,6 +141,17 @@ internal static class TrailersSimple
             return car == null || TowBar.Mounted(car);
         }
         catch (Exception ex) { DebugLog.Error("trailers", ex, "TrailersSimple.CarHasTowHitch"); return true; }
+    }
+
+    /// <summary>Whether the local player's car is a semi truck with a fifth wheel (true when there is no car to ask about).</summary>
+    private static bool CarHasFifthWheel()
+    {
+        try
+        {
+            var car = TrailerHost.CarOf(GameState.Runner.LocalPlayer);
+            return car == null || TrailerHost.CarHitch(car, TrailerSpecs.Of(TrailerKind.Semi), out _);
+        }
+        catch (Exception ex) { DebugLog.Error("trailers", ex, "TrailersSimple.CarHasFifthWheel"); return true; }
     }
 
     private static string KeyName(Key k) => k == Key.None ? "none" : k.ToString();

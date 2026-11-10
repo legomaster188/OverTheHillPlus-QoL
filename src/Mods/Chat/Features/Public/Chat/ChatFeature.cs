@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Features.Public.PlayerList;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -49,7 +53,7 @@ internal sealed class ChatFeature : IFeature
         ServerSettings.AddRow(ServerSettingRow.Toggle("modchat", "Mod Chat", 70, ChatPlugin.ModId, () => Enabled));
         ChatNet.RegisterChannel();
         Registry.OnTick(ChatOverlay.Tick);
-        Registry.OnGui(ChatOverlay.OnGui);
+        Registry.OnGui(ChatOverlay.OnGui, wants: ChatOverlay.GuiWanted);
         Registry.Section(Registry.PlusMode, Tab, DrawChat, 0);
         Registry.Section(Registry.PlusMode, Tab, DrawOverlay, 10);
         Registry.Section(Registry.PlusMode, Tab, DrawMute, 20);

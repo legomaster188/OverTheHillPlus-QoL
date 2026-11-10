@@ -13,7 +13,6 @@ internal static class Qol
 {
     private static float _nextSlowTick;
     private static CameraSettingsInitializer _camera;
-    private static float _nextCameraSearch;
     private static readonly Dictionary<IntPtr, float> CompassOriginal = new();
     private static bool _headlightsByUs;
 
@@ -68,6 +67,10 @@ internal static class Qol
         if (Application.targetFrameRate != cap) Application.targetFrameRate = cap;
     }
 
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer CameraPace = WorldScan.Pace("camera settings", 1f);
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer CompassPace = WorldScan.Pace("compass", 1f);
+    private static readonly List<CompassController> Compasses = new();
+
     private static void ApplyFov()
     {
         float fov = DrivingQolConfig.FovOverride.Value;
@@ -77,8 +80,7 @@ internal static class Qol
             if (_camera == null)
             {
                 // FindObjectOfType walks every object: while there is no camera (menus, loading) this ran every frame.
-                if (Time.unscaledTime < _nextCameraSearch) return;
-                _nextCameraSearch = Time.unscaledTime + 1f;
+                if (!WorldScan.Due(CameraPace, Time.unscaledTime)) return;
                 _camera = Object.FindObjectOfType<CameraSettingsInitializer>();
                 if (_camera == null) return;
             }
@@ -99,9 +101,17 @@ internal static class Qol
         {
             // Nothing to do while the compass is untouched and was never changed (skips the object search).
             if (Math.Abs(mult - 1f) < 0.001f && CompassOriginal.Count == 0) return;
-            foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<CompassController>()))
+            if (WorldScan.Due(CompassPace, Time.unscaledTime))
             {
-                var c = o.TryCast<CompassController>();
+                Compasses.Clear();
+                foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<CompassController>()))
+                {
+                    var found = o.TryCast<CompassController>();
+                    if (found != null) Compasses.Add(found);
+                }
+            }
+            foreach (var c in Compasses)
+            {
                 if (c == null) continue;
                 if (!CompassOriginal.TryGetValue(c.Pointer, out var orig)) CompassOriginal[c.Pointer] = orig = c.maxVisibleRadius;
                 float want = orig * mult;
@@ -121,8 +131,15 @@ internal static class Qol
             if (tm == null || input == null) return;
             int h = tm.Hours;
             bool night = h >= 19 || h < 7;
+#if MELON
+            // The 2026-10-30 game update replaced the on/off toggle with a mode (off, low, high beam).
+            bool on = input.HeadlightsMode != LightsController.HeadlightsMode.Off;
+            if (night && !on) { input.SetHeadlightsMode(LightsController.HeadlightsMode.Low); _headlightsByUs = true; }
+            else if (!night && on && _headlightsByUs) { input.SetHeadlightsMode(LightsController.HeadlightsMode.Off); _headlightsByUs = false; }
+#else
             if (night && !input.HeadlightsOn) { input.ToggleHeadlights(); _headlightsByUs = true; }
             else if (!night && input.HeadlightsOn && _headlightsByUs) { input.ToggleHeadlights(); _headlightsByUs = false; }
+#endif
         }
         catch (Exception ex) { DebugLog.Error("drivingqol", ex, "Qol.AutoHeadlights"); }
     }

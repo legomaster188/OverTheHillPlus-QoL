@@ -1,3 +1,4 @@
+using OverTheHillPlus.Loader;
 using System;
 using System.IO;
 using OverTheHillPlus.Audio;
@@ -45,7 +46,7 @@ internal static class RadioPlayer
 
     public static void Init()
     {
-        Root = Path.Combine(BepInEx.Paths.ConfigPath, "oth.radio");
+        Root = Path.Combine(OthLoader.ConfigDir, "oth.radio");
         try { Directory.CreateDirectory(Root); }
         catch (Exception e) { DebugLog.Error("radio", e, "RadioPlayer.Init"); LogOnce("mkdir", "Could not create the radio folder: " + e.Message); }
         _playlist = new RadioPlaylist(new System.Collections.Generic.List<RadioStation>(), Environment.TickCount);
@@ -158,7 +159,7 @@ internal static class RadioPlayer
         }
         if (_playlist.Current == null)
         {
-            Status = "no music: put mp3, ogg or wav files in BepInEx/config/oth.radio";
+            Status = "no music: put mp3, ogg or wav files in " + OverTheHillPlus.Loader.LoaderText.ConfigDir + "/oth.radio";
             // Look again now and then, so files added while the game runs show up.
             if (now >= _nextRescan) { _nextRescan = now + 10f; Rescan(announce: false); }
             return;

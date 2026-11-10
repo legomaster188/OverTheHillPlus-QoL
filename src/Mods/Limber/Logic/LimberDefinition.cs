@@ -20,7 +20,7 @@ public static class LimberDefinition
     /// <summary>CarInfo.name and the livery car name ("car": "Limber" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Limber";
     public const string Guid = "c93b6c73e25c45b8ab05d7612a185a6f";
-    public const int Protocol = 1;
+    public const int Protocol = 2;
 
     /// <summary>The Marshal hangs its pan and its camping lantern off its roof rack; on the Limber that would be the canvas
     /// tilt, so they hang from the top of the tailgate instead (cosm_Pan, cosm_Lantern in the model).</summary>
@@ -44,6 +44,8 @@ public static class LimberDefinition
         FusionGuid = Guid,
         RegistryKey = "limber",
         Protocol = Protocol,
+        // fitfix: the game items these bodies can't carry (floating over the cab, sunk in the bed floor or the body)
+        HiddenItems = new[] { "Visual/Fender/Mudflap_FL", "Visual/Fender/Mudflap_FR", "Visual/Rear_Bumper/Christmas_Rear", "Visual/Roof/Hotdog", "Visual/Roof/IceCream" },
         // The Marshal, the stock Expedition van (2.66 m wheelbase and 1.59 m track against the Limber's real 2.565 m and
         // 1.52 / 1.55 m; the Mammoth is 2.19 m wide over a 1.80 m track): its skeleton, garage data (the Expedition vehicle
         // class, upgrades) and cosmetic slots (Liveries/limber/README.md). An enclosed load body like the Marshal's: no bed.

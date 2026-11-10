@@ -19,7 +19,7 @@ public static class BentoDefinition
     /// <summary>CarInfo.name and the livery car name ("car": "Bento" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Bento";
     public const string Guid = "960a2f65ca4a47e4a247a6d8ebd83d3c";
-    public const int Protocol = 3;
+    public const int Protocol = 4;
 
     public static CarDefinition Create() => new()
     {
@@ -48,6 +48,11 @@ public static class BentoDefinition
         // cosm_Bed (the standard table has no bed slot).
         HasBed = true,
         Cosmetics = CarCosmetics.Build(CarCosmetics.SlotAnchors.Append(("cosm_Bed", "Visual/Bed")), CarCosmetics.ItemAnchors),
+        // A cab-over: the hood slot sits on the cab roof. The bull horns go on the roof's front edge on their own anchor;
+        // the bush cables (nose to the windscreen pillars' tops of a bonneted car) and the side Christmas lights (wound
+        // round the Burro's long step tube, 14 cm out from this narrow cab) can't sit right and are hidden.
+        ItemAnchors = new[] { new CosmeticItemAnchor("cosm_i_BullHorns", "Visual/Hood/BullHorns") },
+        HiddenItems = new[] { "Visual/Hood/Bushcables", "Visual/Side_Step/Christmas_Side", "Visual/Bed/Camper_Bed", "Visual/Bed/Canoe_Bed", "Visual/Bed/Christmas_Bed", "Visual/Bed/Fisher_Bed", "Visual/Bed/Overlander_Bed", "Visual/Bed/Party_Bed", "Visual/Bed/Refreshments_Bed", "Visual/Bed/Rescue_Bed", "Visual/Bed/Wintersports_Bed" },
         // A 660 cc kei truck on the Burro's skeleton: 0.87 t (under a third of the Burro's 2.8 t) and 14 kW (a small
         // high-revving engine on 12" wheels, so the rev range is raised), a 105 km/h real top speed as a 6.3 m/s limiter,
         // gearing so the limiter comes at 85 % of the revs, soft short-travel springs scaled to the weight (the Burro's are

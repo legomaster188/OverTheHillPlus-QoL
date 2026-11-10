@@ -1,10 +1,18 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppDistantLands.Cozy;
+#else
 using DistantLands.Cozy;
+#endif
 using HarmonyLib;
 using Il2CppInterop.Runtime;
+#if MELON
+using Il2CppOccaSoftware.Buto.Runtime;
+#else
 using OccaSoftware.Buto.Runtime;
+#endif
 using OverTheHillPlus.UI;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -71,7 +79,7 @@ internal sealed class FogAtmosphere : IFeature
 
     private static readonly Dictionary<IntPtr, ButoVolumetricFog> Fogs = new();
     private static CozyWeather _cozy;
-    private static float _nextScan;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer ScanPace = WorldScan.Pace("fog volumes", 2f);
     private static bool _patchedButo, _patchedCozy;
     private static int _cozyCalls, _cozyFrame = -100;
     private static readonly HashSet<string> LoggedOnce = new();
@@ -423,13 +431,10 @@ internal sealed class FogAtmosphere : IFeature
             if (_hadWork) RestoreAll();
             return;
         }
+        if (!_hadWork) ScanPace.Again();
         _hadWork = true;
 
-        if (Time.unscaledTime >= _nextScan)
-        {
-            _nextScan = Time.unscaledTime + 2f;
-            ScanButo();
-        }
+        if (WorldScan.Due(ScanPace, Time.unscaledTime)) ScanButo();
 
         ApplyAllButo(!ButoOn);
         // The COZY postfix already applies RenderSettings each frame while it runs; only do it here otherwise.

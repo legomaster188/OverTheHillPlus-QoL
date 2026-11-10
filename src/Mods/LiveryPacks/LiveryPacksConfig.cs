@@ -1,4 +1,4 @@
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 
 namespace OverTheHillPlus.LiveryPacks;
 
@@ -13,6 +13,6 @@ internal static class LiveryPacksConfig
     {
         File = cfg;
         LoadPacks = cfg.Bind("LiveryPacks", "LoadPacks", true,
-            "Add the packs in BepInEx/config/oth.liveries/ to the garage's livery list (Livery Mods tab, with \"Show local mods\" on).");
+            "Add the packs in " + OverTheHillPlus.Loader.LoaderText.ConfigDir + "/oth.liveries/ to the garage's livery list (Livery Mods tab, with \"Show local mods\" on).");
     }
 }

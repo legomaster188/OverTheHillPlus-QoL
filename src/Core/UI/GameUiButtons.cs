@@ -1,6 +1,10 @@
 using System;
 using Il2CppInterop.Runtime;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -16,6 +20,9 @@ internal static class GameUiButtons
     // Several buttons can be added in the same frame (e.g. PLUS and REJOIN on the main menu): keep all their labels.
     private static readonly System.Collections.Generic.List<(GameObject go, string text)> Relabel = new();
     private static float _relabelUntil;
+    // A menu's buttons fade and slide in when it opens (the game animates each one); a clone made during that
+    // animation keeps the frame it was copied in (often invisible). For a few seconds the clone follows its source.
+    private static readonly System.Collections.Generic.List<(GameObject clone, GameObject source)> Mirror = new();
 
     /// <summary>Clones <paramref name="source"/> next to it with a new label and click action.</summary>
     public static GameObject Clone(UIButtonSelector source, string name, string label, int siblingIndex, Action onClick)
@@ -44,7 +51,10 @@ internal static class GameUiButtons
         if (_relabelUntil <= 0f || Time.unscaledTime > _relabelUntil) Relabel.Clear();
         Relabel.RemoveAll(r => r.go == null || r.go.name == name);
         Relabel.Add((go, label));
-        _relabelUntil = Time.unscaledTime + 2f;
+        Mirror.RemoveAll(m => m.clone == null || m.clone.name == name);
+        Mirror.Add((go, source.gameObject));
+        _relabelUntil = Time.unscaledTime + 3f;
+        FollowSource(go, source.gameObject);
         return go;
     }
 
@@ -56,8 +66,20 @@ internal static class GameUiButtons
         if (Time.unscaledTime > _relabelUntil || Relabel.Count == 0)
         {
             _relabelUntil = 0f;
+            foreach (var (clone, _) in Mirror) Settle(clone);
+            Mirror.Clear();
             Relabel.Clear(); // drop the references so destroyed buttons' wrappers can be collected
             return;
+        }
+        for (int i = Mirror.Count - 1; i >= 0; i--)
+        {
+            var (clone, source) = Mirror[i];
+            try
+            {
+                if (clone == null || source == null) { Mirror.RemoveAt(i); continue; }
+                FollowSource(clone, source);
+            }
+            catch (Exception ex) { DebugLog.Error("core", ex, "GameUiButtons.Mirror"); Mirror.RemoveAt(i); }
         }
         for (int i = Relabel.Count - 1; i >= 0; i--)
         {
@@ -69,6 +91,30 @@ internal static class GameUiButtons
             }
             catch (Exception ex) { DebugLog.Error("core", ex, "GameUiButtons.Tick"); Relabel.RemoveAt(i); }
         }
+    }
+
+    /// <summary>The clone's fade (canvas groups and each graphic's canvas alpha) and scale follow the source's, part by part.</summary>
+    private static void FollowSource(GameObject clone, GameObject source)
+    {
+        clone.transform.localScale = source.transform.localScale;
+        var sg = source.GetComponentsInChildren<CanvasGroup>(true);
+        var cg = clone.GetComponentsInChildren<CanvasGroup>(true);
+        for (int i = 0; i < sg.Length && i < cg.Length; i++) cg[i].alpha = sg[i].alpha;
+        var sr = source.GetComponentsInChildren<CanvasRenderer>(true);
+        var cr = clone.GetComponentsInChildren<CanvasRenderer>(true);
+        for (int i = 0; i < sr.Length && i < cr.Length; i++) cr[i].SetAlpha(sr[i].GetAlpha());
+    }
+
+    /// <summary>After following: never leave the clone faded out (its source may be hidden or gone by then).</summary>
+    private static void Settle(GameObject clone)
+    {
+        try
+        {
+            if (clone == null) return;
+            foreach (var g in clone.GetComponentsInChildren<CanvasGroup>(true)) if (g.alpha < 0.99f) g.alpha = 1f;
+            foreach (var r in clone.GetComponentsInChildren<CanvasRenderer>(true)) if (r.GetAlpha() < 0.99f) r.SetAlpha(1f);
+        }
+        catch (Exception ex) { DebugLog.Error("core", ex, "GameUiButtons.Settle"); }
     }
 
     private static void StripLocalization(GameObject go)

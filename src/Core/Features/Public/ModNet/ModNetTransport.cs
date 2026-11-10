@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+#if MELON
+using Il2CppFusion;
+using Il2CppFusion.Sockets;
+#else
 using Fusion;
 using Fusion.Sockets;
+#endif
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
@@ -42,7 +47,7 @@ internal static class ModNetTransport
     private delegate void ReceiveFn(IntPtr self, IntPtr runner, int player, IntPtr key, IntPtr data, IntPtr method);
 
     private static ReceiveFn _hookFn, _original;
-    private static BepInEx.Unity.IL2CPP.Hook.INativeDetour _detour;
+    private static object _detour;
     private static volatile bool _active;
     private static bool _installed;
     private static int _gameKeysLogged;
@@ -84,7 +89,7 @@ internal static class ModNetTransport
             IntPtr code = methodInfo == IntPtr.Zero ? IntPtr.Zero : Marshal.ReadIntPtr(methodInfo);
             if (code == IntPtr.Zero) { Fault("OverlandNetworkRunner.OnReliableDataReceived has no code pointer; the mod network is off"); return false; }
             _hookFn = Receive;
-            _detour = BepInEx.Unity.IL2CPP.Hook.INativeDetour.CreateAndApply(code, _hookFn, out _original);
+            _detour = OverTheHillPlus.Loader.OthLoader.NativeDetour(code, _hookFn, out _original);
             Core.CorePlugin.Logger?.LogInfo("[ModNet] native receive hook in (" + field.Name + ")");
             return true;
         }
@@ -163,11 +168,14 @@ internal static class ModNetTransport
     {
         try
         {
-            var key = ReliableKey.FromInts(Magic, k1, k2, k3);
             var arr = new Il2CppStructArray<byte>(payload ?? Array.Empty<byte>());
             var span = MakeSpan(arr);
-            if (toServer) r.SendReliableDataToServer(key, span);
-            else r.SendReliableDataToPlayer(to, key, span);
+            if (!SendRaw(r, to, toServer, k1, k2, k3, span))
+            {
+                var key = ReliableKey.FromInts(Magic, k1, k2, k3);
+                if (toServer) r.SendReliableDataToServer(key, span);
+                else r.SendReliableDataToPlayer(to, key, span);
+            }
             Recent.Enqueue((Time.unscaledTime, arr, span));
             return true;
         }
@@ -177,6 +185,61 @@ internal static class ModNetTransport
             ModNet.LogOnce("send" + (k1 & 0xFFFF), $"[ModNet] Sending on channel {k1 & 0xFFFF} failed: {e.Message}");
             return false;
         }
+    }
+
+    private static IntPtr _toServer, _toPlayer, _keyBuf, _argBuf, _playerBuf;
+    private static bool _rawLooked;
+
+    /// <summary>
+    /// Sends with the key as the 16 bytes the native method reads, through il2cpp_runtime_invoke. The interop ReliableKey
+    /// can't carry it: its Data fixed buffer is generated as a single byte (MelonLoader 0.7.3's Il2CppInterop), so
+    /// FromInts plus the wrapper's call sent the first byte of <see cref="Magic"/> and garbage, the host passed the
+    /// message to the game as "key 80" and no handshake ever happened. False when the methods weren't found (the caller
+    /// then uses the wrapper).
+    /// </summary>
+    private static unsafe bool SendRaw(NetworkRunner r, PlayerRef to, bool toServer, int k1, int k2, int k3, Il2CppSystem.ReadOnlySpan<byte> span)
+    {
+        if (!_rawLooked)
+        {
+            _rawLooked = true;
+            const System.Reflection.BindingFlags Static = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            foreach (var f in typeof(NetworkRunner).GetFields(Static))
+            {
+                if (f.FieldType != typeof(IntPtr) || !f.Name.Contains("ReadOnlySpan")) continue;
+                if (f.Name.StartsWith("NativeMethodInfoPtr_SendReliableDataToServer_", StringComparison.Ordinal)) _toServer = (IntPtr)f.GetValue(null);
+                else if (f.Name.StartsWith("NativeMethodInfoPtr_SendReliableDataToPlayer_", StringComparison.Ordinal)) _toPlayer = (IntPtr)f.GetValue(null);
+            }
+            if (_toServer != IntPtr.Zero && _toPlayer != IntPtr.Zero)
+            {
+                _keyBuf = Marshal.AllocHGlobal(16);
+                _argBuf = Marshal.AllocHGlobal(3 * IntPtr.Size);
+                _playerBuf = Marshal.AllocHGlobal(16);
+            }
+            else Core.CorePlugin.Logger?.LogWarning("[ModNet] NetworkRunner.SendReliableData methods not found; sending through the interop key");
+        }
+        if (_keyBuf == IntPtr.Zero) return false;
+        IntPtr method = toServer ? _toServer : _toPlayer;
+        // main thread only (every send comes from the tick or a handler), so one set of buffers will do
+        int* key = (int*)_keyBuf;
+        key[0] = Magic; key[1] = k1; key[2] = k2; key[3] = k3;
+        IntPtr spanValue = IL2CPP.il2cpp_object_unbox(span.Pointer);
+        IntPtr* args = (IntPtr*)_argBuf;
+        if (toServer)
+        {
+            args[0] = _keyBuf;
+            args[1] = spanValue;
+        }
+        else
+        {
+            *(PlayerRef*)_playerBuf = to;
+            args[0] = _playerBuf;
+            args[1] = _keyBuf;
+            args[2] = spanValue;
+        }
+        IntPtr exc = IntPtr.Zero;
+        IL2CPP.il2cpp_runtime_invoke(method, r.Pointer, (void**)args, ref exc);
+        Il2CppInterop.Runtime.Il2CppException.RaiseExceptionIfNecessary(exc);
+        return true;
     }
 
     internal static void PruneRecent()

@@ -50,6 +50,12 @@ public sealed class CarDefinition
     public string DefaultGarageBase;
     /// <summary>The car has a load bed (its base car's bed cosmetics are kept). Usually false.</summary>
     public bool HasBed;
+    /// <summary>The car is a wrecker: the career lets it do what asks for the car hauler (recovery jobs). Usually false.</summary>
+    public bool Wrecker;
+    /// <summary>What kind of vehicle it is (<see cref="VehicleKind"/>): a car on tyres (the default), or a snowmobile or a
+    /// boat, whose four wheels are hidden physics wheels. Other mods' tyre features (pressures, treads, chains, sizes) leave
+    /// a vehicle without tyres alone (core's VehicleTraits). Its wheels' parts in the model carry no triangles.</summary>
+    public VehicleKind Kind = VehicleKind.Car;
 
     // ---------------------------------------------------------------- assets
 
@@ -118,6 +124,15 @@ public sealed class CarDefinition
     /// <summary>Extra box colliders of the body (model space), for the parts the model's collider part leaves out, e.g. a
     /// tractor's frame and deck behind the cab. Part of the network layout (bump <see cref="Protocol"/>).</summary>
     public CarBodyBox[] BodyBoxes = Array.Empty<CarBodyBox>();
+    /// <summary>
+    /// Metres the physical rear axle (the rear wheel colliders) sits ahead of the model's rear wheel anchors, for a car
+    /// whose rear wheels are drawn by tandem followers (<see cref="CarTandem"/>): the visible axles, their ruts and their
+    /// bump stops stay where the model has them. The game's raycast wheels hold a heavy truck still at rest only up to
+    /// about a 3.9 m wheelbase: measured on the Longhorn (2026-11-09), its 4.70 m rocked the body side to side on the
+    /// spot, 4.00 m still did, 3.85 m and less stood still, whatever its inertia, springs, brakes or grip
+    /// (<see cref="CarPhysicsFit.MaxStableWheelbase"/>). Part of the network layout (bump <see cref="Protocol"/>). 0: none.
+    /// </summary>
+    public float PhysicalRearShift;
     /// <summary>The car's own rules for the donor's runtime objects (<see cref="CarDonorObjects"/>): an anchor to move one
     /// to, or an empty anchor to switch it off. Empty: the defaults.</summary>
     public DonorObjectOverride[] DonorObjects = Array.Empty<DonorObjectOverride>();
@@ -229,6 +244,7 @@ public sealed class CarDefinition
             foreach (byte d in Diffs) if (d > 3) return who + "a differential mode is 0 (the game's), 1 (open), 2 (limited slip) or 3 (locked)";
         }
         if (string.IsNullOrWhiteSpace(Description) || string.IsNullOrWhiteSpace(PageNote)) return who + "no description or page note";
+        if (!(PhysicalRearShift >= 0f && PhysicalRearShift <= 2f)) return who + "the physical rear shift must be 0 to 2 m";
         if (BodyBoxes == null || BodyBoxes.Length > 8) return who + "at most 8 body boxes";
         foreach (var b in BodyBoxes)
         {

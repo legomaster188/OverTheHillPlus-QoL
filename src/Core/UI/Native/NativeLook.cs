@@ -2,9 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+#if MELON
+using Il2CppFunCore.Style;
+#else
 using FunCore.Style;
+#endif
 using Il2CppInterop.Runtime;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -615,7 +623,7 @@ internal static class NativeLook
     private const int GenRadius = 24;
     private static Sprite _roundSprite;
 
-    private static void EnsureGeneratedShapes()
+    internal static void EnsureGeneratedShapes()
     {
         if (_roundSprite != null && (bool)_roundSprite && Square?.Sprite != null && (bool)Square.Sprite) return;
         int size = GenRadius * 2 + 2;

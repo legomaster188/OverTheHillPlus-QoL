@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Grayling</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonCarPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.Grayling.GraylingPlugin</OthPluginClass>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model (grayling.mesh, with body_lod1..3 and the outboard's mv_* moving parts) and its textures, made by
+         Liveries/tools/grayling/build_grayling.py with the shared exporter (Liveries/grayling/), read by core's car
+         framework (CarAssets) and by this mod (BoatRig). -->
+    <EmbeddedResource Include="Assets\*.mesh;Assets\*.png" Exclude="Assets\card.png" LogicalName="grayling/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

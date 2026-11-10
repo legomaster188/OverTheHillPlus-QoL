@@ -18,7 +18,7 @@ internal sealed class FeelMixer
     /// <summary>How strongly each effect sounded in the last step, 0 to 1 (before its strength setting).</summary>
     public readonly float[] Parts = new float[7];
 
-    private readonly SmoothNoise _surface = new(11), _grit = new(23), _spin = new(37), _creak = new(41), _idle = new(53);
+    private readonly SmoothNoise _surface = new(11), _grit = new(23), _spin = new(37), _creak = new(41), _idle = new(53), _rattle = new(67);
     private readonly Pulse _bumpLF = new(), _bumpHF = new(), _stopLF = new(), _stopHF = new(), _landLF = new(), _landHF = new();
 
     private float _airTime, _fallSpeed;
@@ -33,6 +33,7 @@ internal sealed class FeelMixer
         _spin.Reset();
         _creak.Reset();
         _idle.Reset();
+        _rattle.Reset();
         _bumpLF.Reset();
         _bumpHF.Reset();
         _stopLF.Reset();
@@ -81,6 +82,15 @@ internal sealed class FeelMixer
                 _surface.Step(dt, 4f);
                 _grit.Step(dt, 4f);
             }
+            // Snow chains (or anything else that hands core a rattle): a fast, hard clatter on the light motor with a thud on the heavy one.
+            float rattle = FeelMath.Clamp01(i.Rattle);
+            if (rattle > 0f && i.Grounded > 0)
+            {
+                float clatter = 0.55f + 0.9f * _rattle.Step(dt, 26f);
+                partLF = FeelMath.Combine(partLF, 0.16f * rattle * clatter);
+                partHF = FeelMath.Combine(partHF, 0.42f * rattle * clatter);
+            }
+            else _rattle.Step(dt, 4f);
             Parts[(int)Effect.Surface] = FeelMath.Clamp01(Math.Max(partLF, partHF));
             float k2 = FeelSettings.Clamp(s.Surface);
             lf = FeelMath.Combine(lf, partLF * k2);

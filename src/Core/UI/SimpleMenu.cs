@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.Features;
 using OverTheHillPlus.UI.GameMenu;
 using OverTheHillPlus.UI.Native;
@@ -239,6 +239,156 @@ internal static class SimpleMenu
             enabled, format(current), wrap: false);
     }
 
+    // ---------------------------------------------------------------- sliders
+
+    private static readonly Dictionary<(float, float, float), float[]> StepValues = new();
+
+    /// <summary>The positions of a stepped slider as a list (cached: the choice rows key their labels by the array).</summary>
+    private static float[] StepsOf(float min, float max, float step)
+    {
+        var key = (min, max, step);
+        if (StepValues.TryGetValue(key, out var cached)) return cached;
+        int n = RowMap.Positions(min, max, step);
+        var values = new float[n];
+        for (int i = 0; i < n; i++) values[i] = RowMap.ValueAt(i, min, max, step);
+        StepValues[key] = values;
+        return values;
+    }
+
+    /// <summary>
+    /// A setting from <paramref name="min"/> to <paramref name="max"/> that moves in steps of <paramref name="step"/>, as the
+    /// game's slider with its value shown (<paramref name="format"/> of the current value). The game's slider moves one step
+    /// per arrow press and snaps to the steps with the mouse. Where there is no slider (the full view) the same steps are
+    /// "&lt; value &gt;" arrows, so every style can set every value. A value between two steps (set in the Advanced view) shows as it is
+    /// and moves to the nearest step when the slider is touched.
+    /// </summary>
+    internal static void StepSlider(string label, string hint, float current, float min, float max, float step, Func<float, string> format,
+        Action<float> set, bool enabled = true)
+    {
+        if (!RowRecorder.Recording)
+        {
+            FloatChoice(label, hint, current, StepsOf(min, max, step), format, set, enabled);
+            return;
+        }
+        float v = Recorded.Slider(label, current, min, max, format(current), enabled, hint, step);
+        if (enabled && Mathf.Abs(v - current) > step * 0.01f) set(v);
+    }
+
+    // ---------------------------------------------------------------- colour swatches
+
+    private const float SwatchSize = 26f, SwatchGap = 7f;
+
+    /// <summary>
+    /// A colour setting from a short list: the "&lt; name &gt;" row, and under it a strip of small squares, one per colour, the
+    /// current one marked, to pick one with a click. <paramref name="colours"/> are 0xRRGGBB. In the full view the squares are
+    /// drawn the same way; the row's arrows (keyboard, gamepad) always work.
+    /// </summary>
+    internal static void SwatchChoice(string label, string hint, int index, string[] names, int[] colours, Action<int> set, bool enabled = true,
+        string shown = null)
+    {
+        Choice(label, hint, index, names, set, enabled, shown, wrap: true);
+        Swatches(label + " colours", index, colours, set, enabled);
+    }
+
+    /// <summary>
+    /// A small grey title and, under it, a strip of colour squares that wraps onto more lines (a group of the shared
+    /// palette). <paramref name="index"/> is the marked square (-1: none); a click calls <paramref name="set"/> with its index.
+    /// </summary>
+    internal static void SwatchGroup(string title, int index, int[] colours, Action<int> set, bool enabled = true)
+    {
+        Note(title);
+        Swatches(title + " colours", index, colours, set, enabled);
+    }
+
+    // The game page's strip is about 12 squares wide; longer groups go onto more strips.
+    private const int NativePerLine = 12;
+
+    private static void Swatches(string id, int index, int[] colours, Action<int> set, bool enabled)
+    {
+        if (colours == null || colours.Length == 0) return;
+        if (RowRecorder.Recording)
+        {
+            for (int at = 0, line = 0; at < colours.Length; at += NativePerLine, line++)
+            {
+                int from = at, n = Math.Min(NativePerLine, colours.Length - at);
+                var part = new int[n];
+                Array.Copy(colours, from, part, 0, n);
+                Recorded.Swatches(line == 0 ? id : id + " " + (line + 1), part, index - from, i => set(from + i), enabled);
+            }
+            return;
+        }
+        int perLine = Math.Max(1, (int)((Menu.ContentWidth - Side * 2f + SwatchGap) / (SwatchSize + SwatchGap)));
+        for (int at = 0; at < colours.Length; at += perLine)
+        {
+            var row = new Rect(0f, Menu.Y, Menu.ContentWidth, SwatchSize + 10f);
+            Menu.Y += row.height;
+            var prev = GUI.color;
+            if (!enabled) GUI.color = Mul(prev, Disabled);
+            try
+            {
+                for (int i = at; i < colours.Length && i < at + perLine; i++)
+                {
+                    var r = new Rect(row.x + Side + (i - at) * (SwatchSize + SwatchGap), row.y + 2f, SwatchSize, SwatchSize);
+                    var c = Theme.Hex(colours[i] & 0xFFFFFF);
+                    if (i == index) Square(new Rect(r.x - 3f, r.y - 3f, r.width + 6f, r.height + 6f), Theme.Text);
+                    Square(r, c);
+                    if (GUI.Button(r, GUIContent.none, Theme.Invisible) && enabled && i != index)
+                    {
+                        set(i);
+                        if (Menu.NativeActive) NativeLook.PlayOption();
+                    }
+                }
+            }
+            finally { GUI.color = prev; }
+        }
+    }
+
+    private static void Square(Rect r, Color c)
+    {
+        if (Menu.NativeActive)
+        {
+            if (NativeCanvas.Emitting) NativeCanvas.Fill(r, c, NativeLook.Square, Depth.Front);
+            return;
+        }
+        Theme.Fill(r, c, 3);
+    }
+
+    // ---------------------------------------------------------------- links between pages
+
+    /// <summary>
+    /// A row that opens another mod's MODS page (its value is that mod's name). For a setting the other page owns, so it is
+    /// not shown twice. False (and nothing drawn) when that mod is not installed.
+    /// </summary>
+    internal static bool Link(string label, string modId, string hint = null)
+    {
+        var mod = Core.Manager.ModManager.Find(modId);
+        if (mod == null) return false;
+        bool running = Core.Manager.ModManager.IsLoaded(modId);
+        string name = mod.Name ?? mod.Id;
+        Button(label, running ? name : name + " (off)", hint, () => ModsPage.Open(modId));
+        return true;
+    }
+
+    /// <summary>A row for each of <paramref name="groups"/> that is another installed mod's page (see <see cref="TuneGroups"/>).</summary>
+    internal static void Links(IReadOnlyList<TuneGroups.Group> groups, string selfModId)
+    {
+        foreach (var g in TuneGroups.Others(groups, selfModId)) Link(g.Title, g.ModId, "Opens the " + g.Title.ToLowerInvariant() + " settings.");
+    }
+
+    /// <summary>
+    /// The car's picture at the top of a page in the full view. The MOD BROWSER's page shows it large in the details panel
+    /// on the right (the mod's card), so the game-widget page leaves it out.
+    /// </summary>
+    internal static void Picture(Texture picture, float maxHeight = 200f)
+    {
+        if (RowRecorder.Recording || picture == null || Menu.NativeActive) return;
+        float aspect = picture.height > 0 ? (float)picture.width / picture.height : 1f;
+        float h = Mathf.Min(maxHeight, Menu.ContentWidth / aspect), w = h * aspect;
+        var r = new Rect((Menu.ContentWidth - w) * 0.5f, Menu.Y + 4f, w, h);
+        Menu.Y += h + 12f;
+        if (Event.current != null && Event.current.type == EventType.Repaint) GUI.DrawTexture(r, picture, ScaleMode.ScaleToFit, true);
+    }
+
     // ---------------------------------------------------------------- colours
 
     private static readonly Dictionary<string, (string text, string forHex)> ColorCodes = new();
@@ -289,6 +439,13 @@ internal static class SimpleMenu
     }
 
     /// <summary>A row that does something when pressed. <paramref name="value"/> shows on the right.</summary>
+    /// <summary>A button whose picture shows beside the page while it's selected (the game-look screens).</summary>
+    internal static bool Button(string label, string value, string hint, Action action, bool enabled, GameMenu.CardInfo card)
+    {
+        if (RowRecorder.Recording) return Recorded.Button(label, value, hint, action, enabled, null, card);
+        return Button(label, value, hint, action, enabled);
+    }
+
     internal static bool Button(string label, string value, string hint, Action action, bool enabled = true)
     {
         if (RowRecorder.Recording) return Recorded.Button(label, value, hint, action, enabled);

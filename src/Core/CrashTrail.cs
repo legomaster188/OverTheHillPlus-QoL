@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Text;
-using BepInEx;
 using UnityEngine;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus;
 
@@ -70,7 +70,7 @@ public static class CrashTrail
     /// <summary>The unclean trails found on this start (empty after a clean end).</summary>
     internal static readonly List<Previous> PreviousTrails = new();
 
-    private static string TrailPath(int i) => Path.Combine(Paths.BepInExRootPath, i == 1 ? "oth.trail.bin" : $"oth.trail.{i}.bin");
+    private static string TrailPath(int i) => Path.Combine(OthLoader.DataDir, i == 1 ? "oth.trail.bin" : $"oth.trail.{i}.bin");
 
     /// <summary>The trail file this game copy writes (null when the trail is off).</summary>
     public static string FileInUse { get; private set; }
@@ -106,26 +106,41 @@ public static class CrashTrail
     /// <summary>The last step marked (for error reports: what the mods were doing when it happened).</summary>
     public static string LastStep { get; private set; } = "";
 
-    /// <summary>Records one step (cheap: a copy into mapped memory). Main thread only: a call from any other thread is
+    // The step time comes from the Stopwatch, anchored to the engine clock once per frame (one icall instead of two per
+    // step; the file still holds the same frame number and seconds since start).
+    private static readonly double SecondsPerTick = 1.0 / System.Diagnostics.Stopwatch.Frequency;
+    private static int _anchorFrame = int.MinValue;
+    private static float _anchorTime;
+    private static long _anchorTicks;
+    private static readonly byte[] Slot = new byte[SlotSize];
+
+    /// <summary>Records one step (cheap: one copy into mapped memory). Main thread only: a call from any other thread is
     /// skipped. Never throws.</summary>
     public static void Mark(string step)
     {
         if (step == null || (_mainThread != 0 && Environment.CurrentManagedThreadId != _mainThread)) return;
         LastStep = step;
         int seq = ++_seq;
+        long ticks = System.Diagnostics.Stopwatch.GetTimestamp();
         int frame;
         float time;
         try
         {
             frame = Time.frameCount;
-            time = Time.realtimeSinceStartup;
+            if (frame != _anchorFrame)
+            {
+                _anchorFrame = frame;
+                _anchorTime = Time.realtimeSinceStartup;
+                _anchorTicks = ticks;
+            }
+            time = _anchorTime + (float)((ticks - _anchorTicks) * SecondsPerTick);
         }
         catch { frame = 0; time = 0f; }
         int slot = seq & (Slots - 1);
         RingText[slot] = step;
         RingFrame[slot] = frame;
         RingTime[slot] = time;
-        RingTicks[slot] = System.Diagnostics.Stopwatch.GetTimestamp();
+        RingTicks[slot] = ticks;
         System.Threading.Volatile.Write(ref _published, seq);
         var v = _view;
         if (v == null) return;
@@ -136,13 +151,15 @@ public static class CrashTrail
                 bytes = Encoding.UTF8.GetBytes(step.Length > TextMax ? step.Substring(0, TextMax) : step);
                 if (Encoded.Count < 4096) Encoded[step] = bytes;
             }
-            long at = Header + (long)(seq % Slots) * SlotSize;
-            v.Write(at, seq);
-            v.Write(at + 4, frame);
-            v.Write(at + 8, time);
+            // The slot is built in one buffer and written in one go: seq, frame, time, length, text.
+            var b = Slot;
             int n = Math.Min(bytes.Length, TextMax);
-            v.Write(at + 12, (byte)n);
-            v.WriteArray(at + 13, bytes, 0, n);
+            BitConverter.TryWriteBytes(new Span<byte>(b, 0, 4), seq);
+            BitConverter.TryWriteBytes(new Span<byte>(b, 4, 4), frame);
+            BitConverter.TryWriteBytes(new Span<byte>(b, 8, 4), time);
+            b[12] = (byte)n;
+            Buffer.BlockCopy(bytes, 0, b, 13, n);
+            v.WriteArray(Header + (long)(seq % Slots) * SlotSize, b, 0, 13 + n);
             v.Write(8, seq);
         }
         catch { /* the trail must never break the game */ }

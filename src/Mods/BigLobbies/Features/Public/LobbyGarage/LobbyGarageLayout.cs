@@ -1,3 +1,8 @@
+#if MELON
+using GameLobby = Il2Cpp.Lobby;
+#else
+using GameLobby = global::Lobby;
+#endif
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -36,7 +41,7 @@ internal static class LobbyGarageLayout
     public static bool IsClone(SpawnPoint p) => p != null && (p.gameObject.name ?? "").Contains(CloneTag);
 
     /// <summary>Moves the existing cloned points to the chosen layout. Returns how many were moved.</summary>
-    public static int Apply(global::Lobby lobby, bool log)
+    public static int Apply(GameLobby lobby, bool log)
     {
         var points = lobby?.spawnPoints;
         if (points == null || points.Count == 0) return 0;
@@ -61,7 +66,7 @@ internal static class LobbyGarageLayout
     }
 
     /// <summary>Clones one more spawn point (for lobbies past the 16 the big-lobby code prepares).</summary>
-    public static bool AddPoint(global::Lobby lobby)
+    public static bool AddPoint(GameLobby lobby)
     {
         var points = lobby?.spawnPoints;
         if (points == null || points.Count == 0 || !TryGeometry(lobby, out var g)) return false;
@@ -91,7 +96,7 @@ internal static class LobbyGarageLayout
         return true;
     }
 
-    private static bool TryGeometry(global::Lobby lobby, out Geometry g)
+    private static bool TryGeometry(GameLobby lobby, out Geometry g)
     {
         g = default;
         var points = lobby.spawnPoints;

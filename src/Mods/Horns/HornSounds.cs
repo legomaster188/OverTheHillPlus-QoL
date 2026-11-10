@@ -1,3 +1,4 @@
+using OverTheHillPlus.Loader;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -39,8 +40,8 @@ internal static class HornSounds
 
     public static void Init()
     {
-        CustomDir = Path.Combine(BepInEx.Paths.ConfigPath, "oth.horns");
-        CacheDir = Path.Combine(BepInEx.Paths.CachePath, "oth.horns");
+        CustomDir = Path.Combine(OthLoader.ConfigDir, "oth.horns");
+        CacheDir = Path.Combine(System.IO.Path.Combine(OthLoader.DataDir, "cache"), "oth.horns");
         try { Directory.CreateDirectory(CustomDir); } catch (Exception e) { DebugLog.Error("horns", e, "HornSounds.Init"); HornsPlugin.Logger.LogWarning("Could not create the horn folder: " + e.Message); }
         try
         {

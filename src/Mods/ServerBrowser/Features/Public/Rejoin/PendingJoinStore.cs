@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using BepInEx;
+using OverTheHillPlus.Loader;
 using OverTheHillPlus.ServerBrowser;
 
 namespace OverTheHillPlus.Features.Public.Rejoin;
@@ -20,7 +20,7 @@ internal static class PendingJoinStore
         public long At { get; set; }
     }
 
-    private static string FilePath => Path.Combine(Paths.ConfigPath, "OverTheHillPlus.pendingjoin.json");
+    private static string FilePath => Path.Combine(OthLoader.ConfigDir, "OverTheHillPlus.pendingjoin.json");
 
     public static void Save(LastServerStore.Entry server)
     {

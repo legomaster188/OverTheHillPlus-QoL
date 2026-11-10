@@ -26,6 +26,8 @@ public sealed class ModInfo
     public bool Private;
     /// <summary>Who needs it installed (default <see cref="ModSide.Client"/>).</summary>
     public ModSide Side;
+    /// <summary>Part of the career, not a mod you pick: always on, never on the MODS list. Its settings live on the CAREER screen.</summary>
+    public bool CareerPart;
     /// <summary>How finished it is: "Stable", "Beta" or "Rough" (shown on its card and in the release list). Empty: the
     /// Mod Manager's table decides (<see cref="ModMaturity"/>: Beta for a mod of ours it doesn't list).</summary>
     public string Maturity;

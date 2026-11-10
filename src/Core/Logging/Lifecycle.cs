@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+#if MELON
+using Il2CppFunCore.Managers;
+using Il2CppFunCore.StateMachine;
+#else
 using FunCore.Managers;
 using FunCore.StateMachine;
+#endif
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes;
 using OverTheHillPlus.Features.Public.PlayerList;

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.UI;
 using UnityEngine;
 using OverTheHillPlus.Graphics;

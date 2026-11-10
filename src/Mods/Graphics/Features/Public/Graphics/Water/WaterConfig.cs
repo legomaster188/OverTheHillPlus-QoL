@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using HarmonyLib;
 using Il2CppInterop.Runtime;
 using UnityEngine;

@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Features.Public.Filter;
 using OverTheHillPlus.Features.Public.ModNet;
 using OverTheHillPlus.Features.Public.PlayerList;
@@ -44,6 +48,7 @@ internal static class ChatNet
         public float At;
         // layout cache (overlay)
         public float CacheWidth = -1f, CacheScale = -1f, NameWidth, Height;
+        public string NameLabel;
     }
 
     internal static readonly List<Line> History = new();

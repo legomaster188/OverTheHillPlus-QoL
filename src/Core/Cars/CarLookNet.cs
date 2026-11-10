@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using UnityEngine;
 using Net = OverTheHillPlus.Features.Public.ModNet.ModNet;
 
@@ -78,13 +82,7 @@ internal static class CarLookNet
         Net.Register(Channel, _options, OnMessage);
         Net.OnSessionReset(Reset);
         Net.OnPeerGone(p => Forget(p.RawEncoded));
-        Net.OnPeerReady(p =>
-        {
-            // Host: a guest arrived, tell it how your cars look (its own announcements ask the others).
-            if (!Net.IsHost) return;
-            foreach (var car in ModdedCars.All)
-                if (Connected(car)) Net.SendTo(p, Channel, MsgLook, CarLookWire.Encode(car.Id, car.Look.Announced));
-        });
+        // No hello from the host to a new guest: the guest's own announcement asks everyone to answer (MsgLookAskBack).
     }
 
     /// <summary>The last look a player sent for a car (null: none yet).</summary>

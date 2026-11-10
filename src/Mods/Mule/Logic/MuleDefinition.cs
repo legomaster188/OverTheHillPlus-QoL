@@ -20,7 +20,7 @@ public static class MuleDefinition
     /// <summary>CarInfo.name and the livery car name ("car": "Mule" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Mule";
     public const string Guid = "f808f27c5f334dd1a61ef4a2fba8e1a7";
-    public const int Protocol = 4;
+    public const int Protocol = 5;
 
     /// <summary>The whip-light poles of the Rear slot stand on the ends of the Mule's rear bumper, and the pan and the
     /// lantern hang on its own tailgate corner: the Burro's bed is wider, so where the slot alone puts them they float
@@ -45,6 +45,8 @@ public static class MuleDefinition
         FusionGuid = Guid,
         RegistryKey = "mule",
         Protocol = Protocol,
+        // fitfix: the game items these bodies can't carry (floating over the cab, sunk in the bed floor or the body)
+        HiddenItems = new[] { "Visual/Bed/Camper_Bed", "Visual/Bed/Canoe_Bed", "Visual/Bed/Christmas_Bed", "Visual/Bed/Fisher_Bed", "Visual/Bed/Party_Bed", "Visual/Bed/Rescue_Bed", "Visual/Rear/Bike", "Visual/Rear/Pan" },
         // The Burro, the stock pickup and a Workhorse (2.94 m wheelbase against the Mule's 2.92 m, a cab and an open bed):
         // its skeleton, garage data (vehicle class, upgrades) and cosmetic slots (Liveries/mule/README.md).
         DefaultDonor = "Car_Burro",
@@ -115,6 +117,7 @@ public static class MuleDefinition
             new LiveryPreset("two_tone", "Sunday Best", "An ivory roof and hood spears over your own paint, with a hand-laid red pinstripe."),
             new LiveryPreset("feed_seed", "Bighorn Lake Feed & Seed", "The feed store's delivery truck, barn red with hand-lettered doors."),
             new LiveryPreset("barn_find", "Barn Find", "Forty years in a barn: chalky blue paint, rust through on the tops and a black fender off another truck."),
+            new LiveryPreset("glasir_trees", "Glasir Wood Tree Farm", "The tree farm truck from Gimli Ridge, spruce green with red wheels and hand-lettered doors."),
         },
     };
 }

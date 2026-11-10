@@ -1,5 +1,9 @@
 using System;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using OverTheHillPlus.Features;
 using OverTheHillPlus.Features.Public;
@@ -40,6 +44,14 @@ internal sealed class TrailersFeature : IFeature
         bool serving = TrailerPrefabs.Ready && ModManager.ServerModActive(TrailersPlugin.ModId);
         if (!serving)
         {
+            Core.Shared.WorldSites.RequestTrailer = null;
+            Core.Shared.WorldSites.PlayerTowing = null;
+            Core.Shared.WorldSites.PlayerTowingKind = null;
+            Core.Shared.WorldSites.LocalTowing = null;
+            Core.Shared.TrailerDecks.DeckOf = null;
+            Core.Shared.WorldSites.BoatTrailerOf = null;
+            Core.Shared.WorldSites.SetTrailerBoat = null;
+            Core.Shared.WorldSites.HitchBoatTrailer = null;
             if (TrailerWorld.Count > 0)
             {
                 if (GameState.IsAuthority) TrailerHost.DespawnAll(DespawnReason.ModOff);
@@ -53,6 +65,66 @@ internal sealed class TrailersFeature : IFeature
         TrailerHost.Tick();
         TrailerNet.Tick();
         Keys();
+        PublishSites();
+    }
+
+    /// <summary>Tells core's WorldSites what this player tows and how to ask for a trailer (a map mod's depot and jobs
+    /// use them).</summary>
+    private static void PublishSites()
+    {
+        try
+        {
+            TrailersActions.MineCount(out var hitched, out _);
+            Core.Shared.WorldSites.LocalTowing = hitched != null ? hitched.Kind.ToString().ToLowerInvariant() : null;
+            Core.Shared.WorldSites.PlayerTowing ??= raw =>
+            {
+                foreach (var t in TrailerWorld.All)
+                    if (t.State.Owner == raw && t.State.Hitched) return true;
+                return false;
+            };
+            Core.Shared.WorldSites.PlayerTowingKind ??= raw =>
+            {
+                foreach (var t in TrailerWorld.All)
+                    if (t.State.Owner == raw && t.State.Hitched) return t.Kind.ToString().ToLowerInvariant();
+                return null;
+            };
+            // a semi-trailer's deck, for another mod's load on it (Haulage): the hitched one first, else any of theirs
+            Core.Shared.TrailerDecks.DeckOf ??= raw =>
+            {
+                TrailerLive pick = null;
+                foreach (var t in TrailerWorld.All)
+                {
+                    if (t.State.Owner != raw || !t.Spec.FifthWheel || !t.Alive) continue;
+                    if (pick == null || (t.State.Hitched && !pick.State.Hitched)) pick = t;
+                }
+                return pick != null ? pick.T.Find("Cargo") : null;
+            };
+            // a boat mod launches from the player's boat trailer and lands back on it (the Grayling)
+            Core.Shared.WorldSites.BoatTrailerOf ??= TrailerHost.BoatTrailerOf;
+            Core.Shared.WorldSites.SetTrailerBoat ??= TrailerHost.SetTrailerBoat;
+            Core.Shared.WorldSites.HitchBoatTrailer ??= TrailerHost.HitchBoatTrailer;
+            Core.Shared.WorldSites.RequestTrailer ??= kind =>
+            {
+                // "flatbed" (Career.Jobs.TrailerFor): the semi-trailer behind a semi truck, else the car hauler
+                if (string.Equals(kind, "flatbed", StringComparison.OrdinalIgnoreCase))
+                    kind = OnSemiTruck() ? TrailerKind.Semi.ToString() : TrailerKind.Hauler.ToString();
+                foreach (var spec in TrailerSpecs.All)
+                    if (string.Equals(spec.Kind.ToString(), kind, StringComparison.OrdinalIgnoreCase))
+                        return TrailerNet.Ask(TrailerOp.Spawn, spec.Kind);
+                return "Failed: no such trailer";
+            };
+        }
+        catch (Exception e) { DebugLog.Error("trailers", e, "TrailersFeature.PublishSites"); }
+    }
+
+    private static bool OnSemiTruck()
+    {
+        try
+        {
+            var car = TrailerHost.CarOf(GameState.Runner.LocalPlayer);
+            return car != null && TrailerHost.CarHitch(car, TrailerSpecs.Of(TrailerKind.Semi), out _);
+        }
+        catch (Exception e) { DebugLog.Error("trailers", e, "TrailersFeature.OnSemiTruck"); return false; }
     }
 
     private static void Keys()

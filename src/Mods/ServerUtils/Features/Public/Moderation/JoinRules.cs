@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Features.Public.PlayerList;
 using UnityEngine;
 using SteamFriendsList = OverTheHillPlus.Features.Public.ServerBrowserPlus.SteamFriendsList;

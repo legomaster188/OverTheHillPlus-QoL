@@ -196,10 +196,35 @@ public sealed class MeshBlob
         foreach (var p in Parts)
         {
             if (p.Kind is not (MeshPartKind.Body or MeshPartKind.Glass or MeshPartKind.Other)) continue;
-            if (p.Name == PlaceholderPartName || IsBodyLod(p.Name)) continue;
+            if (p.Name == PlaceholderPartName || IsBodyLod(p.Name) || IsMoving(p.Name)) continue;
             if (lodPart != null && hasBody && p.Name == BodyName) { list.Add(lodPart); continue; }
             list.Add(p);
         }
+        return list;
+    }
+
+    /// <summary>
+    /// The prefix of a moving part: a piece the vehicle's own mod moves at runtime (a snowmobile's skis and track lugs, a
+    /// boat's outboard motor). It is never drawn as part of the body: the framework hands it to the mod
+    /// (<see cref="MovingParts"/>), which puts it on its own object. Its vertices are in model space like the body's; the
+    /// point it turns about is the anchor of the same name (<c>pivot_</c> + the name after the prefix) when the model has one.
+    /// </summary>
+    public const string MovingPrefix = "mv_";
+
+    /// <summary>The name of a moving part's pivot anchor ("mv_ski_L" turns about "pivot_ski_L").</summary>
+    public static string PivotOf(string movingPart) =>
+        IsMoving(movingPart) ? "pivot_" + movingPart.Substring(MovingPrefix.Length) : null;
+
+    /// <summary>"mv_" followed by at least one character: a moving part, never part of the body.</summary>
+    public static bool IsMoving(string name) =>
+        name != null && name.Length > MovingPrefix.Length && name.StartsWith(MovingPrefix, StringComparison.Ordinal);
+
+    /// <summary>The model's moving parts (<see cref="MovingPrefix"/>), in file order.</summary>
+    public List<MeshPart> MovingParts()
+    {
+        var list = new List<MeshPart>();
+        foreach (var p in Parts)
+            if (IsMoving(p.Name) && p.Kind != MeshPartKind.Collider) list.Add(p);
         return list;
     }
 

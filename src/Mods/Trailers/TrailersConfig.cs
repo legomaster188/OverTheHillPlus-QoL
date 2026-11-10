@@ -1,4 +1,4 @@
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using UnityEngine.InputSystem;
 
 namespace OverTheHillPlus.Trailers;
@@ -18,7 +18,7 @@ internal static class TrailersConfig
     public static void Bind(ConfigFile cfg)
     {
         File = cfg;
-        Kind = cfg.Bind("Trailers", "Kind", TrailerKind.Utility, "The trailer you get: Utility, Camper, Hauler or Boat.");
+        Kind = cfg.Bind("Trailers", "Kind", TrailerKind.Utility, "The trailer you get: Utility, Camper, Hauler, Boat or Semi (a flatbed for a semi truck).");
         HitchKey = cfg.Bind("Trailers", "HitchKey", Key.None,
             "Hotkey: hitch your trailer when your car's back is near its coupler, or unhitch it (while slow). None = no hotkey.");
         ResetKey = cfg.Bind("Trailers", "ResetKey", Key.None,

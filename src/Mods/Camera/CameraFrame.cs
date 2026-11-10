@@ -14,7 +14,7 @@ internal static class CameraFrame
     {
         CoreBehaviour.Hotkeys += Hotkeys;
         CoreBehaviour.AfterFeatureTicks += CameraRig.CheckHook;
-        CoreBehaviour.AfterGuis += DrawName;
+        CoreBehaviour.AddAfterGui(DrawName, () => CameraConfig.ShowName.Value, repaintOnly: true);
         ExtraCameras.TurningOn += CameraRig.ExtraTurningOn;
     }
 
@@ -31,26 +31,33 @@ internal static class CameraFrame
         if (!CameraConfig.ShowName.Value) return;
         float age = Time.unscaledTime - CameraRig.ChangedAt;
         if (age < 0f || age > NameFor) return;
-        var ev = Event.current;
-        if (ev == null || ev.type != EventType.Repaint || CameraView.HudHidden) return;
+        if (!UI.HudKit.HudDraw.Repaint || CameraView.HudHidden) return;
+        if (!UI.HudKit.HudDraw.Begin("camera")) return;
         try
         {
             Theme.Ensure();
             var screen = HudLayout.Begin();
-            string text = "CAMERA  ·  " + (ExtraCameras.Active?.Name ?? CameraMath.Name(CameraConfig.Mode.Value)).ToUpperInvariant();
+            string name = ExtraCameras.Active?.Name ?? CameraMath.Name(CameraConfig.Mode.Value);
+            if (!ReferenceEquals(name, _nameFor))
+            {
+                _nameFor = name;
+                _nameText = "CAMERA  ·  " + name.ToUpperInvariant();
+            }
             var r = new Rect(screen.x * 0.5f - 130f, screen.y * 0.22f, 260f, 34f);
             float a = Mathf.Clamp01((NameFor - age) / 0.3f);
             var prev = GUI.color;
             GUI.color = new Color(1f, 1f, 1f, a);
-            Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.82f), 10);
-            var style = Theme.Label;
-            var align = style.alignment;
-            style.alignment = TextAnchor.MiddleCenter;
-            GUI.Label(r, text, style);
-            style.alignment = align;
+            HudLayout.Panel(r);
+            UI.HudKit.HudDraw.Label(r, _nameText, Theme.Label, TextAnchor.MiddleCenter);
             GUI.color = prev;
         }
         catch (Exception e) { DebugLog.Error("camera", e, "CameraFrame.DrawName"); CameraPlugin.Logger.LogDebug("Camera+ name: " + e.Message); }
-        finally { HudLayout.End(); }
+        finally
+        {
+            HudLayout.End();
+            UI.HudKit.HudDraw.End();
+        }
     }
+
+    private static string _nameFor, _nameText;
 }

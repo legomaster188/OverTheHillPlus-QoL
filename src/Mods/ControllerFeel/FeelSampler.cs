@@ -1,6 +1,10 @@
 using System;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 
 namespace OverTheHillPlus.ControllerFeel;
 
@@ -89,6 +93,7 @@ internal static class FeelSampler
         if (data == null) return false;
         input.EngineOn = data.Get(_chVehicle, _engineWorking) > 0;
         input.Rpm = data.Get(_chVehicle, _rpm) / 1000f;
+        input.Rattle = OverTheHillPlus.Shared.RumbleHints.Rattle(Time.unscaledTime);
         input.Throttle = Mathf.Clamp01(data.Get(_chInput, _throttle) / 10000f);
         input.Brake = Mathf.Clamp01(data.Get(_chInput, _brake) / 10000f);
         input.SpeedMs = Mathf.Abs(data.Get(_chVehicle, _speed) / 1000f);

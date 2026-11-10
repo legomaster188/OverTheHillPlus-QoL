@@ -1,0 +1,75 @@
+{
+  "id": "slim_roofrack",
+  "name": "Slim Platform Roof Rack",
+  "cosmeticType": "Roof",
+  "slot": "Visual/Roof",
+  "price": 18,
+  "paintable": false,
+  "fits": {
+    "Vera": {
+      "pos": [
+        0.0,
+        1.762,
+        -0.77
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Bastion": {
+      "pos": [
+        0.0,
+        1.829,
+        -1.17
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Tercel": {
+      "pos": [
+        0.0,
+        1.529,
+        -1.19
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Aro": {
+      "pos": [
+        0.0,
+        1.923,
+        -0.8
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "TrailBurner": {
+      "pos": [
+        0.0,
+        1.811,
+        -0.73
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    }
+  }
+}

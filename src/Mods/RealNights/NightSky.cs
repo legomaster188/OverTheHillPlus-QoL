@@ -1,5 +1,9 @@
 using System;
+#if MELON
+using Il2CppDistantLands.Cozy;
+#else
 using DistantLands.Cozy;
+#endif
 using HarmonyLib;
 using UnityEngine;
 

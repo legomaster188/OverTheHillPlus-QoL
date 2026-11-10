@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <AssemblyName>OTH.Discord</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonFullPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.Discord.DiscordPlugin</OthPluginClass>
     <RootNamespace>OverTheHillPlus</RootNamespace>
   </PropertyGroup>
 

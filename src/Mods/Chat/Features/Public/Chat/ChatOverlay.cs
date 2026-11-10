@@ -207,6 +207,14 @@ internal static class ChatOverlay
 
     // ---------------------------------------------------------------- drawing (OnGUI)
 
+    /// <summary>
+    /// False while <see cref="OnGui"/> would return before it draws or reads anything: chat closed, no focus to clear, and
+    /// the overlay off or nothing to show yet (OnGuiCore's own checks, minus the ones that need the engine).
+    /// All events stay: the open chat has a text field.
+    /// </summary>
+    internal static bool GuiWanted() => _open || _clearFocus
+        || (ChatFeature.Enabled.Value && ChatFeature.ShowOverlay.Value && (ChatNet.History.Count > 0 || _hintAt > -50f));
+
     internal static void OnGui()
     {
         try { OnGuiCore(); }
@@ -234,8 +242,18 @@ internal static class ChatOverlay
 
         Theme.Ensure();
         EnsureStyles();
+        // In the world the lines go away with the game's HUD; the box, and the lines in a lobby, stay on the screen layer.
+        bool screenLayer = _open || !UI.HudKit.HudCanvas.GameHudUp;
+        if (!UI.HudKit.HudDraw.Begin(screenLayer ? "chat.screen" : "chat", screenLayer ? UI.HudKit.HudLayer.Screen : UI.HudKit.HudLayer.Driving)) return;
+        try { DrawChat(e); }
+        finally { UI.HudKit.HudDraw.End(); }
+    }
+
+    private static void DrawChat(Event e)
+    {
         float scale = Mathf.Clamp(ChatFeature.TextScale.Value, 0.6f, 2f) * Mathf.Clamp(Screen.height / 1080f, 0.6f, 2.5f);
         GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
+        UI.HudKit.HudCanvas.Sync();
         float sw = Screen.width / scale, sh = Screen.height / scale;
         float w = Mathf.Min(PanelWidth, sw - Margin * 2f);
         float x = Margin;
@@ -288,10 +306,10 @@ internal static class ChatOverlay
             float a = Mathf.Clamp01(((_open ? 6f : 4f) - (now - _hintAt)) / 1f);
             GUI.color = new Color(1f, 1f, 1f, a);
             var hr = new Rect(x, y, w, 20f);
-            if (e.type == EventType.Repaint) Theme.Fill(hr, new Color(0.07f, 0.09f, 0.11f, 0.8f), 4);
-            _small.normal.textColor = _hint.StartsWith("Blocked", StringComparison.Ordinal) || _hint.StartsWith("Can't", StringComparison.Ordinal) ? Theme.Warn
+            if (e.type == EventType.Repaint) Theme.Fill(hr, UI.HudKit.HudLook.PanelStrong, HudLayout.PanelRadius);
+            var hintColor = _hint.StartsWith("Blocked", StringComparison.Ordinal) || _hint.StartsWith("Can't", StringComparison.Ordinal) ? Theme.Warn
                 : _hint.StartsWith("Failed", StringComparison.Ordinal) ? Theme.Bad : Theme.Muted;
-            GUI.Label(new Rect(hr.x + Pad, hr.y, hr.width - Pad * 2f, hr.height), _hint, _small);
+            UI.HudKit.HudDraw.Label(new Rect(hr.x + Pad, hr.y, hr.width - Pad * 2f, hr.height), _hint, _small, hintColor);
             GUI.color = prevColor;
             y += hintH;
         }
@@ -308,7 +326,7 @@ internal static class ChatOverlay
         line.NameWidth = 0f;
         if (line.Kind != ChatNet.LineKind.System && !string.IsNullOrEmpty(line.Name))
             line.NameWidth = Mathf.Min(textW * 0.45f, _name.CalcSize(new GUIContent(line.Name + ":")).x + 6f);
-        float h = _text.CalcHeight(new GUIContent(line.Text), Mathf.Max(40f, textW - line.NameWidth));
+        float h = UI.HudKit.HudDraw.Height(line.Text, _text, Mathf.Max(40f, textW - line.NameWidth));
         line.Height = Mathf.Max(22f, h) + 4f;
         return line.Height;
     }
@@ -320,18 +338,18 @@ internal static class ChatOverlay
         var r = new Rect(x, y, w, line.Height);
         if (Event.current.type == EventType.Repaint)
         {
-            Theme.Fill(r, new Color(0.05f, 0.07f, 0.09f, 0.62f), 5);
-            if (line.Kind == ChatNet.LineKind.System) Theme.Fill(new Rect(r.x, r.y, 3f, r.height), Theme.Warn, 1);
+            Theme.Fill(r, HudLayout.PanelBlack, HudLayout.PanelRadius);
+            if (line.Kind == ChatNet.LineKind.System) Theme.Fill(new Rect(r.x + 3f, r.y + 4f, 2f, r.height - 8f), Theme.Warn, 1);
         }
         float tx = x + Pad;
         if (line.NameWidth > 0f)
         {
-            _name.normal.textColor = line.NameColor;
-            GUI.Label(new Rect(tx, y + 2f, line.NameWidth, 22f), line.Name + ":", _name);
+            line.NameLabel ??= line.Name + ":";
+            UI.HudKit.HudDraw.Label(new Rect(tx, y + 2f, line.NameWidth, 22f), line.NameLabel, _name, line.NameColor);
             tx += line.NameWidth;
         }
-        _text.normal.textColor = line.Kind == ChatNet.LineKind.System ? Theme.Muted : Theme.Text;
-        GUI.Label(new Rect(tx, y + 2f, w - Pad - (tx - x), line.Height - 4f), line.Text, _text);
+        UI.HudKit.HudDraw.Label(new Rect(tx, y + 2f, w - Pad - (tx - x), line.Height - 4f), line.Text, _text,
+            line.Kind == ChatNet.LineKind.System ? Theme.Muted : Theme.Text);
     }
 
     private static void DrawInput(Event e, float x, float y, float w)
@@ -363,8 +381,8 @@ internal static class ChatOverlay
         var box = new Rect(x, y, w, InputHeight);
         if (e.type == EventType.Repaint)
         {
-            Theme.Fill(new Rect(box.x - 1f, box.y - 1f, box.width + 2f, box.height + 2f), Theme.Accent, 7);
-            Theme.Fill(box, new Color(0.06f, 0.08f, 0.10f, 0.95f), 6);
+            Theme.Fill(new Rect(box.x - 1f, box.y - 1f, box.width + 2f, box.height + 2f), Theme.Accent, HudLayout.PanelRadius + 1);
+            Theme.Fill(box, new Color(0.06f, 0.06f, 0.06f, 0.95f), HudLayout.PanelRadius);
         }
         GUI.SetNextControlName(FieldName);
         string v = GUI.TextField(new Rect(box.x + 2f, box.y + 2f, box.width - 64f, box.height - 4f), _draft ?? "", ChatNet.MaxChars, _field);
@@ -376,14 +394,15 @@ internal static class ChatOverlay
         }
         if (string.IsNullOrEmpty(_draft))
         {
-            _small.normal.textColor = Theme.Muted;
-            GUI.Label(new Rect(box.x + 12f, box.y, box.width - 80f, box.height), Placeholder(), _small);
+            UI.HudKit.HudDraw.Label(new Rect(box.x + 12f, box.y, box.width - 80f, box.height), Placeholder(), _small, Theme.Muted);
         }
-        _small.normal.textColor = (_draft?.Length ?? 0) > ChatNet.MaxChars - 15 ? Theme.Warn : Theme.Muted;
-        _small.alignment = TextAnchor.MiddleRight;
-        GUI.Label(new Rect(box.xMax - 60f, box.y, 52f, box.height), $"{_draft?.Length ?? 0}/{ChatNet.MaxChars}", _small);
-        _small.alignment = TextAnchor.MiddleLeft;
+        int length = _draft?.Length ?? 0;
+        if (Counter.Changed(length)) Counter.Text = $"{length}/{ChatNet.MaxChars}";
+        UI.HudKit.HudDraw.Label(new Rect(box.xMax - 60f, box.y, 52f, box.height), Counter.Text, _smallRight, length > ChatNet.MaxChars - 15 ? Theme.Warn : Theme.Muted);
     }
+
+    private static readonly UI.HudKit.TextMemo Counter = new();
+    private static GUIStyle _smallRight;
 
     private static string _placeholder;
     private static float _placeholderAt = -100f;
@@ -410,6 +429,7 @@ internal static class ChatOverlay
         _text = new GUIStyle(Theme.Label) { richText = false, wordWrap = true, fontSize = 15, alignment = TextAnchor.UpperLeft, clipping = TextClipping.Clip };
         _text.normal.textColor = Theme.Text;
         _small = new GUIStyle(Theme.Small) { richText = false, wordWrap = false, fontSize = 12, alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip };
+        _smallRight = new GUIStyle(_small) { alignment = TextAnchor.MiddleRight };
         _field = new GUIStyle(Theme.TextField) { richText = false, fontSize = 15 };
         _field.normal.background = null;
         _field.focused.background = null;

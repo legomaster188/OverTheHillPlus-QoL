@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.ServerBrowser;
 using OverTheHillPlus.ServerCreator;
 using OverTheHillPlus.UI;

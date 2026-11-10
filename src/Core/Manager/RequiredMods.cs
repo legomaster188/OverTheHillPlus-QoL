@@ -192,7 +192,7 @@ internal static class RequiredMods
     {
         "vera", "-", "-", "-", "chat", "horns", "-", "biglobbies", "tercel", "trailers",
         "aro", "hilo", "bastion", "hilo22", "gearbox", "drifter", "nomad", "mule", "pixie", "bento", "longhorn", "-", "ibex", "marmot", "drover",
-        "limber", "badger", "gemse",
+        "limber", "badger", "gemse", "-", "-", "marten", "ermine", "grayling", "meerkat", "jackal", "mastiff", "stoat",
     };
 
     private static int CodeOf(string id)
@@ -204,7 +204,9 @@ internal static class RequiredMods
 
     private static int FromBase36(char c) => c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'z' ? c - 'a' + 10 : -1;
     public const int MaxIdChars = 40;
-    public const int MaxMods = 32;
+    /// <summary>The most mods one value lists (and a reader keeps). 64 since the code table passed 32 entries: older
+    /// clients keep their first 32 and count the rest as "more mods".</summary>
+    public const int MaxMods = 64;
     private const int MaxVersionPart = 9999;
     private const int MaxReadChars = 1024;
 
@@ -819,6 +821,30 @@ internal static class RequiredMods
         if (build.Count > 0) parts.Add((parts.Count > 0 ? "your " : "Your ") + JoinAnd(build) + (build.Count == 1 ? " is" : " are") + " another build than the server's");
         if (parts.Count == 0) return null;
         return string.Join("; ", parts) + ". Servers with added cars or trailers only let in players with exactly the same ones.";
+    }
+
+    /// <summary>
+    /// What a player is told when the join ended without getting in while the host's prefab check refuses this game
+    /// (another set or build of the added cars and trailers), or null when the check would let it in. Shown without the
+    /// server browser's join prompt (the cars-only pack has none), so a refused player still learns why.
+    /// </summary>
+    public static string RefusedJoinNotice(IReadOnlyList<RequiredModIssue> issues, Func<string, string> nameOf) =>
+        PrefabSummary(issues, nameOf); // the box's title says "Couldn't join"; this says why, and what lets you in
+
+    /// <summary>
+    /// The gentle notice for a guest whose added cars or trailers are another minor version than the host's (the host let
+    /// it in: same set and build), or null. They work together, but what each player sees of them can differ.
+    /// </summary>
+    public static string PrefabVersionNotice(IReadOnlyList<RequiredModIssue> issues, Func<string, string> nameOf)
+    {
+        if (issues == null) return null;
+        var list = new List<string>();
+        foreach (var i in issues)
+            if (i != null && i.Kind == RequiredIssueKind.VersionMinor && OverTheHillPlus.Core.Shared.NetPrefabPlan.IsOwnerMod(i.Id))
+                list.Add($"{NameOrId(nameOf, i.Id)} (host v{i.Required}, you v{i.Installed})");
+        if (list.Count == 0) return null;
+        return $"Your {JoinAnd(list)} {(list.Count == 1 ? "is" : "are")} another version than the host's. They still work together, " +
+               "but they may look different for each of you: everyone should have the same version.";
     }
 
     /// <summary>The host's notice when its listing left mods out (they stay off for guests), or null.</summary>

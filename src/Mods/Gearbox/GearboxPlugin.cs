@@ -1,7 +1,9 @@
-using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using System;
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.GearboxPlus;
@@ -20,9 +22,13 @@ using OverTheHillPlus.Core.Manager;
 /// are already part of the network state), but a player without it, in a session that runs it, would drive 2-gear
 /// cars against a host with more and get pulled back by the host.</para>
 /// </summary>
+#if MELON
+public class GearboxPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class GearboxPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.gearbox";
     public const string Name = "Gearbox+";
@@ -31,7 +37,7 @@ public class GearboxPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.gearbox.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "gearbox";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

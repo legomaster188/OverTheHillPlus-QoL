@@ -1,10 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Features.Public.ModNet;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 
 namespace OverTheHillPlus.GearboxPlus;
 

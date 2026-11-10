@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Flares;
@@ -16,9 +18,13 @@ using OverTheHillPlus.Core.Manager;
 /// map, compass and minimap). Optionally a flare goes up by itself when you lie stuck on your side or roof. See
 /// <see cref="FlaresCore"/> and <see cref="NameTags"/>.
 /// </summary>
+#if MELON
+public class FlaresPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class FlaresPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.flares";
     public const string Name = "Flares+";
@@ -27,7 +33,7 @@ public class FlaresPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.flares.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "flares";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     private static bool _loggedTick;

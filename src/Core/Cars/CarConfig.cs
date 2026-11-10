@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 
 namespace OverTheHillPlus.Cars;
 
@@ -23,34 +23,10 @@ internal sealed class CarConfig
     {
         _car = car;
         File = cfg;
-        var d = car.Def;
-        string n = d.CarName, section = d.CarName;
-        Donor = cfg.Bind(section, "Donor", d.DefaultDonor,
-            $"Fusion prefab the {n}'s network and physics skeleton is copied from (its body, wheels and cosmetics are replaced), " +
-            $"e.g. {d.DefaultDonor}. Everyone in a session must use the same one: players with another donor " +
-            "are refused when joining. Applies after a restart.");
-        InfoBase = cfg.Bind(section, "GarageBase", d.DefaultGarageBase,
-            $"Stock car whose garage data the {n} copies: vehicle class, upgrade lists (liveries left out) and garage display model. " +
-            "Everyone in a session must use the same one. Applies after a restart.");
-        ShowInGarage = cfg.Bind(section, "ShowInGarage", true,
-            $"List the {n} in the garage (it is yours for free). Off: drive it from the MODS page only.");
-        var paintNames = new string[d.Paints.Length];
-        for (int i = 0; i < paintNames.Length; i++) paintNames[i] = d.Paints[i].Name;
-        var trimNames = new string[d.Trims.Length];
-        for (int i = 0; i < trimNames.Length; i++) trimNames[i] = d.Trims[i].Name;
-        Paint = cfg.Bind("Look", "Paint", d.Paints[0].Name,
-            "Body colour: " + string.Join(", ", paintNames) + ", or Custom (PaintCustom). Other players with this mod see it too.");
-        PaintCustom = cfg.Bind("Look", "PaintCustom", d.PaintCustomDefault, "The body colour when Paint is Custom (#RRGGBB).");
-        Trim = cfg.Bind("Look", "Trim", d.Trims[0].Name,
-            d.TrimWhat + " colour: " + string.Join(", ", trimNames) + ", or Custom (TrimCustom).");
-        TrimCustom = cfg.Bind("Look", "TrimCustom", d.TrimCustomDefault, "The trim colour when Trim is Custom (#RRGGBB).");
-        Skin = cfg.Bind("Look", "Skin", "",
-            "A skin from a livery pack (\"<pack folder>/<livery name>\", see the MODS page), or empty for the paint colours. " +
-            "A skin replaces the whole paint; players who have the same pack see it, the others see your colours.");
-        var labels = new string[d.EngineSounds.Length];
-        for (int i = 0; i < labels.Length; i++) labels[i] = d.EngineSounds[i].Label;
-        EngineSound = cfg.Bind("Look", "EngineSound", d.EngineLabel(d.DefaultEngine),
-            $"The stock engine sound your {n} uses: " + string.Join(", ", labels) + ". Other players with this mod hear the one you picked.");
+        // The entries are bound by CarConfigBinder (pure, so the installer's settings export runs the very same code).
+        var e = CarConfigBinder.Bind(car.Def, cfg);
+        Donor = e.Donor; InfoBase = e.InfoBase; ShowInGarage = e.ShowInGarage;
+        Paint = e.Paint; PaintCustom = e.PaintCustom; Trim = e.Trim; TrimCustom = e.TrimCustom; Skin = e.Skin; EngineSound = e.EngineSound;
     }
 
     /// <summary>The garage base as a CarInfo name ("Car_TrailBurner" and "TrailBurner" both mean the TrailBurner).</summary>

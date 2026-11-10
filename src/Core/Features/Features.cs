@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 
 namespace OverTheHillPlus.Features;
 
@@ -48,6 +48,8 @@ internal static class Registry
         public bool Failed;
         /// <summary>This hook's timing (Logging/HookTiming), made on its first timed run.</summary>
         public Logging.HookStat Stat;
+        /// <summary>When set, the overlay is skipped in events it has nothing to do in (OnGui hooks only).</summary>
+        public Logging.GuiGate Gate;
     }
 
     private static readonly List<Hook> Ticks = new();
@@ -61,8 +63,19 @@ internal static class Registry
     /// <paramref name="modId"/> tags a hook added outside <see cref="DiscoverAndRegister"/> (the public API).</summary>
     public static void OnTick(Action action, string modId = null) => Ticks.Add(NewHook(action, modId));
 
-    /// <summary>Runs in OnGUI every frame, before the MODS page, even when the page is closed (for overlays).</summary>
-    public static void OnGui(Action action, string modId = null) => Guis.Add(NewHook(action, modId));
+    /// <summary>
+    /// Runs in OnGUI every frame, before the MODS page, even when the page is closed (for overlays). A hook that has
+    /// nothing to do in an event costs next to nothing if it says so: <paramref name="wants"/> is a pure managed check
+    /// (no interop) that is false when the hook would return at once, and <paramref name="repaintOnly"/> skips the
+    /// Layout and input events for a hook that starts with a Repaint check. A hook with buttons, GUILayout or text
+    /// fields must keep those events.
+    /// </summary>
+    public static void OnGui(Action action, string modId = null, Func<bool> wants = null, bool repaintOnly = false)
+    {
+        var h = NewHook(action, modId);
+        if (wants != null || repaintOnly) h.Gate = new Logging.GuiGate(wants, repaintOnly);
+        Guis.Add(h);
+    }
 
     private static Hook NewHook(Action action, string modId) => string.IsNullOrEmpty(modId)
         ? new Hook { Owner = _registering, ModId = _registeringMod, Action = action }
@@ -199,13 +212,13 @@ internal static class Registry
         catch (Exception ex) { DebugLog.Error("core", ex, "Registry.RecordConfigOwner"); /* bookkeeping only */ }
     }
 
-    internal static void RunTicks() => Run(Ticks, "tick", false);
+    internal static void RunTicks() => Run(Ticks, "tick", false, false);
 
-    internal static void RunGuis()
+    /// <param name="repaint">This OnGUI event is the Repaint event.</param>
+    internal static void RunGuis(bool repaint)
     {
-        Run(Guis, "OnGUI", true);
         // Leave a clean state for the HUD and menu even if an overlay forgot to restore it or threw mid-draw.
-        if (Guis.Count > 0) ResetGuiState();
+        if (Run(Guis, "OnGUI", true, repaint)) ResetGuiState();
     }
 
     /// <summary>
@@ -219,20 +232,24 @@ internal static class Registry
         UnityEngine.GUI.backgroundColor = UnityEngine.Color.white;
         UnityEngine.GUI.contentColor = UnityEngine.Color.white;
         UnityEngine.GUI.enabled = true;
+        UI.HudKit.HudCanvas.Close(); // a HUD group left open must not swallow the next mod's fills
     }
 
     /// <summary>
     /// Runs each hook: marks the crash trail, says whose hook is running (CrashTrail.RunningMod: hangs and the game's
     /// errors meanwhile are blamed on that mod) and, unless the debug level is Off, times it (slow hooks are noted).
     /// </summary>
-    private static void Run(List<Hook> hooks, string what, bool gui)
+    private static bool Run(List<Hook> hooks, string what, bool gui, bool repaint)
     {
         bool timed = DebugLog.On;
+        bool ran = false;
         for (int i = 0; i < hooks.Count; i++)
         {
             var h = hooks[i];
             if (h.Failed) continue;
-            if (gui && i > 0) ResetGuiState();
+            if (gui && h.Gate != null && h.Gate.Skips(repaint)) continue;
+            if (gui && ran) ResetGuiState();
+            ran = true;
             CrashTrail.Mark(h.Trail ??= $"{what} {h.Owner} ({h.ModId})");
             string prev = CrashTrail.RunningMod;
             CrashTrail.RunningMod = h.ModId;
@@ -251,5 +268,6 @@ internal static class Registry
                 if (timed) Logging.HookTiming.Record(h.Stat ??= Logging.HookTiming.NewStat(h.ModId, h.Trail), System.Diagnostics.Stopwatch.GetTimestamp() - t0);
             }
         }
+        return ran;
     }
 }

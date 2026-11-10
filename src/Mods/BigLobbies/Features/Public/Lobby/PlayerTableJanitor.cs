@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using Il2CppInterop.Runtime;
 using OverTheHillPlus.Multiplayer;
@@ -470,10 +474,9 @@ internal static class Janitor
                 }
             }
 
-            foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<FusionPlayer>()))
+            foreach (var fp in GameState.FusionPlayers)
             {
-                var fp = o.TryCast<FusionPlayer>();
-                var no = fp?.Object;
+                var no = fp != null ? fp.Object : null;
                 if (no == null) continue;
                 int raw;
                 try { raw = no.InputAuthority.RawEncoded; } catch (Exception ex) { DebugLog.Error("biglobbies", ex, "Janitor.DespawnGhostCars"); continue; }
@@ -725,7 +728,7 @@ internal static class Janitor
                     var sp = OverlandSessionPlayers.Instance;
                     if (sp == null) { Menu.SetStatus("Failed: not in a session."); return; }
                     BigLobbiesPlugin.Logger.LogInfo("[Lobby] Player tables: " + Describe(sp));
-                    Menu.SetStatus("Player tables written to the BepInEx log.");
+                    Menu.SetStatus("Player tables written to the " + OverTheHillPlus.Loader.LoaderText.LoaderName + " log.");
                 }, true));
             if (!host) Menu.Small("Only the host can change the slots; you can still see them here.");
         });

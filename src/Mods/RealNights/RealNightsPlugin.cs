@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.RealNights;
@@ -14,9 +16,13 @@ using OverTheHillPlus.Core.Manager;
 /// nights, storms that go pitch black, and the lamps on your car (roof light bars, bull-bar lamps, the custom light
 /// bars) and the headlights lighting the ground. Only changes what you see; works with Graphics+ (which keeps the day).
 /// </summary>
+#if MELON
+public class RealNightsPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class RealNightsPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.realnights";
     public const string Name = "Nights+";
@@ -25,7 +31,7 @@ public class RealNightsPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.realnights.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "realnights";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

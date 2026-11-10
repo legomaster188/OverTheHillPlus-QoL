@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Graphics;
@@ -14,9 +16,13 @@ using OverTheHillPlus.Core.Manager;
 /// and shadows, lighting, colour looks (post-processing), sky and clouds, fog, water and wet weather. Only changes what
 /// you see.
 /// </summary>
+#if MELON
+public class GraphicsPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class GraphicsPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.graphics";
     public const string Name = "Graphics+";
@@ -25,7 +31,7 @@ public class GraphicsPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.graphics.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "graphics";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

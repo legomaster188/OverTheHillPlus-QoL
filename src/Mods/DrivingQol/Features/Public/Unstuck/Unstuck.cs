@@ -1,10 +1,18 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Features.Public.ModNet;
 using OverTheHillPlus.Features.Public.PlayerList;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 using Net = OverTheHillPlus.Features.Public.ModNet.ModNet;
 using OverTheHillPlus.DrivingQol;
 

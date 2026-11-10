@@ -1,4 +1,6 @@
+using OverTheHillPlus.Shared;
 using OverTheHillPlus.UI;
+using OverTheHillPlus.UI.HudKit;
 using UnityEngine;
 
 namespace OverTheHillPlus.Unreleased;
@@ -21,22 +23,24 @@ internal static class Notice
     {
         float age = Time.unscaledTime - _at;
         if (age < 0f || age > Seconds || string.IsNullOrEmpty(_title)) return;
-        if (CoreBehaviour.GuiHidden) return; // never in a screenshot
-        if (Event.current == null || Event.current.type != EventType.Repaint) return;
-
-        Theme.Ensure();
-        var keep = GUI.matrix;
+        if (!HudDraw.Repaint) return;
+        // The screen layer: these notes come while joining and in the garage, when the game's HUD may be away.
+        if (!HudDraw.Begin(UnreleasedPlugin.ModId, HudLayer.Screen)) return;
         var color = GUI.color;
-        float scale = Mathf.Max(1f, Screen.height / 1080f);
-        GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
-        float sw = Screen.width / scale;
-        var r = new Rect(sw - 380f, 80f, 360f, 50f);
-        GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(Seconds - age)); // fades over the last second
-        Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.9f), 10);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), Theme.Bad, 2);
-        GUI.Label(new Rect(r.x + 16f, r.y + 6f, r.width - 24f, 20f), _title, Theme.Label);
-        GUI.Label(new Rect(r.x + 16f, r.y + 26f, r.width - 24f, 18f), _sub, Theme.Small);
-        GUI.color = color;
-        GUI.matrix = keep;
+        try
+        {
+            Theme.Ensure();
+            var screen = HudLayout.Begin();
+            GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(Seconds - age)); // fades over the last second
+            var inner = WorldOverlay.PanelBox(new Rect(screen.x - 380f, 80f, 360f, 50f), Theme.Bad);
+            HudDraw.Label(new Rect(inner.x + 4f, inner.y, inner.width - 6f, 20f), _title, Theme.Label);
+            HudDraw.Label(new Rect(inner.x + 4f, inner.y + 20f, inner.width - 6f, 18f), _sub, Theme.Small);
+        }
+        finally
+        {
+            GUI.color = color;
+            HudLayout.End();
+            HudDraw.End();
+        }
     }
 }

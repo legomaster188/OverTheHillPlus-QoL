@@ -20,7 +20,7 @@ public static class NomadDefinition
     public const string CarName = "Nomad";
     public const string Guid = "bad3198dfd694fcd8bb3ae5488bd8395";
     /// <summary>4: the game's side steps hidden (the Nomad's own step ladders), so its garage part list changed.</summary>
-    public const int Protocol = 4;
+    public const int Protocol = 5;
 
     public static CarDefinition Create() => new()
     {
@@ -36,6 +36,8 @@ public static class NomadDefinition
         FusionGuid = Guid,
         RegistryKey = "nomad",
         Protocol = Protocol,
+        // fitfix: the game items these bodies can't carry (floating over the cab, sunk in the bed floor or the body)
+        HiddenItems = new[] { "Visual/Bed/Camper_Bed", "Visual/Bed/Christmas_Bed", "Visual/Bed/Overlander_Bed", "Visual/Bed/Party_Bed", "Visual/Bed/Refreshments_Bed", "Visual/Bed/Tent_Bed", "Visual/Front_Bumper/BashBar_02", "Visual/Roof/Christmas" },
         // The Mammoth, the stock Expedition truck (2.53 m wheelbase, 1.80 m track, a cab-forward flatbed): its
         // skeleton, garage data (the Expedition vehicle class, upgrades) and cosmetic slots (Liveries/nomad/README.md).
         // The Marshal, the other Expedition car, is a box van with no bed.
@@ -48,8 +50,11 @@ public static class NomadDefinition
         Cosmetics = CarCosmetics.Build(CarCosmetics.SlotAnchors.Append(("cosm_Bed", "Visual/Bed")), CarCosmetics.ItemAnchors),
         // The tow bar's plate hung 15 cm under the rear beam with the rest of the rear bumper slot: up against the beam's
         // underside, 2 cm forward so the plate sits under it, the shank under the jaw coupling (ball centre about 0.92 m up).
-        // The Trailers mod hitches to the ball it finds on the bar, so trailers follow.
-        ItemOffsets = { ["Visual/Rear_Bumper/TowBar"] = new MeshVec3(0f, 0.155f, 0.02f) },
+        // The Trailers mod hitches to the ball it finds on the bar, so trailers follow. (The slot itself moved 6 cm forward
+        // onto the beam's face in the 2026-10-24 refit, so the offset takes it back: the bar stays where it was.)
+        ItemOffsets = { ["Visual/Rear_Bumper/TowBar"] = new MeshVec3(0f, 0.155f, -0.04f) },
+        // The toilet seat hung 39 cm under the rear beam: on its own anchor against the beam's face.
+        ItemAnchors = new[] { new CosmeticItemAnchor("cosm_i_ToiletSeat", "Visual/Rear_Bumper/ToiletSeat") },
         // The Nomad has its own step ladders under the doors: the game's tube steps (and the side Christmas lights, wound
         // round the same tube) hung below and through them, so the slot is hidden (the rock sliders already leave it out).
         HiddenSlots = new[] { "Visual/Side_Step" },

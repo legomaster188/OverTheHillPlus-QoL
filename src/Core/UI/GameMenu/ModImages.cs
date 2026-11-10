@@ -42,7 +42,20 @@ internal static class ModImages
         }
         if (Failed.Contains(key)) return null;
         Sprite made = null;
-        if (!string.IsNullOrEmpty(card.ModId))
+        if (!string.IsNullOrEmpty(card.ImageFile))
+        {
+            try
+            {
+                var fi = new FileInfo(card.ImageFile);
+                if (fi.Exists && fi.Length > 8 && fi.Length <= MaxBytes)
+                {
+                    OverTheHillPlus.CrashTrail.Mark("MODS cards: decoding a picture file");
+                    made = Make(File.ReadAllBytes(card.ImageFile), "OTH_CardFile");
+                }
+            }
+            catch (Exception e) { Warn(key, $"the picture {Path.GetFileName(card.ImageFile)}: {e.Message}; a generated card instead"); }
+        }
+        if (made == null && !string.IsNullOrEmpty(card.ModId))
         {
             try
             {

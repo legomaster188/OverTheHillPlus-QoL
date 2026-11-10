@@ -2,9 +2,9 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using BepInEx;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.Logging;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus;
 
@@ -189,7 +189,7 @@ public static class DebugLog
             if (_writer != null || _fileFailed) return;
             try
             {
-                string dir = Path.Combine(Paths.BepInExRootPath, "oth-debug");
+                string dir = Path.Combine(OthLoader.DataDir, "oth-debug");
                 Directory.CreateDirectory(dir);
                 int keep = Math.Max(1, KeepFiles?.Value ?? 10);
                 var names = new System.Collections.Generic.List<string>();

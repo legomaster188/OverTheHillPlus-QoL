@@ -1,6 +1,10 @@
 using System;
 using System.Linq;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using OverTheHillPlus.Features.Public.PlayerList;
 
@@ -13,11 +17,11 @@ internal sealed class ModNetFeature : IFeature
 
     public void Register()
     {
-        // Off by default until verified in-game: while a modded session runs it hooks the game's network receive
-        // handler (which every join message passes through).
-        ModNet.Enabled = CoreConfig.File.Bind(Section, "Enabled", false,
-            "Let players who run this mod exchange small messages (unstuck requests, big-lobby names) through the host. " +
-            "Vanilla players are never sent anything. As host it applies to servers started after enabling. Experimental.");
+        ModNet.Enabled = CoreConfig.File.Bind(Section, "Enabled", ModNetDefaults.OnByDefault,
+            "Let players who run this mod exchange small messages through the host: other players' paint and builds, " +
+            "trailer requests, big-lobby names, unstuck requests. Vanilla players are never sent anything. As host it " +
+            "applies to servers started after enabling.");
+        SwitchOnOnce();
         Registry.OnTick(ModNet.Tick);
         Registry.Section(Registry.PlusMode, "Network", DrawCard, 50);
         ServerSettings.AddRow(ServerSettingRow.Toggle("modnet", "Mod Network", 60, "core", () => ModNet.Enabled));
@@ -42,6 +46,26 @@ internal sealed class ModNetFeature : IFeature
         Try("Fusion_INetworkRunnerCallbacks_OnPlayerLeft", nameof(LeftPrefix));
     }
 
+    /// <summary>An install that has the old default (off) written gets the network switched on once, where it is on by
+    /// default now; the marker makes a later switch-off stick.</summary>
+    private static void SwitchOnOnce()
+    {
+        if (!ModNetDefaults.OnByDefault) return;
+        try
+        {
+            string marker = System.IO.Path.Combine(Loader.OthLoader.ConfigDir, ModNetDefaults.SwitchedOnMarker);
+            bool markerExists = System.IO.File.Exists(marker);
+            if (ModNetDefaults.ShouldSwitchOn(true, markerExists, ModNet.Enabled.Value))
+            {
+                ModNet.Enabled.Value = true;
+                Core.CorePlugin.Logger?.LogInfo("[ModNet] Switched on: other players' paint, Meerkat builds and trailer requests need it " +
+                                                "(MODS > Mod Manager > Network switches it off)");
+            }
+            if (!markerExists) System.IO.File.WriteAllText(marker, DateTime.UtcNow.ToString("O") + ": the mod network was switched on once (core 1.4.1)\n");
+        }
+        catch (Exception e) { DebugLog.Error("core", e, "ModNetFeature.SwitchOnOnce"); }
+    }
+
     private static void JoinedPrefix(PlayerRef player) => ModNet.PlayerJoinedOrLeft(player, true);
     private static void LeftPrefix(PlayerRef player) => ModNet.PlayerJoinedOrLeft(player, false);
 
@@ -49,7 +73,7 @@ internal sealed class ModNetFeature : IFeature
     {
         Menu.Card("Mod network", "Players who run this mod can talk to each other through the host: unstuck requests, big-lobby names, chat, ping notices. Vanilla players are never sent anything.", () =>
         {
-            Menu.Switch(ModNet.Enabled, "Mod network (experimental)", "Host: applies to servers started after enabling. Guest: talks to modded hosts only", true);
+            Menu.Switch(ModNet.Enabled, "Mod network", "Host: applies to servers started after enabling. Guest: talks to modded hosts only", true);
             Menu.KeyValue("Status", ModNet.Describe());
             if (ModNet.Enabled.Value && ModNet.IsHost && ModNet.PeerCount > 0)
             {

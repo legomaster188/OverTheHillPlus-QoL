@@ -1,6 +1,11 @@
 using System;
+#if MELON
+using Il2CppFusion;
+using Il2CppFusion.Addons.Physics;
+#else
 using Fusion;
 using Fusion.Addons.Physics;
+#endif
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
@@ -153,6 +158,49 @@ internal static class TrailerPhysics
             Vector3 hub = pos + rot * w.Local;
             rb.AddForceAtPosition(lat * fl + lon * fo, Vector3.Lerp(contact, hub, 0.6f), ForceMode.Force);
         }
+
+        // a semi-trailer standing unhitched rests its nose on the landing gear: a stiff spring under each foot, and the
+        // sand shoes don't slide
+        if (!hitched && spec.GearDrop > 0f) GearSupport(t, rb, pos, rot, up, mass, dt);
+    }
+
+    /// <summary>The landing gear's feet as stiff, high-friction supports (a semi-trailer standing unhitched).</summary>
+    private static void GearSupport(TrailerLive t, Rigidbody rb, Vector3 pos, Quaternion rot, Vector3 up, float mass, float dt)
+    {
+        int feet = 0;
+        foreach (var _ in t.GearFeet()) feet++;
+        if (feet == 0) return;
+        // the gear carries the share of the weight ahead of the axles, spread over the feet, sagging 2 cm
+        float share = mass * GearShare(t.Spec, t.Model) / feet;
+        float k = share * WheelMath.G / 0.02f;
+        float c = 2f * 0.8f * (float)Math.Sqrt(k * share);
+        const float above = 0.30f;
+        foreach (var foot in t.GearFeet())
+        {
+            Vector3 top = pos + rot * (foot + Vector3.up * above);
+            if (!Ground(top, -up, above + 0.25f, t, out var hit)) continue;
+            float compression = above - hit.distance;
+            if (compression <= 0f) continue;
+            Vector3 v = rb.GetPointVelocity(hit.point);
+            float sus = WheelMath.Suspension(compression, Vector3.Dot(v, up), k, c, share * WheelMath.G);
+            if (sus <= 0f) continue;
+            Vector3 slide = Vector3.ProjectOnPlane(v, hit.normal);
+            // static friction up to 0.8 of the load: the sand shoes hold, a hard shove still drags them
+            Vector3 hold = -slide * (share / Math.Max(dt, 1e-3f) * 0.5f);
+            float limit = sus * 0.8f;
+            if (hold.magnitude > limit) hold = hold.normalized * limit;
+            rb.AddForceAtPosition(up * sus + hold, hit.point, ForceMode.Force);
+        }
+    }
+
+    /// <summary>The share of the trailer's weight its landing gear carries: the centre of mass's distance ahead of the axles
+    /// over the gear's.</summary>
+    private static float GearShare(TrailerSpec spec, TrailerModel model)
+    {
+        var a = model.Blob.Anchor("gear_L");
+        float gz = a != null ? a.Position.Z : 0f;
+        if (!(gz > 0.5f)) return 0.4f;
+        return Mathf.Clamp(spec.ComForward / gz, 0.1f, 0.9f);
     }
 
     /// <summary>The nearest ground hit below a point that is not this trailer or its towing car.</summary>

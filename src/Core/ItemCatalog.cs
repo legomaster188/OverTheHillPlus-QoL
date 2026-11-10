@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using ItemType = Il2Cpp.InventoryItemScriptableObject.ItemType;
+#else
 using ItemType = InventoryItemScriptableObject.ItemType;
+#endif
 
 namespace OverTheHillPlus;
 

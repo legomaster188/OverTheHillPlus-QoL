@@ -1,0 +1,141 @@
+{
+  "id": "fender_flares",
+  "name": "Fender Flares",
+  "cosmeticType": "Fenders",
+  "slot": "Visual/Fender",
+  "price": 15,
+  "paintable": false,
+  "group": "flares",
+  "fits": {
+    "Tercel": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Aro": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Hilo": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Bastion": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Drifter": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Pixie": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Bento": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Ibex": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Marmot": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Drover": {
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    }
+  }
+}

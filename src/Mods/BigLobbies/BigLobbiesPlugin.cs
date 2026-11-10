@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.BigLobbies;
@@ -14,9 +16,13 @@ using OverTheHillPlus.Core.Manager;
 /// working: crash guards, spawn points, fall rescue, slot keeping, overflow names, extra player colours, player
 /// table guards, the player-slot janitor and the lobby garage for players 5 and up.
 /// </summary>
+#if MELON
+public class BigLobbiesPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class BigLobbiesPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.biglobbies";
     public const string Name = "Lobby+";
@@ -25,7 +31,7 @@ public class BigLobbiesPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.biglobbies.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "biglobbies";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

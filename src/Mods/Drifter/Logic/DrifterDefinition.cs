@@ -104,6 +104,9 @@ public static class DrifterDefinition
             "Visual/Rear/SpareWheel", "Visual/Rear/Ladder", "Visual/Rear/Bike", "Visual/Rear/Guitar", "Visual/Rear/MountedGrill",
             "Visual/Rear/CampingLantern", "Visual/Rear/Pan", "Visual/Side/Side_Left", "Visual/Side_Step/Christmas_Side",
         },
+        // The roof bar slot sits low so the bars' feet clamp the front gutter; the taxi sign has no feet and stands on the
+        // pop-top on its own anchor.
+        ItemAnchors = new[] { new CosmeticItemAnchor("cosm_i_TaxiSign", "Visual/Roof_Bar/TaxiSign") },
         // The swing-away spare and the ladder hang 0.3 m behind the collider part (the hull stops at the rear panel): a box
         // round them so they don't pass through walls, rocks and other cars (the QA audit's physics check).
         BodyBoxes = new[] { new CarBodyBox(new MeshVec3(-0.30f, 0.93f, -2.54f), new MeshVec3(1.20f, 0.95f, 0.31f)) },

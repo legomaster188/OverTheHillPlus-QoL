@@ -53,7 +53,7 @@ internal static class HornsSimple
             v => Mathf.RoundToInt(v * 100f) + "%", v => HornsConfig.Volume.Value = v);
         SimpleMenu.Note("Here: " + HornNet.Describe());
         if (HornSounds.FolderLinked) SimpleMenu.Note("The horn folder is a link (symlink or junction), so nothing in it is used: put the files in the folder itself.");
-        SimpleMenu.Note("Your own horns: wav files of up to 256 KB and 10 s in BepInEx/config/oth.horns." +
+        SimpleMenu.Note("Your own horns: wav files of up to 256 KB and 10 s in " + OverTheHillPlus.Loader.LoaderText.ConfigDir + "/oth.horns." +
                         (bad > 0 ? $" {bad} file(s) there can't be used (see the Advanced fold)." : ""));
     }
 

@@ -1,0 +1,89 @@
+{
+  "id": "shovel_axe",
+  "name": "Shovel and Axe",
+  "cosmeticType": "Hood",
+  "slot": "Visual/Hood",
+  "price": 12,
+  "paintable": false,
+  "group": "hood_tools",
+  "fits": {
+    "Aro": {
+      "pos": [
+        0.0,
+        1.2444,
+        1.2325
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Bastion": {
+      "pos": [
+        0.0,
+        1.3418,
+        1.6525
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Hilo22": {
+      "pos": [
+        0.0,
+        1.3693,
+        1.8125
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Mule": {
+      "pos": [
+        0.0,
+        1.3641,
+        1.3525
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Ibex": {
+      "pos": [
+        0.0,
+        1.3137,
+        1.2125
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Drover": {
+      "pos": [
+        0.0,
+        1.4189,
+        1.7125
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    }
+  }
+}

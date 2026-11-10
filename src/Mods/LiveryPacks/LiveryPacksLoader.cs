@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using BepInEx;
 using HarmonyLib;
 using OverTheHillPlus.Shared;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.LiveryPacks;
 
@@ -23,7 +23,7 @@ namespace OverTheHillPlus.LiveryPacks;
 /// </summary>
 internal static class LiveryPacksLoader
 {
-    public static string Root => Path.Combine(Paths.ConfigPath, "oth.liveries");
+    public static string Root => Path.Combine(OthLoader.ConfigDir, "oth.liveries");
 
     /// <summary>The last scan, for the mod page.</summary>
     public static IReadOnlyList<LiveryPack> Packs { get; private set; } = Array.Empty<LiveryPack>();
@@ -130,7 +130,11 @@ internal static class LiveryPacksLoader
     {
         try
         {
+#if MELON
+            var service = global::Il2Cpp.ModManager.Instance?.Liveries;
+#else
             var service = global::ModManager.Instance?.Liveries;
+#endif
             if (service == null)
             {
                 Rescan();
@@ -176,9 +180,21 @@ internal static class LiveryPacksLoader
     }
 }
 
-[HarmonyPatch(typeof(ModLiveryService), nameof(ModLiveryService.RegisterLocalLiveries))]
+[HarmonyPatch]
 internal static class RegisterLocalLiveriesPatch
 {
+    // The game's local livery scan: RegisterLocalLiveries, RefreshLocalLiveries since a game update in October 2026.
+    // Looked up by plain reflection: AccessTools.Method logs a warning for the name this game doesn't have.
+    private static System.Reflection.MethodBase TargetMethod() =>
+        Find("RegisterLocalLiveries") ?? Find("RefreshLocalLiveries");
+
+    private static System.Reflection.MethodInfo Find(string name)
+    {
+        foreach (var m in typeof(ModLiveryService).GetMethods(AccessTools.all))
+            if (m.Name == name && !m.IsGenericMethodDefinition) return m;
+        return null;
+    }
+
     private static void Postfix(ModLiveryService __instance)
     {
         // A throw here would end the game's own refresh half-way.

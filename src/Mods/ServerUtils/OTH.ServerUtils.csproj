@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <AssemblyName>OTH.ServerUtils</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonFullPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.ServerUtils.ServerUtilsPlugin</OthPluginClass>
     <RootNamespace>OverTheHillPlus</RootNamespace>
   </PropertyGroup>
 

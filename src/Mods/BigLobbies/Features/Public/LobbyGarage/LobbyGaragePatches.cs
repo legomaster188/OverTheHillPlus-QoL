@@ -1,5 +1,14 @@
+#if MELON
+using GameLobby = Il2Cpp.Lobby;
+#else
+using GameLobby = global::Lobby;
+#endif
 using System;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 
 namespace OverTheHillPlus.Features.Public.LobbyGarage;
@@ -8,11 +17,11 @@ namespace OverTheHillPlus.Features.Public.LobbyGarage;
 /// Spawn point for extra players. Runs before the big-lobby fallback (a different free spot on every call, so a
 /// car and its label could end up apart) and gives each extra player one stable spot instead.
 /// </summary>
-[HarmonyPatch(typeof(global::Lobby), nameof(global::Lobby.GetSpawnPoint))]
+[HarmonyPatch(typeof(GameLobby), nameof(GameLobby.GetSpawnPoint))]
 internal static class LobbyGarageSpawnPointPatch
 {
     [HarmonyPriority(Priority.First)]
-    private static Exception Finalizer(Exception __exception, global::Lobby __instance, PlayerRef playerRef,
+    private static Exception Finalizer(Exception __exception, GameLobby __instance, PlayerRef playerRef,
         ref int spawnPointIndex, ref SpawnPoint __result)
     {
         if (!LobbyGarage.Enabled) return __exception;
@@ -33,11 +42,11 @@ internal static class LobbyGarageSpawnPointPatch
 }
 
 /// <summary>Lays the extra lobby spots out once the lobby (and the big-lobby clones) exist.</summary>
-[HarmonyPatch(typeof(global::Lobby), nameof(global::Lobby.Awake))]
+[HarmonyPatch(typeof(GameLobby), nameof(GameLobby.Awake))]
 internal static class LobbyGarageAwakePatch
 {
     [HarmonyPriority(Priority.Low)] // after the big-lobby postfix that clones the spawn points
-    private static void Postfix(global::Lobby __instance) => LobbyGarage.OnLobbyAwake(__instance);
+    private static void Postfix(GameLobby __instance) => LobbyGarage.OnLobbyAwake(__instance);
 }
 
 /// <summary>

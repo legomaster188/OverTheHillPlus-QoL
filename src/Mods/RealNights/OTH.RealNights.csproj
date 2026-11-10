@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <AssemblyName>OTH.RealNights</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonFullPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.RealNights.RealNightsPlugin</OthPluginClass>
     <RootNamespace>OverTheHillPlus</RootNamespace>
   </PropertyGroup>
 

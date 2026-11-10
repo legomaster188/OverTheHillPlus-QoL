@@ -1,10 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
+#if MELON
+using FunCoreManagers = Il2CppFunCore.Managers;
+#else
+using FunCoreManagers = FunCore.Managers;
+#endif
 
 namespace OverTheHillPlus.Core.Shared;
 
@@ -19,6 +28,11 @@ public sealed class NetPrefabBuild
     public static NetPrefabBuild Done(NetworkObject template) => new() { Template = template };
     /// <summary>Not possible yet (the game is still loading): asked again a second later.</summary>
     public static NetPrefabBuild Later(string waitingFor) => new() { WaitingFor = waitingFor ?? "the game" };
+    /// <summary>Under way, with steps left (spread over frames so the game keeps drawing): asked again next frame, for
+    /// the same index; nothing after it registers in between.</summary>
+    public static NetPrefabBuild Working(string step) => new() { Step = step ?? "building" };
+    /// <summary>The step a <see cref="Working"/> build is at.</summary>
+    public string Step { get; private set; }
     /// <summary>Never: the entry is dropped (later entries still register, at the indices that follow).</summary>
     public static NetPrefabBuild Fail(string reason) => new() { Failed = reason ?? "failed" };
 }
@@ -34,7 +48,9 @@ public sealed class NetPrefabEntry
     public string AssetPath;
     /// <summary>Everything else peers must agree on for the template to match (protocol, donor, ...): in the hash.</summary>
     public string Layout;
-    /// <summary>Builds the template for the given prefab index (main thread).</summary>
+    /// <summary>Builds the template for the given prefab index (main thread). It may take several frames
+    /// (<see cref="NetPrefabBuild.Working"/>); while <see cref="NetPrefabRegistry.Urgent"/> is set (a session is starting)
+    /// it must finish in that call.</summary>
     public Func<int, NetPrefabBuild> Build;
     /// <summary>The entry is in the table at this index.</summary>
     public Action<int> Registered;
@@ -78,6 +94,10 @@ internal static class NetPrefabRegistry
         public bool WakeLogged;
         /// <summary>Fusion's table holds the template (the mod must keep it, even if the entry is lost).</summary>
         public bool InTable;
+        /// <summary>Main-thread time the build took, over how many frames, and its longest frame (for the log).</summary>
+        public double BuildMs, LongestMs;
+        public int BuildFrames;
+        public string LongestStep;
     }
 
     private static readonly List<Slot> Slots = new();
@@ -177,12 +197,91 @@ internal static class NetPrefabRegistry
 
     // ---------------------------------------------------------------- registering
 
+    private static bool _tableSeen;
+
+    /// <summary>Set while a session is starting (<see cref="BeforeStartGame"/>): every build must finish in the call
+    /// that asks for it, background loads included.</summary>
+    public static bool Urgent { get; private set; }
+
+    private static readonly System.Diagnostics.Stopwatch FrameClock = new();
+
+    /// <summary>The current frame still has main-thread time for more build steps (<see cref="NetPrefabSchedule.FrameBudgetMs"/>).</summary>
+    public static bool BudgetLeft() => FrameClock.Elapsed.TotalMilliseconds < NetPrefabSchedule.FrameBudgetMs;
+
+    private static readonly StartGate Gate = new();
+
+    // Fusion's config is a Resources asset whose prefab table holds 58 "static lazy" sources (spawners, rocks, three
+    // cars), and Unity's player loads those with it (lazy only in the editor): its first access pulls some 35,000
+    // objects, 330 MB on disk, in one frame. It is loaded in the background first, so that first access finds it loaded.
+    private const string ConfigResource = "NetworkProjectConfig";
+    private const float ConfigLoadLimit = 120f;
+    private static ResourceRequest _configLoad;
+    private static UnityEngine.Object _configAsset;
+    private static float _configLoadSince;
+    private static bool _configLoadDone;
+
     internal static void Tick()
     {
-        if (Slots.Count == 0 || Time.unscaledTime < _next) return;
-        _next = Time.unscaledTime + 1f;
+        if (Slots.Count == 0) return;
+        // Asked for from the first frame, not after the menu has settled: its load then runs next to the game's own first
+        // stall (several seconds with nothing to draw anyway), instead of freezing the settled menu for as long again.
+        if (!_configLoadDone && !_tableSeen && Logging.DebugConfig.Get(Logging.DebugConfig.EarlyFusionConfig, true)) ConfigLoaded();
+        if (!Gate.Open)
+        {
+            if (!Gate.Update(Time.unscaledDeltaTime, Time.realtimeSinceStartup, MenuUp())) return;
+            Logging.BootReport.Mark("menu settled");
+            Core.CorePlugin.Logger?.LogInfo($"[NetPrefabs] the game is up ({(Gate.OpenedBy == "quiet" ? "the frames are steady" : "time limit")}, " +
+                                            $"{Gate.WaitedSeconds:0.0} s after the first frame): {Slots.Count} network prefab(s) register now, a step per frame.");
+        }
+        if (Time.unscaledTime < _next) return;
+        // Once registration has begun, a build step per frame (a car's whole build took a second or more, and all of
+        // them in one frame froze the game for half a minute at start); before that, a check once a second.
+        _next = Time.unscaledTime + (_begun && AnyPending ? 0f : 1f);
         if (SessionHolds()) return;
+        if (!ConfigLoaded()) { _next = 0f; return; }
+        FrameClock.Restart();
         TryRegister();
+    }
+
+    /// <summary>The game's main menu is on top of its state stack.</summary>
+    private static bool MenuUp()
+    {
+        try
+        {
+            var top = FunCoreManagers.HybridSingleton<FunCoreManagers.GameStateManager>.Instance?.PeekState();
+            return top != null && top.TryCast<StateMainMenu>() != null;
+        }
+        catch (Exception ex) { DebugLog.Error("core", ex, "NetPrefabRegistry.MenuUp"); return true; }
+    }
+
+    /// <summary>Fusion's config is loaded (or will be loaded by the first access, the old way): registration may go on.</summary>
+    private static bool ConfigLoaded()
+    {
+        if (_configLoadDone || _tableSeen) return true;
+        float now = Time.realtimeSinceStartup;
+        if (_configLoad == null)
+        {
+            try
+            {
+                CrashTrail.Mark("netprefabs: Fusion's config in the background");
+                _configLoad = Resources.LoadAsync(ConfigResource, Il2CppInterop.Runtime.Il2CppType.Of<ScriptableObject>());
+                _configLoadSince = now;
+            }
+            catch (Exception ex) { DebugLog.Error("core", ex, "NetPrefabRegistry.ConfigLoaded"); _configLoad = null; }
+            if (_configLoad == null) { _configLoadDone = true; return true; }
+            Core.CorePlugin.Logger?.LogInfo("[NetPrefabs] loading Fusion's config in the background.");
+        }
+        bool done;
+        try { done = _configLoad.isDone; } catch (Exception ex) { DebugLog.Error("core", ex, "NetPrefabRegistry.ConfigLoaded"); done = true; }
+        float took = now - _configLoadSince;
+        if (!done && took < ConfigLoadLimit) return false;
+        try { _configAsset = done ? _configLoad.asset : null; } catch (Exception ex) { DebugLog.Error("core", ex, "NetPrefabRegistry.ConfigLoaded"); _configAsset = null; }
+        _configLoadDone = true;
+        Logging.BootReport.Mark("Fusion's config in");
+        Core.CorePlugin.Logger?.LogInfo(done
+            ? $"[NetPrefabs] Fusion's config loaded in the background in {took:0.0} s" + (_configAsset == null ? " (not found under Resources: the first access loads it)." : ".")
+            : $"[NetPrefabs] Fusion's config still loading after {took:0} s: the first access finishes it.");
+        return true;
     }
 
     private static bool SessionHolds()
@@ -206,12 +305,23 @@ internal static class NetPrefabRegistry
         catch (Exception e) { Core.CorePlugin.Logger?.LogError($"[NetPrefabs] {s.Entry.Key} failed callback: {e}"); }
     }
 
-    private static void TryRegister()
+    private static RegisterStep TryRegister()
     {
-        if (_broken) return;
+        if (_broken) return RegisterStep.Broken;
         NetworkPrefabTable table;
+        // The first touch of Fusion's config loads it (and whatever it references) right here, in one frame: marked and
+        // timed, so a long first frame at start names it instead of just "tick NetPrefabFeature".
+        bool first = !_tableSeen;
+        long t0 = first ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        if (first) CrashTrail.Mark("netprefabs: Fusion's prefab table");
         try { table = NetworkProjectConfig.Global?.PrefabTable; } catch (Exception ex) { DebugLog.Error("core", ex, "NetPrefabRegistry.TryRegister"); table = null; }
-        if (table == null) return;
+        if (table == null) return RegisterStep.Waiting;
+        if (first)
+        {
+            _tableSeen = true;
+            double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            Core.CorePlugin.Logger?.LogInfo($"[NetPrefabs] Fusion's prefab table: {table._sources.Count} entries, first access took {ms:0} ms.");
+        }
         foreach (var s in Slots)
         {
             if (s.State != State.Pending) continue;
@@ -220,11 +330,13 @@ internal static class NetPrefabRegistry
             if (count != expected)
             {
                 Break($"Fusion's prefab table has {count} entries where {expected} were expected (something else added prefabs)");
-                return;
+                return RegisterStep.Broken;
             }
             _begun = true;
             NetPrefabBuild b;
             bool modSaidNo = false;
+            long b0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            CrashTrail.Mark("netprefabs: build " + s.Entry.Key);
             try
             {
                 b = s.Entry.Build(count);
@@ -232,17 +344,26 @@ internal static class NetPrefabRegistry
             }
             catch (Exception e) { DebugLog.Error("core", e, "NetPrefabRegistry.TryRegister"); b = NetPrefabBuild.Fail("build failed: " + e.Message); }
             if (b == null) b = NetPrefabBuild.Fail("no template");
+            double buildMs = (System.Diagnostics.Stopwatch.GetTimestamp() - b0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            s.BuildMs += buildMs;
+            s.BuildFrames++;
+            if (buildMs > s.LongestMs) { s.LongestMs = buildMs; s.LongestStep = b.Step ?? (b.Template != null ? "last step" : "-"); }
+            if (b.Step != null)
+            {
+                s.WaitingFor = null;
+                return RegisterStep.Working; // same entry next frame: nothing after it may take an index first
+            }
             if (b.WaitingFor != null)
             {
                 s.WaitingFor = b.WaitingFor;
-                return; // later entries wait for this one: their indices depend on it
+                return RegisterStep.Waiting; // later entries wait for this one: their indices depend on it
             }
             if (b.Failed != null || b.Template == null)
             {
                 string why = b.Failed ?? "no template";
                 Core.CorePlugin.Logger?.LogWarning($"[NetPrefabs] {s.Entry.Key} is not registered: {why}.");
                 GiveUp(s, why, tellMod: !modSaidNo);
-                continue;
+                return RegisterStep.GaveUp;
             }
             try
             {
@@ -251,7 +372,7 @@ internal static class NetPrefabRegistry
                 {
                     Core.CorePlugin.Logger?.LogError($"[NetPrefabs] {s.Entry.Key}: its guid is taken.");
                     GiveUp(s, "its network prefab guid is already in Fusion's table", tellMod: true);
-                    continue;
+                    return RegisterStep.GaveUp;
                 }
                 s.Source = new NetworkPrefabSourceStatic { AssetGuid = s.Guid, AssetPath = s.Entry.AssetPath };
                 s.Source.Object = b.Template;
@@ -259,29 +380,40 @@ internal static class NetPrefabRegistry
                 {
                     Core.CorePlugin.Logger?.LogError($"[NetPrefabs] Fusion refused {s.Entry.Key}.");
                     GiveUp(s, "Fusion refused its network prefab", tellMod: true);
-                    continue;
+                    return RegisterStep.GaveUp;
                 }
                 // in Fusion's table from here on: its copies are woken, and it is lost (never given up) if anything breaks
                 s.InTable = true;
                 s.TemplateGo = b.Template.gameObject.Pointer;
-                if (id.AsIndex != count) { Break($"{s.Entry.Key} landed at index {id.AsIndex}, not {count}"); return; }
+                if (id.AsIndex != count) { Break($"{s.Entry.Key} landed at index {id.AsIndex}, not {count}"); return RegisterStep.Broken; }
                 if (_stock < 0) _stock = count;
                 s.Index = count;
                 s.State = State.Registered;
                 s.WaitingFor = null;
                 UpdateMarker();
                 DebugLog.Info("core", $"network prefab '{s.Entry.Key}' registered at index {count} (join marker {_marker}, {_stock} stock prefabs)");
-                Core.CorePlugin.Logger?.LogInfo($"[NetPrefabs] {s.Entry.Key} registered at index {count} (join marker {_marker}).");
+                Core.CorePlugin.Logger?.LogInfo($"[NetPrefabs] {s.Entry.Key} registered at index {count} (join marker {_marker}; " +
+                                                $"built over {s.BuildFrames} frame(s), {s.BuildMs:0} ms in all, longest {s.LongestMs:0} ms at '{s.LongestStep}'" +
+                                                (Urgent ? ", finished as a session started" : "") + ").");
             }
             catch (Exception e)
             {
                 DebugLog.Error("core", e, "NetPrefabRegistry.TryRegister");
                 Break($"{s.Entry.Key} could not be added: {e.Message}");
-                return;
+                return RegisterStep.Broken;
             }
             try { s.Entry.Registered?.Invoke(s.Index); }
             catch (Exception e) { Core.CorePlugin.Logger?.LogError($"[NetPrefabs] {s.Entry.Key} registered callback: {e}"); }
+            if (!AnyPending)
+            {
+                Core.CorePlugin.Logger?.LogInfo($"[NetPrefabs] all done: {RegisteredCount()} of {Slots.Count} registered.");
+                // nothing more will ask for a texture decoded ahead
+                Cars.AssetPrefetch.Close();
+                Logging.BootReport.Write();
+            }
+            return RegisterStep.Registered; // the next one on the next frame, so the game keeps drawing between cars
         }
+        return RegisterStep.Idle;
     }
 
     private static int RegisteredCount()
@@ -332,7 +464,7 @@ internal static class NetPrefabRegistry
     internal static void BeforeStartGame(NetworkRunner runner)
     {
         if (Slots.Count == 0) return;
-        if (!SessionHolds()) TryRegister();
+        FlushPending();
         if (!_broken && RegisteredCount() > 0) Verify();
         foreach (var s in Slots)
             if (s.State == State.Pending)
@@ -343,6 +475,29 @@ internal static class NetPrefabRegistry
             }
         // From here until this runner is shut down, the set stays as it is (the advert is built right after this).
         _session = runner;
+    }
+
+    /// <summary>The game builds its connection token inside OverlandNetworkRunner.StartGame, before NetworkRunner.StartGame
+    /// runs, so the flush has to come first or the token carries a marker for a half-registered set.</summary>
+    private static void FlushPending()
+    {
+        if (!SessionHolds() && AnyPending)
+        {
+            // The session's set is fixed from here on, so everything that can register does, now, in this call: its
+            // builds finish at once (background loads included). The start of the session waits for it, rather than the
+            // cars staying out of it.
+            Gate.Force(Time.realtimeSinceStartup);
+            int before = RegisteredCount();
+            long f0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            Urgent = true;
+            (int attempts, RegisterStep last) r;
+            try { r = NetPrefabSchedule.Flush(TryRegister, NetPrefabSchedule.FlushAttempts(Slots.Count)); }
+            finally { Urgent = false; }
+            double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - f0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            int added = RegisteredCount() - before;
+            if (added > 0 || r.last != RegisterStep.Idle)
+                Core.CorePlugin.Logger?.LogInfo($"[NetPrefabs] a session is starting: {added} more registered first, in {ms:0} ms ({r.attempts} step(s), last: {r.last}).");
+        }
     }
 
     private static void Verify()
@@ -471,7 +626,13 @@ internal static class NetPrefabRegistry
         catch (Exception e) { DebugLog.Error("core", e, "NetPrefabRegistry.StartGamePrefix"); Core.CorePlugin.Logger?.LogWarning("[NetPrefabs] start check: " + e.Message); }
     }
 
-    /// <summary>Installs the token, join, start and instantiate hooks (core's Load). Without all four, nothing can be
+    private static void OverlandStartPrefix()
+    {
+        try { if (Slots.Count > 0) FlushPending(); }
+        catch (Exception e) { DebugLog.Error("core", e, "NetPrefabRegistry.OverlandStartPrefix"); Core.CorePlugin.Logger?.LogWarning("[NetPrefabs] start flush: " + e.Message); }
+    }
+
+    /// <summary>Installs the token, join, start (both) and instantiate hooks (core's Load). Without all five, nothing can be
     /// declared.</summary>
     internal static void InstallPatches(Harmony h)
     {
@@ -482,14 +643,17 @@ internal static class NetPrefabRegistry
             var connect = AccessTools.Method(typeof(OverlandNetworkRunner), "Fusion_INetworkRunnerCallbacks_OnConnectRequest");
             var start = AccessTools.Method(typeof(NetworkRunner), nameof(NetworkRunner.StartGame));
             var instantiate = AccessTools.Method(typeof(NetworkObjectProviderDefault), nameof(NetworkObjectProviderDefault.InstantiatePrefab));
-            if (token == null || connect == null || start == null || instantiate == null) throw new MissingMethodException("a game method was not found");
+            var overlandStart = AccessTools.Method(typeof(OverlandNetworkRunner), nameof(OverlandNetworkRunner.StartGame), new[] { typeof(GameSetupContext) });
+            if (token == null || connect == null || start == null || instantiate == null || overlandStart == null) throw new MissingMethodException("a game method was not found");
             var tokenPatch = AccessTools.Method(typeof(NetPrefabRegistry), nameof(TokenPostfix));
             var connectPatch = AccessTools.Method(typeof(NetPrefabRegistry), nameof(ConnectPrefix));
             var startPatch = AccessTools.Method(typeof(NetPrefabRegistry), nameof(StartGamePrefix));
+            var overlandStartPatch = AccessTools.Method(typeof(NetPrefabRegistry), nameof(OverlandStartPrefix));
             var instantiatePatch = AccessTools.Method(typeof(NetPrefabRegistry), nameof(InstantiatePostfix));
             h.Patch(token, postfix: new HarmonyMethod(tokenPatch)); done.Add((token, tokenPatch));
             h.Patch(connect, prefix: new HarmonyMethod(connectPatch) { priority = Priority.First }); done.Add((connect, connectPatch));
             h.Patch(start, prefix: new HarmonyMethod(startPatch) { priority = Priority.First }); done.Add((start, startPatch));
+            h.Patch(overlandStart, prefix: new HarmonyMethod(overlandStartPatch) { priority = Priority.First }); done.Add((overlandStart, overlandStartPatch));
             h.Patch(instantiate, postfix: new HarmonyMethod(instantiatePatch) { priority = Priority.First }); done.Add((instantiate, instantiatePatch));
             _patchesOk = true;
         }

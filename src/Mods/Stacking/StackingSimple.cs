@@ -11,7 +11,7 @@ internal static class StackingSimple
     {
         // Not bound when the mod failed to start: nothing to show then.
         if (StackingConfig.ShiftStacks == null) return;
-        SimpleMenu.Heading("Garage cosmetics");
+        SimpleMenu.Heading(TuneGroups.Looks);
         SimpleMenu.Toggle(StackingConfig.ShiftStacks, "Shift + click stacks",
             "Puts the cosmetic on without taking off the one of its type already on. Not for horns (the car plays one).");
         SimpleMenu.Toggle(StackingConfig.ReplaceWholeStack, "Plain click replaces the stack",
@@ -23,5 +23,7 @@ internal static class StackingSimple
         SimpleMenu.Note("Take a cosmetic off by clicking it while it is on: only that one comes off. Stacks are saved with " +
                         "your car and shown to every player, also those without the mod.");
         if (StackHint.Problem != null) SimpleMenu.Note("Hint: " + StackHint.Problem);
+        SimpleMenu.Heading("Also changes the look");
+        SimpleMenu.Links(TuneGroups.LookPages, StackingPlugin.ModId);
     }
 }

@@ -1,5 +1,9 @@
 using System;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Core.Shared;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
@@ -24,7 +28,11 @@ internal sealed class CarDrive
     private readonly RuntimeCar _car;
     private float _nextTrack;
 
-    public CarDrive(RuntimeCar car) { _car = car; }
+    public CarDrive(RuntimeCar car)
+    {
+        _car = car;
+        _nextTrack = car.Beat;
+    }
 
     /// <summary>The garage may list the car here: ready, wanted, and drivable in this session.</summary>
     public bool Listable => _car.Ready && _car.Config.ShowInGarage != null && _car.Config.ShowInGarage.Value && SessionAllows;
@@ -51,6 +59,8 @@ internal sealed class CarDrive
         if (!_car.Ready) return _car.FailedReason != null || ModManager.FailedReason(_car.Id) != null ? "Off" : "Loading";
         if (GameState.LocalPlayer == null || SpawnManager.Instance == null || GameState.LocalCar == null) return "Load into a world";
         if (!SessionAllows) return "Not on this server";
+        // In a career only owned cars are driven (bought at the dealer or the game's merchant).
+        if (Api.Career.Active && !Api.Career.Garage.Owns(_car.Def.CarName)) return "Buy it first";
         try
         {
             var rb = GameState.LocalCar.GetComponent<Rigidbody>();
@@ -65,6 +75,9 @@ internal sealed class CarDrive
         string why = Blocker();
         if (why != null) return why + ".";
         if (Driving) return $"You are in the {_car.Def.CarName} already.";
+        try { why = _car.Hooks.DriveBlocker?.Invoke(); }
+        catch (Exception ex) { DebugLog.Error("core", ex, "CarDrive.DriveIt"); why = null; }
+        if (why != null) return why;
         RememberCurrentCar();
         return Swap(_car.Def.ItemId) ?? $"Switching to the {_car.Def.CarName}…";
     }
@@ -90,7 +103,7 @@ internal sealed class CarDrive
             var load = CarLoadout.For(carId);
             CrashTrail.Mark(_car.Id + ": change car");
             DebugLog.Info(_car.Id, $"change car to 0x{carId:X8} (livery {load.LiveryModId}/{load.LiverySubId})");
-            sm.RPC_ChangeCarAtCurrentPosition(me.Value, carId, load.Bits, load.LiveryModId, load.LiverySubId);
+            load.ChangeCar(sm, me.Value, carId);
             return null;
         }
         catch (Exception e)
@@ -124,7 +137,12 @@ internal sealed class CarDrive
     {
         try
         {
-            var vcc = GameState.LocalCar?.GetComponent<VehicleCustomizationController>();
+            // Unity's null test, not ?.: GameState refreshes the car once a second, so for up to a second after a car
+            // change or a world load it can hold a destroyed car, and GetComponent on that throws (every car's tracker
+            // hit it once: 25 errors per car change).
+            var car = GameState.LocalCar;
+            if (car == null) return;
+            var vcc = car.GetComponent<VehicleCustomizationController>();
             var ci = vcc?.currentCarInfo;
             if (ci != null && !IsNonStock(ci.ItemId)) _car.Save.FallbackCar = ci.ItemId;
         }
@@ -135,7 +153,7 @@ internal sealed class CarDrive
     public void Tick()
     {
         if (!_car.Ready || Time.unscaledTime < _nextTrack) return;
-        _nextTrack = Time.unscaledTime + 1f;
+        _nextTrack = _car.NextBeat(1f);
         RememberCurrentCar();
     }
 
@@ -163,25 +181,24 @@ internal sealed class CarDrive
 /// (RuntimePlayerInjector.SendRuntimePlayer: GetAllMountedParts, then Car.GetMountedUpgradesBitSet).</summary>
 internal readonly struct CarLoadout
 {
-    public readonly BitSet256 Bits;
     public readonly ulong[] Words;
     public readonly long LiveryModId;
     public readonly int LiverySubId;
 
-    private CarLoadout(BitSet256 bits, long modId, int subId)
+    private CarLoadout(ulong[] words, long modId, int subId)
     {
-        Bits = bits;
-        Words = new ulong[4];
-        for (int i = 0; i < 256; i++)
-            if (bits.IsSet(i)) Words[i >> 6] |= 1UL << (i & 63);
+        Words = words;
         LiveryModId = modId;
         LiverySubId = subId;
     }
 
+    /// <summary>Changes the player's car where it stands, wearing this loadout.</summary>
+    public void ChangeCar(SpawnManager sm, PlayerRef player, uint carId) => UpgradeBits.ChangeCar(sm, player, carId, Words, LiveryModId, LiverySubId);
+
     /// <summary>The loadout of car <paramref name="carId"/> (empty when it can't be read: stock parts, no livery).</summary>
     public static CarLoadout For(uint carId)
     {
-        var bits = new BitSet256();
+        var words = new ulong[UpgradeWords.Count];
         long modId = 0;
         int subId = 0;
         try
@@ -193,7 +210,7 @@ internal readonly struct CarLoadout
             if (ci != null)
             {
                 var parts = InventoryUtility.GetAllMountedParts(ci);
-                if (parts != null) bits = new Car(ci, parts).GetMountedUpgradesBitSet();
+                if (parts != null) words = UpgradeBits.Of(new Car(ci, parts));
                 bool modsAllowed = false;
                 try { modsAllowed = OverlandNetworkRunner.Instance != null && OverlandNetworkRunner.Instance.ModsAllowed; } catch (Exception ex) { DebugLog.Error("core", ex, "CarLoadout.For"); }
                 if (modsAllowed && modded == null)
@@ -204,6 +221,6 @@ internal readonly struct CarLoadout
             }
         }
         catch (Exception e) { DebugLog.Error("core", e, "CarLoadout.For"); Core.CorePlugin.Logger?.LogWarning("[Cars] could not read a car's upgrades: " + e.Message); }
-        return new CarLoadout(bits, modId, subId);
+        return new CarLoadout(words, modId, subId);
     }
 }

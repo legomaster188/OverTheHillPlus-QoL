@@ -1,0 +1,102 @@
+{
+  "id": "snorkel_round",
+  "name": "Ram Snorkel",
+  "cosmeticType": "SideSection",
+  "slot": "Performance/Snorkel",
+  "price": 20,
+  "paintable": false,
+  "group": "snorkel",
+  "fits": {
+    "Vera": {
+      "pos": [
+        0.9586,
+        1.09,
+        0.8545
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Tercel": {
+      "pos": [
+        0.8122,
+        0.81,
+        1.0153
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Aro": {
+      "pos": [
+        0.8845,
+        1.1,
+        0.72
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Hilo": {
+      "pos": [
+        0.7943,
+        1.03,
+        0.9484
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Bastion": {
+      "pos": [
+        0.945,
+        1.11,
+        0.9272
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Hilo22": {
+      "pos": [
+        0.865,
+        1.12,
+        1.0538
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Marmot": {
+      "pos": [
+        0.7,
+        0.99,
+        0.7259
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    }
+  }
+}

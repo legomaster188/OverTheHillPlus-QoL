@@ -10,15 +10,24 @@ internal static class BigLobbiesSimple
 
     internal static void Draw()
     {
-        int custom = BigLobbiesConfig.CustomMaxPlayers.Value;
         SimpleMenu.IntChoice("Max players", "Picked for you in Create Server. Above 4 players, everyone should run this mod.",
-            custom >= 2 ? custom : BigLobbiesConfig.DefaultMaxPlayers.Value, SizeSteps, v => v.ToString(), SetLobbySize);
+            LobbySize, SizeSteps, v => v.ToString(), SetLobbySize);
         if (OverTheHillPlus.Features.Public.Lobby.PublicListing.Enabled != null)
             SimpleMenu.Toggle(OverTheHillPlus.Features.Public.Lobby.PublicListing.Enabled, "Show to everyone under 4 players",
                 "The game hides servers above 4 slots. With this on, your big lobby is listed as a 4-slot room (visible and joinable for everyone, also without mods) until the 4th player joins.");
     }
 
-    private static void SetLobbySize(int n)
+    /// <summary>The size servers you host get: the exact size when one is typed, else the Create Server choice.</summary>
+    internal static int LobbySize
+    {
+        get
+        {
+            int custom = BigLobbiesConfig.CustomMaxPlayers.Value;
+            return custom >= 2 ? custom : BigLobbiesConfig.DefaultMaxPlayers.Value;
+        }
+    }
+
+    internal static void SetLobbySize(int n)
     {
         n = UnityEngine.Mathf.Clamp(n, 2, LobbyRules.MaxPlayers);
         BigLobbiesConfig.DefaultMaxPlayers.Value = n;

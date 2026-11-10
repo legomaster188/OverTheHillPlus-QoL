@@ -189,6 +189,7 @@ internal static class CarLooks
                     Apply(car, setter, look, !mine, seen, "car", livery);
                     ApplyEngine(car, fp, look?.Engine ?? car.Def.DefaultEngine, seen);
                     if (DebugLog.IsVerbose) CarCosmeticsProbe.Check(car, fp.transform, "car");
+                    if (mine) CarLodProbe.Check(car, fp.transform, "your car");
                 }
                 catch (Exception e)
                 {
@@ -235,17 +236,19 @@ internal static class CarLooks
         try { go = menu.dummyChosenCarGameObject; }
         catch (Exception ex) { DebugLog.Error("core", ex, "CarLooks.ApplyDummy"); _merchant = null; return; }
         if (go == null) return;
-        RuntimeCar car = null;
-        foreach (var c in ModdedCars.All)
-            if (c.Ready && go.name.StartsWith(c.Def.PrefabName + "_Dummy", StringComparison.Ordinal)) { car = c; break; }
-        if (car == null) return;
+        var car = ModdedCars.ByGarageModel(go);
+        if (car == null || !car.Ready) return;
         PropertyBlockSetter setter = null;
         var lvcc = go.GetComponentInChildren<LocalVehicleCustomizationController>(true);
         if (lvcc != null) setter = lvcc.propertyBlockSetter;
         if (setter == null) setter = go.GetComponentInChildren<PropertyBlockSetter>(true);
         CrashTrail.Mark(car.Id + ": look on the garage model");
-        Apply(car, setter, car.Look.Local, remote: false, seen, "garage model", car.Liveries.ForGarage(menu));
+        // A paint or trim chip highlighted in the Liveries tab shows on its own (no skin, no livery over it).
+        var preview = GaragePaintMenu.PreviewFor(car);
+        if (preview != null) Apply(car, setter, preview, remote: false, seen, "garage model", 0);
+        else Apply(car, setter, car.Look.Local, remote: false, seen, "garage model", car.Liveries.ForGarage(menu));
         if (DebugLog.IsVerbose) CarCosmeticsProbe.Check(car, go.transform, "garage model");
+        CarLodProbe.Check(car, go.transform, "garage model", 2f);
     }
 
     // ---------------------------------------------------------------- applying
@@ -547,7 +550,7 @@ internal static class CarLooks
             var o = new byte[basePx.Length];
             CarPaint.Recolour(basePx, zones, main, trim, o);
             CarPaint.Overlay(o, px, o);
-            return o;
+            return TexturePixels.MipChain(o, w, h);
         });
         Cache[cacheKey] = c;
         return 0;
@@ -560,12 +563,10 @@ internal static class CarLooks
         try
         {
             if (c.Build.IsFaulted) throw c.Build.Exception?.GetBaseException() ?? new InvalidOperationException("the build failed");
-            var px = c.Build.Result;
+            var px = c.Build.Result; // with its mips, made on the build's thread: only the upload is left here
             var t = new Texture2D(c.W, c.H, TextureFormat.RGBA32, true, false) { name = car.Def.CarName + suffix, ignoreMipmapLimit = true };
-            var arr = new Il2CppStructArray<Color32>(c.W * (long)c.H);
-            px.AsSpan().CopyTo(MemoryMarshal.AsBytes(arr.AsSpan()));
-            t.SetPixels32(arr);
-            t.Apply(true, true); // mipmaps, then the pixels live on the GPU only
+            CarAssets.Upload(t, px);
+            t.Apply(false, true); // the pixels live on the GPU only from here
             CarAssets.Sampling(t, full: true);
             t.hideFlags = HideFlags.DontUnloadUnusedAsset;
             c.Texture = t;
@@ -597,7 +598,7 @@ internal static class CarLooks
             {
                 var o = new byte[basePx.Length];
                 CarPaint.Recolour(basePx, zones, main, trim, o);
-                return o;
+                return TexturePixels.MipChain(o, w, h);
             });
             Cache[cacheKey] = c;
             return false;
@@ -769,6 +770,17 @@ internal static class CarLooks
     }
 
     // ---------------------------------------------------------------- the game's garage
+
+    /// <summary>A paint texture is being made right now (the garage's chip preview waits for it before asking for another).</summary>
+    internal static bool PaintBuilding
+    {
+        get
+        {
+            foreach (var c in Cache.Values)
+                if (c.Build != null && c.Key.StartsWith("c:", StringComparison.Ordinal)) return true;
+            return false;
+        }
+    }
 
     internal static void MerchantDummy(StateMerchantMenu menu)
     {

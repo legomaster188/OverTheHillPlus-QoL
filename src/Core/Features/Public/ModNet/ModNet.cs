@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using UnityEngine;
 
 namespace OverTheHillPlus.Features.Public.ModNet;
@@ -92,6 +96,16 @@ internal static class ModNet
         public const ushort Realism = 45;
         /// <summary>Gearbox+ (OTH.Gearbox): a player's differential setup to the host, so the host simulates the car the way the player's game predicts it.</summary>
         public const ushort Gearbox = 44;
+        public const ushort TerrainPlus = 46;
+        public const ushort Career = 48;
+        public const ushort Haulage = 49;
+        /// <summary>The Meerkat roadster (OTH.Meerkat): each player's build (lift, tyres, add-ons, engine stage) to the host,
+        /// the host's table of everyone's builds back (50; the next free number after Haulage's 49).</summary>
+        public const ushort Meerkat = 50;
+        /// <summary>Custom Cosmetics (OTH.CustomCosmetics): each player's part set (a fingerprint of which parts fit which
+        /// cars, so the mounted-parts bits mean the same parts), compared with the host's so a player with another set is
+        /// told (51; the next free number after the Meerkat's 50).</summary>
+        public const ushort CustomParts = 51;
         /// <summary>Reserved for the private build: never reuse it.</summary>
         public const ushort Reserved35 = 35;
         /// <summary>Reserved for the private build: never reuse it.</summary>

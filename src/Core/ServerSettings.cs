@@ -108,6 +108,26 @@ internal static class ServerSettings
     /// <summary>The rows in screen order (equal orders keep the order they were added in).</summary>
     public static IReadOnlyList<ServerSettingRow> Rows => _sorted ??= Defs.OrderBy(d => d.Order).ToList();
 
+    private static readonly List<ServerSettingRow> HostDefs = new();
+    private static List<ServerSettingRow> _hostSorted;
+
+    /// <summary>
+    /// Adds a row to the host settings screen's Players section (the pause menu's HOST SETTINGS, and its button on
+    /// Create Server), replacing an earlier one with the same id: for settings of a server you start (Lobby+'s max
+    /// players). The career mod draws them; without it nothing does.
+    /// </summary>
+    public static void AddHostRow(ServerSettingRow row)
+    {
+        if (row == null || string.IsNullOrEmpty(row.Id) || row.Options == null || row.Selected == null || row.Choose == null)
+            throw new ArgumentException("A host settings row needs an id, options, a selected index and a choose action.");
+        HostDefs.RemoveAll(d => d.Id == row.Id);
+        HostDefs.Add(row);
+        _hostSorted = null;
+    }
+
+    /// <summary>The host settings rows in order (equal orders keep the order they were added in).</summary>
+    public static IReadOnlyList<ServerSettingRow> HostRows => _hostSorted ??= HostDefs.OrderBy(d => d.Order).ToList();
+
     /// <summary>Called by Server Creator+ when a server is created from its screen. A failing handler doesn't stop the
     /// others; its error goes to <paramref name="warn"/>.</summary>
     internal static void RaiseServerCreated(Action<string> warn = null)
@@ -126,6 +146,8 @@ internal static class ServerSettings
     {
         Defs.Clear();
         _sorted = null;
+        HostDefs.Clear();
+        _hostSorted = null;
         ServerCreated = null;
     }
 }

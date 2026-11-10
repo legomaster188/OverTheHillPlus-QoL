@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Meerkat</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonCarPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.Meerkat.MeerkatPlugin</OthPluginClass>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model (meerkat.mesh, with body_lod1..3, the mv_* pods, tops and kit, the tyre_alt_* treads) and its textures,
+         made by Liveries/tools/meerkat/build_meerkat.py with the shared exporter (Liveries/meerkat/), read by core's car
+         framework (CarAssets) and by this mod (MeerkatRig). -->
+    <EmbeddedResource Include="Assets\*.mesh;Assets\*.png" Exclude="Assets\card.png" LogicalName="meerkat/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

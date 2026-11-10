@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 
 namespace OverTheHillPlus.Horns;
 
@@ -20,7 +20,7 @@ internal static class HornsConfig
     {
         File = cfg;
         Horn = cfg.Bind("Horns", "Horn", "stock",
-            "Your horn: stock (the game's), builtin:<id> (one of this mod's), or custom:<file.wav> (a file in BepInEx/config/oth.horns).");
+            "Your horn: stock (the game's), builtin:<id> (one of this mod's), or custom:<file.wav> (a file in " + OverTheHillPlus.Loader.LoaderText.ConfigDir + "/oth.horns).");
         CustomMode = cfg.Bind("Horns", "CustomMode", HornMode.WholeClip, "Your own wav file: Hold = loops while you hold the horn, WholeClip = plays once per press.");
         Volume = cfg.Bind("Horns", "Volume", 1f, new ConfigDescription("Volume of the horns this mod plays.", new AcceptableValueRange<float>(0f, 1f)));
         HearOthers = cfg.Bind("Horns", "HearOthers", true, "Hear the horns other players with this mod picked (off: everyone else sounds like the game's horn).");

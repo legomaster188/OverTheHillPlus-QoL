@@ -1,4 +1,4 @@
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 
 namespace OverTheHillPlus.Unreleased;
 
@@ -11,10 +11,8 @@ internal static class UnreleasedConfig
     public static void Bind(ConfigFile cfg)
     {
         File = cfg;
-        AutoAdd = cfg.Bind("Garage", "AddAllAutomatically", false,
-            "Add every switched-on unreleased car to your garage by itself once a profile is loaded (solo or host).");
+        AutoAdd = UnreleasedSettings.BindAutoAdd(cfg);
         foreach (var car in UnreleasedCars.All)
-            car.Enabled = cfg.Bind("Cars", car.Name, true,
-                $"Show the {car.Name} in your garage once you added it (the MODS page's \"Add to my garage\").");
+            car.Enabled = UnreleasedSettings.BindCar(cfg, car.Name);
     }
 }

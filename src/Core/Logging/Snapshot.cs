@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using BepInEx;
 using OverTheHillPlus.Features.Public.ModNet;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Logging;
 
@@ -51,7 +51,7 @@ internal static class Snapshot
         {
             var model = Gather(reason);
             string text = SnapshotText.Build(model);
-            string dir = Path.Combine(Paths.BepInExRootPath, "oth-reports");
+            string dir = Path.Combine(OthLoader.DataDir, "oth-reports");
             Directory.CreateDirectory(dir);
             var names = new List<string>();
             foreach (var f in Directory.GetFiles(dir, SnapshotText.FilePrefix + "*" + SnapshotText.FileExt)) names.Add(Path.GetFileName(f));

@@ -4,7 +4,11 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 using Object = UnityEngine.Object;
 
 namespace OverTheHillPlus.Cockpit;

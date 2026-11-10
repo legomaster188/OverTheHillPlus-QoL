@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.ServerUtils;
@@ -14,9 +16,13 @@ using OverTheHillPlus.Core.Manager;
 /// rule, moderation (join rules, AFK rule), autosave, smooth joins (car preloading), the host network tweaks, and
 /// sharing settings as a code.
 /// </summary>
+#if MELON
+public class ServerUtilsPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class ServerUtilsPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.serverutils";
     public const string Name = "Host+";
@@ -25,7 +31,7 @@ public class ServerUtilsPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.serverutils.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "serverutils";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

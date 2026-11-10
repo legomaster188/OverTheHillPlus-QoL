@@ -17,7 +17,8 @@ public static class LonghornDefinition
     /// <summary>CarInfo.name and the livery car name ("car": "Longhorn" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Longhorn";
     public const string Guid = "ba0d4ba8025842499b88ab37d9a794f3";
-    public const int Protocol = 4;
+    /// <summary>6: the physical rear axle 1.1 m ahead of the tandem's centre and the smaller steering lock (2026-11-09).</summary>
+    public const int Protocol = 6;
 
     /// <summary>The slots that make sense on a tractor: plates and shackles on the bumper, hood ornaments, lights on the
     /// cab roof, the antenna, and the rear slot (whip-light poles in brackets on the cab's back, the rest of its gear on
@@ -65,6 +66,8 @@ public static class LonghornDefinition
         FusionGuid = Guid,
         RegistryKey = "longhorn",
         Protocol = Protocol,
+        // fitfix: the game items these bodies can't carry (floating over the cab, sunk in the bed floor or the body)
+        HiddenItems = new[] { "Visual/Hood/Wreath_Front", "Visual/Rear/Bike", "Visual/Rear/Guitar", "Visual/Rear/MountedGrill", "Visual/Rear/SpareWheel" },
         // The Blast Wagon, the stock work truck with the longest wheelbase (3.31 m against the Longhorn's real 4.70 m between
         // its steer axle and the middle of the tandem) and 0.48 m tyres (the Longhorn's 11R22.5 are 0.525 m): its skeleton,
         // garage data (vehicle class, upgrades) and cosmetic slots (Liveries/longhorn/README.md). The Mammoth has a 2.53 m
@@ -77,18 +80,23 @@ public static class LonghornDefinition
         // wheel behind the cab get a box (Liveries/tools/semi/semi_const.py: rails 0.80 to 1.07 m high either side of
         // x 0.43, the fifth wheel's top plate at 1.22 m, the frame's end 0.8 m behind the rear axle at z -3.01).
         BodyBoxes = new[] { new CarBodyBox(new MeshVec3(0f, 1.01f, -1.90f), new MeshVec3(1.10f, 0.42f, 3.82f)) },
+        // The physical rear axle sits 1.1 m ahead of the tandem's centre (a 3.60 m physical wheelbase): on its real 4.70 m the
+        // truck rocked from side to side at rest, about 2 cm at the bumpers 12 times a second (the game's raycast wheels hold
+        // a heavy truck still only up to about 3.9 m, CarPhysicsFit.MaxStableWheelbase). Both visible rear axles, their ruts
+        // and their bump stops stay where the model has them (CarTandem.PhysicalOffsets).
+        PhysicalRearShift = 1.1f,
         // The real tractor's numbers on the Blast Wagon's skeleton: 8.6 t (mass x3.07 of 2800 kg) and 144 kW (Power 2.4 on the
         // donor's 60 kW cap: about 17 kW/t), a governed 105 km/h real top speed as a 6.3 m/s limiter (TopSpeed 1.05), a
         // slow-revving diesel (revs x0.75), gearing so the limiter comes at 85 % of the revs on the 0.525 m tyres, springs and
-        // dampers scaled to the weight (x3.0 keeps the Blast Wagon's static sag), a small steering lock (x0.9: the real 4.70 m
-        // wheelbase keeps about the old turning circle). Unrated for towing: a semi tows anything. Gears and diffs: five of the
-        // Eaton's gears, open axles and an inter-axle differential (limited slip).
+        // dampers scaled to the weight (x3.0 keeps the Blast Wagon's static sag), a small steering lock (x0.7: on the 3.60 m
+        // physical wheelbase it turns the circle it had with x0.9 on 4.70 m). Unrated for towing: a semi tows anything. Gears
+        // and diffs: five of the Eaton's gears, open axles and an inter-axle differential (limited slip).
         GearSet = "heavy5",
         Diffs = new byte[] { 1, 1, 2 },
         Tuning = new CarTuningProfile
         {
             Mass = 3.07f, CentreOfMassDrop = 0.10f, Torque = 3.5f, Power = 2.4f, TopSpeed = 1.05f, RevRange = 0.75f, GearRatios = 0.91f, FinalDrive = 1.0f,
-            SuspensionTravel = 0.9f, SpringRate = 3.0f, DamperRate = 3.0f, TyreGrip = 1.0f, SteeringLock = 0.9f,
+            SuspensionTravel = 0.9f, SpringRate = 3.0f, DamperRate = 3.0f, TyreGrip = 1.0f, SteeringLock = 0.7f,
         },
         // Classic truck colours: black, white, candy red, royal blue, forest green, school-bus yellow, burnt orange, silver.
         Paints = new[]

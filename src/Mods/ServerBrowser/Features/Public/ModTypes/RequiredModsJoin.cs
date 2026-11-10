@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using HarmonyLib;
 using OverTheHillPlus.Features.Public.Rejoin;
 using OverTheHillPlus.Features.Public.ServerBrowserPlus;
@@ -16,7 +16,7 @@ using OverTheHillPlus.Core.Manager;
 /// <summary>
 /// Servers that need mods: their row shows "Needs: Vera Crossover, Race Mode" (from the host's othp.req, read by
 /// core's RequiredModsSession), and a join is held while this game lacks one of them, switched one off, or runs
-/// another version. Core's MODS page then asks what to do (RequiredModsPrompt): install and rejoin after the restart,
+/// another version. Core then asks what to do in the game's own pop-up (RequiredModsPrompt): install and rejoin after the restart,
 /// switch on and restart, join anyway (not when another major version blocks it), or cancel. The rejoin after the
 /// restart goes through Rejoin (LastServerStore + RejoinCore). Core never calls this mod; this mod calls core.
 /// </summary>
@@ -60,8 +60,8 @@ internal sealed class RequiredModsJoin : IFeature
     private static readonly Dictionary<RequiredList, string> TagCache = new();
     private static bool _tagsWithList, _tagsPrefabsPending = true;
 
-    /// <summary>"Needs: ..." for a row: green when everything is here, yellow when something is missing or off, red when
-    /// another major version blocks the join. Null when the server lists no server mods.</summary>
+    /// <summary>"Needs: ..." for a row: dimmed cream when everything is here, the game's yellow when something is missing
+    /// or off, red when another major version blocks the join. Null when the server lists no server mods.</summary>
     internal static string RowTag(Fusion.SessionInfo session)
     {
         if (ShowNeeds == null || !ShowNeeds.Value || session == null) return null;
@@ -85,7 +85,9 @@ internal sealed class RequiredModsJoin : IFeature
         if (text != null)
         {
             var issues = RequiredModsSession.CheckJoin(list);
-            string color = issues.Count == 0 ? "#4CC38A" : RequiredMods.Blocks(issues) ? "#E5534B" : "#F2B33D";
+            // In the list's own colours: the game's cream (dimmed) when you have them all, its yellow when something is
+            // missing or off, a muted red when another version blocks the join.
+            string color = issues.Count == 0 ? UI.GameMenu.ModsScreenModel.Cream + "B3" : RequiredMods.Blocks(issues) ? UI.GameMenu.ModsScreenModel.Red : UI.GameMenu.ModsScreenModel.Yellow;
             tag = $"<color={color}>{Escape(text)}</color>  ";
         }
         TagCache[list] = tag;

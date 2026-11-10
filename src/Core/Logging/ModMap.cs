@@ -2,8 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
-using BepInEx;
-using BepInEx.Unity.IL2CPP;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Logging;
 
@@ -47,15 +46,20 @@ internal static class ModMap
         var problems = new List<TypeLoadProblem>();
         try
         {
-            foreach (var kv in IL2CPPChainloader.Instance.Plugins)
+            foreach (var kv in OthLoader.Plugins)
             {
                 var info = kv.Value;
-                string id = IdOfGuid(info?.Metadata?.GUID);
+                string id = IdOfGuid(info?.Guid);
                 if (string.IsNullOrEmpty(id)) continue;
                 m.Ids.Add(id);
-                if (!string.IsNullOrEmpty(info.Metadata.Name)) m.Sources[info.Metadata.Name] = id;
+                if (!string.IsNullOrEmpty(info.Name))
+                {
+                    m.Sources[info.Name] = id;
+                    // MelonLoader logs a mod under its name with underscores for spaces (OTH_Mod_Manager).
+                    m.Sources[info.Name.Replace(' ', '_')] = id;
+                }
                 Assembly asm = null;
-                try { asm = info.Instance?.GetType().Assembly; } catch { }
+                try { asm = info.Assembly; } catch { }
                 if (asm == null || m.Assemblies.ContainsKey(asm)) continue;
                 m.Assemblies[asm] = id;
                 Type[] types;

@@ -4,7 +4,11 @@ using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using OverTheHillPlus.ServerBrowser;
 using OverTheHillPlus.UI;
 using OverTheHillPlus.UI.Native;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;

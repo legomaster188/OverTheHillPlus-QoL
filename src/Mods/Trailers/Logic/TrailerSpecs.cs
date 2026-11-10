@@ -3,13 +3,15 @@ using System.Collections.Generic;
 
 namespace OverTheHillPlus.Trailers;
 
-/// <summary>The four trailers. The numbers are part of the network protocol (messages carry them): never renumber.</summary>
+/// <summary>The trailers. The numbers are part of the network protocol (messages carry them): never renumber, only add.</summary>
 public enum TrailerKind : byte
 {
     Utility = 0,
     Camper = 1,
     Hauler = 2,
     Boat = 3,
+    /// <summary>The 40 ft flatbed semi-trailer: on a semi tractor's fifth wheel (a modded car with a "fifth_wheel" anchor).</summary>
+    Semi = 4,
 }
 
 /// <summary>One trailer's fixed identity and tuning. Pure data (unit-tested).</summary>
@@ -45,16 +47,28 @@ public sealed class TrailerSpec
     public float Rolling = 0.015f;
     /// <summary>Mass the car hauler gains with a car on its deck, kg (0: no cargo).</summary>
     public float CargoMass;
+    /// <summary>Boat trailer: the share of <see cref="Mass"/> that is its boat (gone while the boat is off), kg.</summary>
+    public float LoadMass;
 
     /// <summary>Hitch: jackknife stop (yaw either way), pitch either way, roll either way, degrees.</summary>
     public float YawLimit = 80f, PitchLimit = 60f, RollLimit = 35f;
+
+    /// <summary>A semi-trailer: its kingpin goes on a tractor's fifth wheel (the car model's "fifth_wheel" anchor), not on
+    /// a tow ball; the model's hitch anchor is "kingpin".</summary>
+    public bool FifthWheel;
+    /// <summary>A shared texture of its own (embedded file; null: the trailers' shared one) and its baked occlusion.</summary>
+    public string Texture, Occlusion;
+    /// <summary>Landing gear: how far its feet come down when it stands unhitched, m (0: none). The model's "gear" part
+    /// is drawn that much lower, and its feet ("gear_L" / "gear_R" anchors, retracted) hold the nose up.</summary>
+    public float GearDrop;
 }
 
 /// <summary>The trailer table and the model check. Pure code (unit-tested).</summary>
 public static class TrailerSpecs
 {
-    /// <summary>Bumped when a template's network layout changes: part of each entry's layout in core's join hash.</summary>
-    public const int Protocol = 1;
+    /// <summary>Bumped when a template's network layout or the trailers' state changes: part of each entry's layout in core's
+    /// join hash. 2: the boat trailer's boat comes off (its own part and collider, the boat's place in the state).</summary>
+    public const int Protocol = 2;
 
     /// <summary>The stock prefab the templates are copied from (Fusion table name).</summary>
     public const string Donor = "WinchablePlank";
@@ -87,7 +101,18 @@ public static class TrailerSpecs
             Kind = TrailerKind.Boat, RegistryKey = "trailer.boat", Guid = "be95e00dfc3141f2ae91b78619df4dc6",
             AssetPath = "Assets/Mods/OTHP/Trailer_Boat.prefab", MeshFile = "boat.mesh",
             Name = "Boat trailer", Description = "A galvanised trailer with a small runabout strapped on.",
-            Mass = 640f, ComHeight = 0.78f, ComForward = 0.15f,
+            Mass = 640f, ComHeight = 0.78f, ComForward = 0.15f, LoadMass = 200f,
+        },
+        new()
+        {
+            Kind = TrailerKind.Semi, RegistryKey = "trailer.semi", Guid = "7d2f4c81a9e54b36b0c5e8a13f6d92b4",
+            AssetPath = "Assets/Mods/OTHP/Trailer_Semi.prefab", MeshFile = "flatbed.mesh",
+            Name = "Flatbed semi-trailer", Description = "A 40 ft flatbed on a tandem. Needs a semi truck's fifth wheel. Built for long paved roads.",
+            // 4.1 t empty (40 ft steel combo flatbed), the centre of mass a little ahead of mid-deck and about frame height;
+            // air ride. A fifth wheel lets the trailer pitch (room for the game's crests) and hardly roll.
+            Mass = 4100f, ComHeight = 1.05f, ComForward = 4.2f, Travel = 0.12f, Sag = 0.08f, Damping = 0.7f, Rolling = 0.008f,
+            YawLimit = 88f, PitchLimit = 32f, RollLimit = 8f,
+            FifthWheel = true, Texture = "flatbed_albedo.png", Occlusion = "flatbed_ao.png", GearDrop = 0.44f,
         },
     };
 
@@ -98,7 +123,13 @@ public static class TrailerSpecs
         return null;
     }
 
-    public static bool IsKind(byte b) => b <= (byte)TrailerKind.Boat;
+    public static bool IsKind(byte b) => b <= (byte)TrailerKind.Semi;
+
+    /// <summary>The model anchor the trailer hitches by: "kingpin" for a semi-trailer, "hitch" for the others.</summary>
+    public static string HitchAnchor(TrailerSpec s) => s != null && s.FifthWheel ? "kingpin" : "hitch";
+
+    /// <summary>The car model anchor a semi-trailer's kingpin locks into.</summary>
+    public const string FifthWheelAnchor = "fifth_wheel";
 
     /// <summary>What every peer's template must agree on beyond the guid (core's join hash).</summary>
     public static string Layout(TrailerSpec s) => $"v{Protocol}|{Donor}|{s.MeshFile}";
@@ -126,7 +157,7 @@ public static class TrailerSpecs
         if (blob.First(OverTheHillPlus.Cars.MeshPartKind.Body) == null) missing.Add("body");
         if (blob.First(OverTheHillPlus.Cars.MeshPartKind.Wheel) == null) missing.Add("wheel");
         if (blob.First(OverTheHillPlus.Cars.MeshPartKind.Tyre) == null) missing.Add("tyre");
-        if (blob.Anchor("hitch") == null) missing.Add("hitch");
+        if (blob.Anchor("hitch") == null && blob.Anchor("kingpin") == null) missing.Add("hitch");
         if (WheelAnchors(n => blob.Anchor(n) != null).Count == 0) missing.Add("wheel_L1/wheel_R1");
         var colliders = blob.PartsOf(OverTheHillPlus.Cars.MeshPartKind.Collider);
         if (colliders.Count == 0) missing.Add("collider");

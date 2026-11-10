@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using BepInEx;
 using UnityEngine;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Unreleased;
 
@@ -41,7 +41,7 @@ internal static class SaveGuard
     private static float _nextTick;
     private static uint _lastStockInUse;
 
-    private static string StashPath => Path.Combine(Paths.ConfigPath, FileName);
+    private static string StashPath => Path.Combine(OthLoader.ConfigDir, FileName);
 
     // ---------------------------------------------------------------- around SaveGame
 

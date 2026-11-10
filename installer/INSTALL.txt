@@ -10,7 +10,7 @@ This zip holds the mod DLLs in the folder layout the game needs. The easy way is
 2. Close the game. Unzip THIS zip into the same game folder. The DLLs end up in
    BepInEx\plugins\OverTheHillMods\
 3. Start the game. The first start takes a few minutes while BepInEx gets ready.
-4. In the game press F7 (or Esc, then MODS) to open the mods page. Mods can be switched on and off there.
+4. In the game open Settings, then MODS, for the mods page. Mods can be switched on and off there.
 
 Update: replace the DLLs with the ones from a newer zip, or use the AVAILABLE MODS tab on the MODS page.
 Uninstall: delete the folder BepInEx\plugins\OverTheHillMods\

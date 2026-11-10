@@ -277,7 +277,7 @@ internal static class AutosaveRuntime
         {
             DebugLog.Error("serverutils", e, "AutosaveRuntime.SaveDirect");
             ServerUtilsPlugin.Logger.LogWarning("[Autosave] the game's save failed: " + e.Message);
-            Toast("Save failed", "See the BepInEx log", true);
+            Toast("Save failed", "See the " + OverTheHillPlus.Loader.LoaderText.LoaderName + " log", true);
             return false;
         }
         finally { _pending = null; }
@@ -352,19 +352,24 @@ internal static class AutosaveRuntime
     {
         float age = Time.unscaledTime - _toastAt;
         if (age < 0f || age > ToastSeconds || string.IsNullOrEmpty(_toast)) return;
-        if (CoreBehaviour.GuiHidden) return; // never in a screenshot
-        if (Event.current == null || Event.current.type != EventType.Repaint) return;
-
-        Theme.Ensure();
-        float scale = Mathf.Max(1f, Screen.height / 1080f);
-        GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
-        float sw = Screen.width / scale;
-        var r = new Rect(sw - 300f, 20f, 280f, 50f);
-        GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(ToastSeconds - age)); // fades over the last second
-        Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.9f), 10);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), _toastBad ? Theme.Bad : Theme.Good, 2);
-        GUI.Label(new Rect(r.x + 16f, r.y + 6f, r.width - 24f, 20f), _toast, Theme.Label);
-        GUI.Label(new Rect(r.x + 16f, r.y + 26f, r.width - 24f, 18f), _toastSub, Theme.Small);
+        if (!UI.HudKit.HudDraw.Repaint) return;
+        if (!UI.HudKit.HudDraw.Begin("autosave", UI.HudKit.HudLayer.Screen)) return;
+        var prev = GUI.color;
+        try
+        {
+            Theme.Ensure();
+            var screen = HudLayout.Begin();
+            GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(ToastSeconds - age)); // fades over the last second
+            var inner = Shared.WorldOverlay.PanelBox(new Rect(screen.x - 300f, 20f, 280f, 50f), _toastBad ? Theme.Bad : Theme.Good);
+            UI.HudKit.HudDraw.Label(new Rect(inner.x + 4f, inner.y, inner.width - 6f, 20f), _toast, Theme.Label);
+            UI.HudKit.HudDraw.Label(new Rect(inner.x + 4f, inner.y + 20f, inner.width - 6f, 18f), _toastSub, Theme.Small);
+        }
+        finally
+        {
+            GUI.color = prev;
+            HudLayout.End();
+            UI.HudKit.HudDraw.End();
+        }
     }
 
     internal static void LogOnce(string key, string message)

@@ -114,20 +114,41 @@ internal static class ReportText
         }
         double ours = 0, worst = -1;
         string worstText = null;
+        var took = new double[rows.Count];
         for (int i = 0; i < rows.Count; i++)
         {
             long next = i + 1 < rows.Count ? rows[i + 1].Ticks : frameEndTicks;
             double ms = (next - rows[i].Ticks) * 1000.0 / ticksPerSecond;
+            took[i] = ms;
             if (i + 1 < rows.Count) ours += ms;
             if (ms > worst) { worst = ms; worstText = rows[i].Text; }
         }
         if (skipped > 0) sb.Append("  (").Append(skipped).Append(" earlier steps of that frame not shown)\n");
         if (frameStartTicks != 0 && skipped == 0)
             sb.Append("  before the first step: ").Append(Ms((rows[0].Ticks - frameStartTicks) * 1000.0 / ticksPerSecond)).Append('\n');
-        AppendSteps(sb, rows, frameEndTicks, ticksPerSecond, modOfStep);
-        sb.Append("  longest: \"").Append(worstText).Append("\" ").Append(Ms(worst)).Append(" (the last step's time includes the game's work after it)");
+        if (rows.Count <= SpikeStepsShown) AppendSteps(sb, rows, frameEndTicks, ticksPerSecond, modOfStep);
+        else
+        {
+            // Most of a frame's 200 steps took nothing: the ones that took the time, in the order they ran.
+            sb.Append("  the ").Append(SpikeStepsShown).Append(" longest of its ").Append(rows.Count).Append(" steps:\n");
+            var order = new int[rows.Count];
+            for (int i = 0; i < order.Length; i++) order[i] = i;
+            Array.Sort(order, (a, b) => took[b].CompareTo(took[a]));
+            Array.Resize(ref order, SpikeStepsShown);
+            Array.Sort(order);
+            foreach (int i in order)
+            {
+                var one = new[] { rows[i] };
+                AppendSteps(sb, one, rows[i].Ticks + (long)(took[i] / 1000.0 * ticksPerSecond), ticksPerSecond, modOfStep);
+            }
+        }
+        sb.Append("  steps of ours ").Append(Ms(ours)).Append("; longest: \"").Append(worstText).Append("\" ").Append(Ms(worst))
+          .Append(" (the last step's time includes the game's work after it)");
         return sb.ToString();
     }
+
+    /// <summary>A frame spike lists at most this many steps.</summary>
+    public const int SpikeStepsShown = 12;
 
     /// <summary>The last <paramref name="last"/> rows grouped by frame, with the seconds since the previous step.</summary>
     public static string GroupByFrame(IReadOnlyList<TrailRow> rows, int last, Func<string, string> modOfStep = null)
@@ -233,8 +254,8 @@ internal static class ReportText
         sb.Append("Windows Application events around that time\n-------------------------------------------\n");
         sb.Append(string.IsNullOrEmpty(p.WindowsEvents) ? "(none found)" : p.WindowsEvents.TrimEnd()).Append('\n');
         sb.Append('\n');
-        sb.Append("Attach this file and BepInEx/LogOutput.log to a bug report. More detail next time: set [Debug] Level = Verbose " +
-                  "(and PatchGuards = true) in BepInEx/config/oth.core.cfg.\n");
+        sb.Append("Attach this file and " + OverTheHillPlus.Loader.LoaderText.LogFile + " to a bug report. More detail next time: set [Debug] Level = Verbose " +
+                  "(and PatchGuards = true) in " + OverTheHillPlus.Loader.LoaderText.ConfigDir + "/oth.core.cfg.\n");
         return sb.ToString();
     }
 

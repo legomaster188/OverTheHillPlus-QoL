@@ -13,16 +13,16 @@ using OverTheHillPlus.Core.Manager;
 
 /// <summary>
 /// The MODS page's full view: the mod manager in a window of its own, in the game's style (Server Browser > Create).
-/// Normally MODS opens inside the game's MOD BROWSER with the game's own settings widgets (UI/GameMenu); this window
-/// is what shows when that can't be done (switched off with [Core] GameMenus, the browser's parts or the settings
-/// widgets not found after a game update, a page that failed). It is only that fallback. A window with the big title
+/// Normally MODS is a screen of the game's Settings menu with the game's own buttons and rows (UI/GameMenu); this window
+/// is what shows when that can't be done (switched off with [Core] GameMenus, the settings widgets not found after a
+/// game update, a page that failed). It is only that fallback. A window with the big title
 /// "MODS", a tab bar (INSTALLED first; more tabs through <see cref="RegisterTab"/>) with [Q] [E] keycaps, game-style
 /// rows (UI/SimpleMenu: label left, "◂ value ▸" right, the selected row filled with the game's yellow) and a footer of
 /// keycap hints. INSTALLED lists every registered mod with its version, a CLIENT / HOST / SERVER badge (plus PRIVATE) and an ON/OFF switch
 /// (takes effect after a restart); Enter or a click opens the mod's page (<see cref="ModPageView"/>), Esc / B goes
 /// back, and closes the page from the list (back to the ESC menu when it was opened from there).
 ///
-/// <see cref="Open"/> (the ESC menu's MODS entry, [Core] OpenKey (F7), a mod's own button) tries the MOD BROWSER
+/// <see cref="Open"/> (Settings > MODS, a mod's own button, [Debug] ModsKey) tries the Settings menu's MODS screen
 /// first and opens this window when it can't. Open/close mechanics (cursor, the game's EventSystem, the Terminal input map, so no driving
 /// while the page is up) are CoreBehaviour's; this class draws the window (both menu styles, like the widgets).
 /// </summary>
@@ -50,14 +50,14 @@ internal static class ModsPage
 
     // ---------------------------------------------------------------- API
 
-    /// <summary>True while MODS is open: this window, or the MOD BROWSER with our tabs in it.</summary>
-    public static bool IsOpen => IsClassicOpen || GameModsTab.Attached;
+    /// <summary>True while MODS is open: this window, the MODS screen of the Settings menu, or a pop-up of ours.</summary>
+    public static bool IsOpen => IsClassicOpen || GameModsTab.Attached || GameModal.Showing;
 
     /// <summary>True while this window (the full view) is open.</summary>
     internal static bool IsClassicOpen => CoreBehaviour.MenuOpen;
 
     /// <summary>Opens MODS on the list, or on the page of mod <paramref name="modId"/> (the list if it isn't
-    /// registered): in the game's MOD BROWSER when it can be opened, otherwise in this window.</summary>
+    /// registered): the MODS screen of the game's Settings menu when it can be opened, otherwise this window.</summary>
     public static void Open(string modId = null)
     {
         if (!IsClassicOpen && GameModsScreen.Open(modId)) return;
@@ -72,7 +72,7 @@ internal static class ModsPage
         CoreBehaviour.SetMenuOpen(true);
     }
 
-    /// <summary>The names of the tabs (INSTALLED first), for the MOD BROWSER's MODS buttons.</summary>
+    /// <summary>The names of the tabs (INSTALLED first; the MODS screen lists the others under "More").</summary>
     internal static IReadOnlyList<string> TabNames
     {
         get
@@ -107,7 +107,7 @@ internal static class ModsPage
         else Tabs.Add(new TabEntry { Name = name, Draw = draw });
     }
 
-    /// <summary>[Core] OpenKey: opens MODS, or closes it (this window, or the MOD BROWSER while a MODS tab shows in it).</summary>
+    /// <summary>[Debug] ModsKey: opens MODS, or closes it (this window, or the MODS screen).</summary>
     internal static void Toggle()
     {
         if (IsClassicOpen) CoreBehaviour.SetMenuOpen(false);
@@ -115,7 +115,7 @@ internal static class ModsPage
         else Open();
     }
 
-    /// <summary>Closes MODS: this window when it is open, otherwise the MOD BROWSER we are in.</summary>
+    /// <summary>Closes MODS: this window when it is open, otherwise the MODS screen (our pop-ups close through their own choices).</summary>
     internal static void Close()
     {
         if (IsClassicOpen) CoreBehaviour.SetMenuOpen(false);
@@ -164,15 +164,6 @@ internal static class ModsPage
     private static CanvasGroup _underGroup;
     private static GameObject _underButton;
     private static bool _underCanPop = true;
-
-    /// <summary>The ESC menu's MODS button: MODS in the MOD BROWSER, or this window over the ESC menu (which hides
-    /// until the window closes).</summary>
-    internal static void OpenFromPauseMenu(StatePauseMenu menu, GameObject button)
-    {
-        if (IsOpen) return;
-        if (GameModsScreen.Open(null)) return;
-        OpenOver(menu, menu != null && menu.contextUIPauseMenu != null ? menu.contextUIPauseMenu.CanvasGroup : null, button, null);
-    }
 
     /// <summary>
     /// Opens this window over a screen of the game (the ESC menu, the MOD BROWSER for a mod's full view): the screen
@@ -240,7 +231,7 @@ internal static class ModsPage
     private static List<ModInfo> SortedMods()
     {
         Sorted.Clear();
-        Sorted.AddRange(ModManager.All);
+        Sorted.AddRange(ModManager.Listed);
         ModListModel.Sort(Sorted, ModPageView.IsCore, m => m.Name ?? m.Id);
         return Sorted;
     }
@@ -508,7 +499,7 @@ internal static class ModsPage
     {
         float titleW = close.x - win.x - Pad - 8f;
         var mod = CurrentMod();
-        int count = ModManager.All.Count;
+        int count = ModManager.Listed.Count;
         string sub = mod == null
             ? $"{count} mod{(count == 1 ? "" : "s")} installed"
             : $"{mod.Name ?? mod.Id}{(string.IsNullOrEmpty(mod.Version) ? "" : "  ·  v" + mod.Version)}";

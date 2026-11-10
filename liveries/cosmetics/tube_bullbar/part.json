@@ -1,0 +1,12 @@
+{
+  "id": "tube_bullbar",
+  "name": "Tubular Bull Bar",
+  "cosmeticType": "FrontSection",
+  "slot": "Visual/Front",
+  "price": 25,
+  "paintable": true,
+  "light": {
+    "flares": true
+  },
+  "fits": {}
+}

@@ -58,16 +58,31 @@ internal sealed class GamePage
     /// <summary>Called with what the player did to a row.</summary>
     public Action<GameRow, RowInput> OnInput;
 
-    private GamePage(GameObject root, RectTransform viewport, RectTransform content, ScrollRect scroll)
+    /// <summary>False: up from the first row goes nowhere (the page sits beside its <see cref="Above"/>, not under it).</summary>
+    public bool UpFromFirst = true;
+
+    /// <summary>Where left / right go from a button row when <see cref="OwnSides"/> is set (else both to <see cref="Above"/>,
+    /// as on the browser's page).</summary>
+    public Selectable LeftOf, RightOf;
+    public bool OwnSides;
+
+    /// <summary>The template of this page's button rows (null: the settings' button row, <see cref="GamePrefabs.Button"/>).</summary>
+    public GameObject ButtonTemplate;
+
+    private readonly bool _grow;
+
+    private GamePage(GameObject root, RectTransform viewport, RectTransform content, ScrollRect scroll, bool grow)
     {
+        _grow = grow;
         Root = root;
         _viewport = viewport;
         _content = content;
         _scroll = scroll;
     }
 
-    /// <summary>A page over <paramref name="area"/>: same parent, same rect, drawn just above it.</summary>
-    internal static GamePage Create(RectTransform area, string name)
+    /// <summary>A page over <paramref name="area"/>: same parent, same rect, drawn just above it. <paramref name="grow"/>:
+    /// reaching <see cref="PageRect.GrowTop"/> higher (over the MOD BROWSER's sort line).</summary>
+    internal static GamePage Create(RectTransform area, string name, bool grow = true)
     {
         var parent = area.parent;
         var root = new GameObject(name);
@@ -77,7 +92,7 @@ internal sealed class GamePage
         rt.anchorMin = area.anchorMin;
         rt.anchorMax = area.anchorMax;
         rt.pivot = area.pivot;
-        var (pos, size) = Grown(area);
+        var (pos, size) = grow ? Grown(area) : (area.anchoredPosition, area.sizeDelta);
         rt.anchoredPosition = pos;
         rt.sizeDelta = size;
         rt.localScale = area.localScale;
@@ -123,7 +138,7 @@ internal sealed class GamePage
         scroll.movementType = ScrollRect.MovementType.Clamped;
         scroll.scrollSensitivity = 40f;
         scroll.inertia = false;
-        return new GamePage(root, vrt, crt, scroll);
+        return new GamePage(root, vrt, crt, scroll, grow);
     }
 
     public bool Alive
@@ -144,7 +159,7 @@ internal sealed class GamePage
         if (rt.anchorMin != area.anchorMin) rt.anchorMin = area.anchorMin;
         if (rt.anchorMax != area.anchorMax) rt.anchorMax = area.anchorMax;
         if (rt.pivot != area.pivot) rt.pivot = area.pivot;
-        var (pos, size) = Grown(area);
+        var (pos, size) = _grow ? Grown(area) : (area.anchoredPosition, area.sizeDelta);
         if (rt.anchoredPosition != pos) rt.anchoredPosition = pos;
         if (rt.sizeDelta != size) rt.sizeDelta = size;
     }
@@ -185,11 +200,17 @@ internal sealed class GamePage
             if (row == null || row.Kind != kind)
             {
                 row?.Destroy();
-                row = GameRow.Create(kind, _content);
+                row = GameRow.Create(kind, _content, kind == WidgetKind.Button ? ButtonTemplate : null);
                 if (row == null && kind == WidgetKind.Card)
                 {
                     // The browser's cell couldn't be made into a card: rows from now on (never the full view for this).
                     GamePrefabs.DropModCell("a card could not be made from the MOD BROWSER's mod cell");
+                    kind = KindFor(e.Model);
+                    row = GameRow.Create(kind, _content);
+                }
+                if (row == null && kind == WidgetKind.Swatches)
+                {
+                    // The strip of squares could not be made: this and every later swatch row is a line of text blocks.
                     kind = KindFor(e.Model);
                     row = GameRow.Create(kind, _content);
                 }
@@ -225,7 +246,15 @@ internal sealed class GamePage
     }
 
     /// <summary>The widget a model shows with (a template missing after a game update makes the page fall back).</summary>
-    internal static WidgetKind KindFor(RowModel m) => RowMap.WidgetFor(m, GamePrefabs.CardsReady);
+    internal static WidgetKind KindFor(RowModel m)
+    {
+        var kind = RowMap.WidgetFor(m, GamePrefabs.CardsReady);
+        // A swatch strip that could not be built is a line of colour blocks in text.
+        if (kind == WidgetKind.Swatches && GameRow.SwatchStripBroken) return WidgetKind.Text;
+        // No text box found in this game version: the row shows its value as a line.
+        if (kind == WidgetKind.TextField && GamePrefabs.TextField == null) return WidgetKind.Text;
+        return kind;
+    }
 
     private void Send(GameRow row, RowInput input) => OnInput?.Invoke(row, input);
 
@@ -341,7 +370,7 @@ internal sealed class GamePage
             if (s == null || !RowMap.Selectable(_rows[i].Kind)) continue;
             var n = s.navigation;
             n.mode = Navigation.Mode.Explicit;
-            n.selectOnUp = nav[i].up >= 0 ? _rows[nav[i].up].Selectable : Above;
+            n.selectOnUp = nav[i].up >= 0 ? _rows[nav[i].up].Selectable : UpFromFirst ? Above : null;
             n.selectOnDown = nav[i].down >= 0 ? _rows[nav[i].down].Selectable : null;
             if (_rows[i].Kind == WidgetKind.Card)
             {
@@ -352,12 +381,22 @@ internal sealed class GamePage
             else
             {
                 // Button rows: left and right go back to the tab button (option rows and sliders use them for their value).
-                n.selectOnLeft = _rows[i].Kind == WidgetKind.Button ? Above : null;
-                n.selectOnRight = _rows[i].Kind == WidgetKind.Button ? Above : null;
+                bool button = _rows[i].Kind == WidgetKind.Button;
+                n.selectOnLeft = button ? (OwnSides ? LeftOf : Above) : null;
+                n.selectOnRight = button ? (OwnSides ? RightOf : Above) : null;
             }
             s.navigation = n;
         }
     }
+
+    /// <summary>Links the rows again (after <see cref="LeftOf"/> / <see cref="RightOf"/> changed).</summary>
+    public void Relink() => LinkNavigation();
+
+    /// <summary>The selectable of row <paramref name="index"/>, or null.</summary>
+    public Selectable SelectableAt(int index) => index >= 0 && index < _rows.Count ? _rows[index].Selectable : null;
+
+    /// <summary>True when the EventSystem's selection is one of this page's rows.</summary>
+    public bool HasSelection => SelectedRow(out _) != null;
 
     /// <summary>True while a text box of the page has the keyboard.</summary>
     public bool Typing

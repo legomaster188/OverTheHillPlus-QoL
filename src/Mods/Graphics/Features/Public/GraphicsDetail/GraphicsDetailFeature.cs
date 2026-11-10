@@ -1,9 +1,15 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppCinemachine;
+using Il2CppGPUInstancerPro;
+using Il2CppGPUInstancerPro.TerrainModule;
+#else
 using Cinemachine;
 using GPUInstancerPro;
 using GPUInstancerPro.TerrainModule;
+#endif
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -237,6 +243,7 @@ internal sealed class GraphicsDetailFeature : IFeature
     private static GPUIDetailManager _detail;
     private static GPUITreeManager _trees;
     private static float _nextFind;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer FindPace = WorldScan.Pace("detail managers", 2f);
 
     private static void FindManagers()
     {
@@ -257,15 +264,18 @@ internal sealed class GraphicsDetailFeature : IFeature
         catch (Exception e) { DebugLog.Error("graphics", e, "GraphicsDetailFeature.FindManagers"); LogOnce("SceneReferences", e); }
         try
         {
-            if (_detail == null)
+            if ((_detail == null || _trees == null) && WorldScan.Due(FindPace, Time.unscaledTime))
             {
-                var o = Object.FindObjectOfType(Il2CppInterop.Runtime.Il2CppType.Of<GPUIDetailManager>());
-                if (o != null) _detail = o.TryCast<GPUIDetailManager>();
-            }
-            if (_trees == null)
-            {
-                var o = Object.FindObjectOfType(Il2CppInterop.Runtime.Il2CppType.Of<GPUITreeManager>());
-                if (o != null) _trees = o.TryCast<GPUITreeManager>();
+                if (_detail == null)
+                {
+                    var o = Object.FindObjectOfType(Il2CppInterop.Runtime.Il2CppType.Of<GPUIDetailManager>());
+                    if (o != null) _detail = o.TryCast<GPUIDetailManager>();
+                }
+                if (_trees == null)
+                {
+                    var o = Object.FindObjectOfType(Il2CppInterop.Runtime.Il2CppType.Of<GPUITreeManager>());
+                    if (o != null) _trees = o.TryCast<GPUITreeManager>();
+                }
             }
         }
         catch (Exception e) { DebugLog.Error("graphics", e, "GraphicsDetailFeature.FindManagers"); LogOnce("find GPUI managers", e); }

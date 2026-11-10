@@ -1,6 +1,10 @@
 using System;
 using HarmonyLib;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 
 namespace OverTheHillPlus.ControllerFeel;
 

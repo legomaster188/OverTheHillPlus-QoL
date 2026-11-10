@@ -1,14 +1,26 @@
 using System;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using Il2CppInterop.Runtime;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 using Object = UnityEngine.Object;
 
 namespace OverTheHillPlus;
 
-/// <summary>Cached lookups of the network session and the local player's car, refreshed once per second.</summary>
-internal static class GameState
+/// <summary>
+/// Cached lookups of the network session and the local player's car, refreshed once per second. The session comes from the
+/// game's own runner holder, and the car stays the car it was while it is still yours: searching the world for them
+/// every second cost 40 ms a time, and a search now only runs when the world changed (<see cref="WorldScan"/>).
+/// </summary>
+internal static partial class GameState
 {
     public static NetworkRunner Runner { get; private set; }
     public static VPVehicleController LocalCar { get; private set; }
@@ -27,20 +39,22 @@ internal static class GameState
     private static float _nextRefresh;
 
     private static FusionPlayer[] _fusionPlayers = Array.Empty<FusionPlayer>();
-    private static float _fusionPlayersAt = -100f;
+    private static readonly Core.Shared.ScanPacer PlayersPace = WorldScan.Pace("cars", 1f);
+    // Searches for what is missing: with no session or no car of yours nobody is driving, so these cost nothing anyone
+    // feels, and whatever the game's holder or the car hooks didn't tell still turns up.
+    private static float _nextRunnerSearch, _nextCarSearch;
 
     /// <summary>
-    /// Every FusionPlayer (player car object) in the scene, from one shared scan at most once a second, so features
-    /// don't each walk all loaded objects. Up to a second old: entries can be destroyed already (check with the Unity
-    /// null test, e.g. <c>fp == null</c>) and a car spawned in the last second can be missing. Main thread only.
+    /// Every FusionPlayer (player car object) in the scene, from one shared scan, so features don't each walk all loaded
+    /// objects, and that scan only runs after the world changed (<see cref="WorldScan"/>). Entries can be destroyed
+    /// already (check with the Unity null test, e.g. <c>fp == null</c>) and a car spawned in the last second can be
+    /// missing. Main thread only.
     /// </summary>
     public static FusionPlayer[] FusionPlayers
     {
         get
         {
-            float now = Time.unscaledTime;
-            if (now - _fusionPlayersAt < 1f && now >= _fusionPlayersAt) return _fusionPlayers;
-            _fusionPlayersAt = now;
+            if (!WorldScan.Due(PlayersPace, Time.unscaledTime)) return _fusionPlayers;
             try
             {
                 var found = Object.FindObjectsOfType(Il2CppType.Of<FusionPlayer>());
@@ -158,8 +172,37 @@ internal static class GameState
         Runner = FindRunner();
         _authorityFrame = -1; // runner may have changed: recompute IsAuthority on next use
         JoinedPrivateSession = Runner != null && IsPrivate(Runner);
+        WorldScan.Poll(Runner);
+        DropDeadCars();
         LocalCar = FindLocalCar();
         LocalCarPtr = LocalCar == null ? IntPtr.Zero : LocalCar.Pointer;
+        if (LocalCarPtr != IntPtr.Zero) WorldScan.SawLocalCar();
+    }
+
+    private static readonly System.Collections.Generic.List<FusionPlayer> Left = new();
+
+    /// <summary>A car on the list is gone: it leaves the list, and the searches may look again. A handful of cars at most,
+    /// each one native check.</summary>
+    private static void DropDeadCars()
+    {
+        var cars = _fusionPlayers;
+        if (cars.Length == 0) return;
+        Left.Clear();
+        foreach (var fp in cars)
+        {
+            try { if (fp != null) Left.Add(fp); }
+            catch (Exception ex) { DebugLog.Error("core", ex, "GameState.DropDeadCars"); }
+        }
+        if (Left.Count == cars.Length) return;
+        _fusionPlayers = Left.ToArray();
+        WorldScan.Changed();
+    }
+
+    /// <summary>False before Fusion spawns this behaviour and once it has let it go: its networked properties throw then.</summary>
+    public static bool IsSpawned(NetworkBehaviour b)
+    {
+        try { return b != null && b.Object != null && b.Object.IsValid; }
+        catch (Exception) { return false; }
     }
 
     private static bool IsPrivate(NetworkRunner r)
@@ -183,6 +226,22 @@ internal static class GameState
     {
         try
         {
+            var held = OverlandNetworkRunner.Instance?.NetworkRunner;
+            if (held != null && held.IsRunning) return held;
+        }
+        catch (Exception e) { DebugLog.Error("core", e, "GameState.FindRunner held"); }
+        // Not in the game's own session: the menus, or a runner it doesn't hold, which stays while it runs. A search now and then.
+        try
+        {
+            var known = Runner;
+            if (known != null && known.IsRunning) return known;
+        }
+        catch (Exception e) { DebugLog.Error("core", e, "GameState.FindRunner known"); }
+        float now = Time.unscaledTime;
+        if (now < _nextRunnerSearch || !WorldScan.Turn()) return null;
+        _nextRunnerSearch = now + 5f;
+        try
+        {
             foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<NetworkRunner>()))
             {
                 var r = o.TryCast<NetworkRunner>();
@@ -193,8 +252,40 @@ internal static class GameState
         return null;
     }
 
+    /// <summary>The car already known is still the one this player drives: no search needed.</summary>
+    private static bool StillMine(VPVehicleController v)
+    {
+        try
+        {
+            if (v == null || !v.isActiveAndEnabled) return false;
+            if (v.Object != null && v.HasInputAuthority) return true;
+            return _onlyCar && Runner.IsSinglePlayer;
+        }
+        catch (Exception ex) { DebugLog.Error("core", ex, "GameState.StillMine"); return false; }
+    }
+
+    // The car came from the single-player rule below: it stays the one until it is gone.
+    private static bool _onlyCar;
+
     private static VPVehicleController FindLocalCar()
     {
+        if (Runner == null) { _onlyCar = false; return null; } // no session, no car of ours
+        if (StillMine(LocalCar)) return LocalCar;
+        _onlyCar = false;
+        // Among the cars that are listed anyway, then a search of its own.
+        foreach (var fp in FusionPlayers)
+        {
+            try
+            {
+                if (fp == null) continue;
+                var v = fp.GetComponent<VPVehicleController>();
+                if (v != null && v.isActiveAndEnabled && v.Object != null && v.HasInputAuthority) return v;
+            }
+            catch (Exception ex) { DebugLog.Error("core", ex, "GameState.FindLocalCar list"); }
+        }
+        float now = Time.unscaledTime;
+        if (now < _nextCarSearch || !WorldScan.Turn()) return null;
+        _nextCarSearch = now + 2f;
         try
         {
             VPVehicleController only = null;
@@ -208,7 +299,7 @@ internal static class GameState
                 try { if (v.Object != null && v.HasInputAuthority) return v; } catch (Exception ex) { DebugLog.Error("core", ex, "GameState.FindLocalCar"); }
             }
             // Single-player fallback: the only car around is ours.
-            if (count == 1 && Runner != null && Runner.IsSinglePlayer) return only;
+            if (count == 1 && Runner != null && Runner.IsSinglePlayer) { _onlyCar = true; return only; }
         }
         catch (Exception e) { DebugLog.Error("core", e, "GameState.FindLocalCar"); Core.CorePlugin.Logger?.LogDebug("FindLocalCar: " + e.Message); }
         return null;

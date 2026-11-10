@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Core.Shared;
 
@@ -12,7 +13,7 @@ namespace OverTheHillPlus.Core.Shared;
 /// </summary>
 public static class ServerListCaps
 {
-    private static string FilePath => Path.Combine(BepInEx.Paths.ConfigPath, "oth.serverlist.caps");
+    private static string FilePath => Path.Combine(OthLoader.ConfigDir, "oth.serverlist.caps");
 
     /// <summary>True / false once Server Browser+ has looked at a list row on this PC; null when never seen.</summary>
     public static bool? EscapedTagsRender

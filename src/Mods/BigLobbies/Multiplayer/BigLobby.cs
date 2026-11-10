@@ -1,10 +1,23 @@
+#if MELON
+using GameLobby = Il2Cpp.Lobby;
+#else
+using GameLobby = global::Lobby;
+#endif
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using Il2CppInterop.Runtime;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 using Object = UnityEngine.Object;
 using OverTheHillPlus.BigLobbies;
 
@@ -143,10 +156,9 @@ internal static class BigLobby
     private static List<PlayerRef> PlayersWithCars()
     {
         var list = new List<PlayerRef>();
-        foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<FusionPlayer>()))
+        foreach (var fp in GameState.FusionPlayers)
         {
-            var fp = o.TryCast<FusionPlayer>();
-            if (fp?.Object == null) continue;
+            if (fp == null || fp.Object == null) continue;
             try { var p = fp.Object.InputAuthority; if (p.IsRealPlayer) list.Add(p); } catch (Exception ex) { DebugLog.Error("biglobbies", ex, "BigLobby.PlayersWithCars"); }
         }
         list.Sort((a, b) => a.RawEncoded.CompareTo(b.RawEncoded));
@@ -231,7 +243,7 @@ internal static class BigLobby
             target = anchor.position - anchor.forward * 10f + anchor.right * 5f + Vector3.up * 2f;
             if (TryGroundHeight(target, out float g)) target.y = g + 2f;
         }
-        car.Reposition(target, rot);
+        OverTheHillPlus.Cars.CarMove.Place(car, target, rot);
         Rescued++;
         BigLobbiesPlugin.Logger.LogInfo($"[Lobby] Fall rescue: car at {pos} ({(underGround ? "under ground" : "off map")}) -> {target}");
     }
@@ -258,10 +270,10 @@ internal static class RemovePlayerPromotePatch
     private static void Postfix(OverlandSessionPlayers __instance) => BigLobby.PromoteOverflow(__instance);
 }
 
-[HarmonyPatch(typeof(global::Lobby), nameof(global::Lobby.Awake))]
+[HarmonyPatch(typeof(GameLobby), nameof(GameLobby.Awake))]
 internal static class LobbySpawnPointsPatch
 {
-    private static void Postfix(global::Lobby __instance) => BigLobby.EnsureSpawnPoints(__instance.spawnPoints, "Lobby");
+    private static void Postfix(GameLobby __instance) => BigLobby.EnsureSpawnPoints(__instance.spawnPoints, "Lobby");
 }
 
 [HarmonyPatch(typeof(Portal), nameof(Portal.AssignPlayersToSpawnPoints))]

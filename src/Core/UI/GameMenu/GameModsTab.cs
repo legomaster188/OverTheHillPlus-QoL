@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Il2CppInterop.Runtime;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -14,121 +18,143 @@ namespace OverTheHillPlus.UI.GameMenu;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// Our mods inside the game's MOD BROWSER (StateLiveryModsMenu / ContextUILiveryModsMenu).
+/// The MODS screen of the game's Settings menu (Settings > MODS, next to GRAPHICS, AUDIO, CONTROLS ...).
 ///
-/// Decoded from the game (Cpp2IL): the browser is a filter column on the left (Subscribed only / Enabled only, each
-/// a ContextUIButtonSelectorWithTextAndIcon: a button with a label and a check icon, wired by WireFilterButton and
-/// shown checked by SetFilterChecked), a grid of mod cells in the middle (<c>Content</c>, under a scroll view, with a
-/// pager and a "no mods found" notice), a details panel on the right (image, name, author, description, dates) and
-/// key hints along the bottom (subscribe / enable / sort / order). The state opens from the main menu's MOD BROWSER
-/// button (StateMainMenu.LiveryModsButtonPressed pushes it on the GameStateManager) and pops on the back input
-/// unless CanPop is off.
-///
-/// What we add: one button per MODS tab in the filter column (INSTALLED MODS, AVAILABLE MODS: clones of the game's
-/// filter button, checked while open). Pressing one hides the grid, its pager and the livery hints and shows a page
-/// of the game's own settings widgets in the grid's place (<see cref="GamePage"/>), with the selected mod's name,
-/// version / type and the selected row's explanation in the details panel. A mod's page opens from its row; Esc /
-/// B goes back to the list (and from the list closes the browser, as the game does). Pressing the button again,
-/// or one of the game's own filters, goes back to the liveries, which work as before.
-///
-/// The MODS lists (INSTALLED, AVAILABLE) look like the browser itself: each mod is a copy of the browser's own mod
-/// cell (StateLiveryModsMenu.modCellPrefab, a ContextUIModCell; <see cref="GamePrefabs.TakeModCell"/>) with the mod's
-/// image (<see cref="ModImages"/>), name, status, version and side, in a grid of the browser's column count
-/// (<see cref="GamePage"/>). The selected card fills the details panel (image, name, author, description, version /
-/// side, status, and the enabled panel); the browser's enable hint switches the selected mod on / off as the row's
-/// arrows did. Pressing a card does what pressing its row did (a mod's page opens). Without the cell (a game update)
-/// the lists keep their rows.
-///
-/// The rows come from the page's own draw code run in a recording pass every frame (<see cref="RowRecorder"/>), so
-/// every mod's settings, the switches, install / update / uninstall and the required-mods prompt behave exactly as
-/// before; text boxes are copies of the browser's own search field. Anything that goes wrong (a template or a part of
-/// the browser missing after a game update, a widget that can't be made) is logged once and the old window
-/// (UI/ModsPage, the full view) opens instead: it is only that fallback.
+/// The game's settings screens (decoded from the game: Prefabs/UI/Menus/Settings/*SettingsMenu) are all alike: the big
+/// title top left, a column of rows 807 wide under it (Content, at 78 / -141), the blurred background and the key hints
+/// bottom right; each is a state pushed on the GameStateManager (StateHUDSettingsMenu, StateLanguageSettingsMenu ...),
+/// and the back input pops it. The MODS screen is one of them for real: <see cref="GameModsScreen"/> pushes a
+/// StateLanguageSettingsMenu (the smallest one: a single row, nothing else) and this class turns it into MODS. The
+/// title reads MODS, the language row is hidden (and its save is skipped), and in its place:
+/// <list type="bullet">
+/// <item>on the left, the list of mods: copies of the Settings menu's own buttons (<see cref="GamePrefabs.MenuButton"/>),
+///   "All mods" first, then core and our mods, the mods of other creators made with our API, "This server" in a
+///   session, and "Get more mods" (the installer);</item>
+/// <item>beside it, the selected mod's settings as copies of the game's own settings rows (<see cref="GamePage"/>):
+///   its ModInfo.DrawSimple page and SimpleMenu rows, run as a recording pass every frame (<see cref="RowRecorder"/>),
+///   so every mod's settings show without being rewritten;</item>
+/// <item>on the right, when the screen is wide enough, the mod's picture, name, version and the selected row's
+///   explanation, in copies of the game's own text.</item>
+/// </list>
+/// Keyboard, gamepad and mouse work like the game's: up / down along the list, Enter / A or right into the settings,
+/// Esc / B back to the list, and from the list back to Settings (the game's own back). Anything that goes wrong (a
+/// template missing after a game update, a widget that can't be made) is logged once and the full view (UI/ModsPage)
+/// opens instead.
 /// </summary>
 internal static class GameModsTab
 {
-    private const string ButtonPrefix = "OTH_ModsTab_";
+    private const float ListWidth = 352f, Gap = 48f, BottomMargin = 112f, DetailsMargin = 73f, DetailsMaxWidth = 470f, DetailsMinWidth = 280f;
 
-    private sealed class TabButton
-    {
-        public int Tab;
-        public GameObject Go;
-        public ContextUIButtonSelectorWithTextAndIcon Ui;
-        public Selectable Selectable;
-        public string Label;
-    }
+    private static StateLanguageSettingsMenu _state;
+    private static Transform _root;
+    private static GameObject _content;
+    private static CanvasGroup _veil;
+    private static bool _veilAdded;
+    private static TMP_Text _title;
+    private static string _titleWas;
+    private static RectTransform _listArea, _pageArea;
+    private static GamePage _list, _page;
+    private static bool _broken;
 
-    private static StateLiveryModsMenu _state;
-    private static ContextUILiveryModsMenu _ctx;
-    private static RectTransform _area;
-    private static GamePage _page;
-    private static readonly List<TabButton> Buttons = new();
-
-    /// <summary>A part of the browser we hide: through a CanvasGroup (invisible, not clickable or selectable), so its
-    /// place in the browser's layout stays and the game can keep switching it on and off as it likes.</summary>
-    private sealed class Veil
-    {
-        public GameObject Go;
-        public CanvasGroup Group;
-        public bool Added;
-        public float Alpha;
-        public bool Interactable, Blocks;
-        /// <summary>Shown again (not clickable) while a card that uses it is selected: the enabled panel, the enable hint.</summary>
-        public bool Show;
-    }
-
-    private static readonly List<Veil> Hidden = new();
-    private static GameObject _details;
-    private static bool _detailsWasActive;
-
-    private static int _tab = -1;
-    private static string _modId;
-    private static bool _closeOnBack;
-    private static bool _selectFirst;
+    // What the page on the right shows: a mod's id, or one of ModsScreenModel's own keys.
+    private static string _key = ModsScreenModel.AllKey;
+    private static bool _inPage, _closeOnBack, _selectList, _focusPage;
     private static string _openNext;
+    private static (string modId, bool closeOnBack)? _later;
     private static bool _canPopTaken;
     private static int _canPopBackFrame = -1;
-    private static bool _broken;
+    private static int _mouseFrame = -100, _typingFrame = -100, _keysFrame = -100, _recordedFrame = -1;
 
     private static readonly RowRecorder Recorder = new();
     private static readonly List<GamePage.Entry> Entries = new();
+    private static readonly List<GamePage.Entry> ListEntries = new();
+    private static List<ModsScreenModel.Entry> _listModel = new();
+    private static readonly Dictionary<string, RowModel> ListRows = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly List<ModsScreenModel.Mod> ModsScratch = new();
+    private static readonly List<string> TabsScratch = new();
     private static readonly HashSet<string> Logged = new();
-    private static int _recordedFrame = -1;
 
-    private static readonly RowModel BackRow = new() { Kind = RowKind.Button, Label = "Back", Value = "to the list of mods", Hint = "Esc / B goes back too." };
-    private static readonly RowModel CloseRow = new() { Kind = RowKind.Button, Label = "Close", Hint = "Back to where you opened it. Esc / B too." };
+    private static readonly RowModel FullViewRow = new()
+    {
+        Kind = RowKind.Button, Label = "More settings", Value = "full view",
+        Hint = "This mod draws some of its settings itself: the full view shows them. Esc there comes back here.",
+    };
 
-    /// <summary>True while a MOD BROWSER is open with our buttons in it.</summary>
+    /// <summary>True while the MODS screen is up.</summary>
     internal static bool Attached => _state != null;
 
-    /// <summary>True while one of our tabs is shown in it.</summary>
-    internal static bool Active => _state != null && _tab >= 0;
+    /// <summary>Same as <see cref="Attached"/> (the screen always shows a page).</summary>
+    internal static bool Active => _state != null;
 
-    /// <summary>The browser we are in (null: none).</summary>
-    internal static StateLiveryModsMenu State => _state;
+    /// <summary>The game state the screen lives in (null: none).</summary>
+    internal static StateLanguageSettingsMenu State => _state;
 
-    // ---------------------------------------------------------------- attach / detach (StateLiveryModsMenu.Open / Close)
+    /// <summary>True after the screen failed once this session: MODS opens the full view from then on.</summary>
+    internal static bool Broken => _broken;
 
-    internal static void Attach(StateLiveryModsMenu state)
+    /// <summary>The list never shows cards (the mods are buttons, like the Settings menu).</summary>
+    internal static bool ShowsCards => false;
+
+    // ---------------------------------------------------------------- attach / detach
+
+    // A mod's own settings screen shown instead of MODS (null: the MODS screen).
+    private static GameScreenSpec _spec;
+
+    /// <summary>The mod's own settings screen this is (null: the MODS screen).</summary>
+    internal static GameScreenSpec Screen => _spec;
+
+    /// <summary>Turns the language screen <paramref name="state"/> into MODS, on <paramref name="modId"/>'s page (null: the
+    /// list); or, with <paramref name="screen"/>, into that mod's own settings screen on <paramref name="section"/>.</summary>
+    internal static void Attach(StateLanguageSettingsMenu state, string modId, bool closeOnBack, GameScreenSpec screen = null, string section = null)
     {
         Detach();
         if (state == null) return;
         try
         {
-            var ctx = state.contextUI;
-            if (ctx == null) { Warn("parts", "the MOD BROWSER's parts were not found; the MODS page opens from the ESC menu and F7 instead"); return; }
+            if (_broken || !GamePrefabs.Ensure()) { Warn("templates", "the game's settings widgets were not found (" + GamePrefabs.Summary + "); MODS shows the full view"); return; }
+            var ctx = state.languageSettingsMenuUIContext;
+            var row = ctx != null ? ctx.Language : null;
+            if (row == null || row.transform.parent == null) { Warn("parts", "the settings screen's parts were not found; MODS shows the full view"); return; }
             _state = state;
-            _ctx = ctx;
-            _broken = false;
-            GamePrefabs.TakeTextField(ctx.SearchField);
-            GamePrefabs.TakeModCell(state, ctx);
-            AddButtons();
-            if (Buttons.Count == 0) { Detach(); return; }
+            _spec = screen;
+            _content = row.transform.parent.gameObject;
+            _root = _content.transform.parent;
+            if (_root == null) { Detach(); return; }
+            HideContent();
+            TakeTitle();
+            BuildAreas();
+            _list = GamePage.Create(_listArea, "OTH_ModsList", false);
+            _list.UpFromFirst = false;
+            _list.OwnSides = true;
+            _list.ButtonTemplate = GamePrefabs.MenuButton;
+            _list.OnInput = OnListInput;
+            _page = GamePage.Create(_pageArea, "OTH_ModsPage", false);
+            _page.UpFromFirst = false;
+            _page.OwnSides = true;
+            _page.OnInput = OnPageInput;
+            ModDetails.Create(_root, _pageArea);
+            if (_spec != null)
+            {
+                // A mod's own screen: like the game's Settings, the list of sections first, its rows on the right.
+                _key = section ?? FirstSection();
+                _closeOnBack = false;
+                _focusPage = false;
+                _selectList = true;
+                _inPage = false;
+                LogLayoutOnce();
+                return;
+            }
+            var m = ModManager.Find(modId);
+            _key = m != null ? m.Id : ModsScreenModel.AllKey;
+            _closeOnBack = closeOnBack && m != null;
+            _focusPage = m != null;
+            _selectList = m == null;
+            _inPage = m != null;
             LogLayoutOnce();
         }
         catch (Exception e)
         {
-            Warn("attach", "could not add MODS to the MOD BROWSER: " + e.Message);
+            Warn("attach", "could not make the MODS screen: " + e);
             Detach();
         }
     }
@@ -140,530 +166,185 @@ internal static class GameModsTab
             try { if (!_state.WasCollected) _state.CanPop = true; } catch { }
         }
         _canPopTaken = false;
+        try { _list?.Destroy(); } catch { }
         try { _page?.Destroy(); } catch { }
-        _page = null;
-        Buttons.Clear();
-        Hidden.Clear();
-        NavChanged.Clear();
+        try { ModDetails.Destroy(); } catch { }
+        try { if (_listArea != null) Object.Destroy(_listArea.gameObject); } catch { }
+        try { if (_pageArea != null) Object.Destroy(_pageArea.gameObject); } catch { }
+        try
+        {
+            // The title as the game had it (in case it reuses the screen), and its own text updates again.
+            if (_title != null)
+            {
+                FunTexts.Ours.Remove(_title.Pointer);
+                if (_titleWas != null && _title.text != _titleWas) _title.text = _titleWas;
+            }
+        }
+        catch { }
+        try
+        {
+            if (_veil != null && _veilAdded) Object.Destroy(_veil);
+            else if (_veil != null) { _veil.alpha = 1f; _veil.interactable = true; _veil.blocksRaycasts = true; }
+        }
+        catch { }
+        _list = _page = null;
+        _veil = null;
+        _veilAdded = false;
+        _title = null;
+        _titleWas = null;
+        _content = null;
+        _root = null;
+        _listArea = _pageArea = null;
         GameRow.ByPointer.Clear();
         // Also when a row's Destroy threw above (the screen is gone already): a stale pointer would let a later game
         // input field at the same address have its submit swallowed.
         GameRow.TextFields.Clear();
-        _details = null;
         _state = null;
-        _ctx = null;
-        _area = null;
-        _tab = -1;
-        _modId = null;
-        _closeOnBack = false;
+        _spec = null;
+        _key = ModsScreenModel.AllKey;
+        _inPage = _closeOnBack = _selectList = _focusPage = false;
         _openNext = null;
         _later = null;
-        _detailsTaken = false;
-        _shownImage = null;
-        _enableAction = null;
-        _enableActionLooked = false;
+        ListRows.Clear();
         Recorder.Abort();
     }
 
-    private static void AddButtons()
+    /// <summary>The game's own row column (the language row): invisible, not clickable or selectable.</summary>
+    private static void HideContent()
     {
-        var template = _ctx.EnabledOnlyFilter ?? _ctx.SubscribedOnlyFilter;
-        if (template == null || template.buttonSelector == null)
-        {
-            Warn("filters", "the MOD BROWSER's filter buttons were not found; MODS opens from the ESC menu and F7");
-            return;
-        }
-        var parent = template.transform.parent;
-        bool layout = parent != null && parent.GetComponent<LayoutGroup>() != null;
-        var tRt = template.transform.TryCast<RectTransform>();
-        Vector2 step = Vector2.zero;
-        var other = _ctx.SubscribedOnlyFilter;
-        if (!layout && tRt != null)
-        {
-            var oRt = other != null && other.Pointer != template.Pointer && other.transform.parent != null && other.transform.parent.Pointer == parent.Pointer
-                ? other.transform.TryCast<RectTransform>() : null;
-            step = oRt != null ? tRt.anchoredPosition - oRt.anchoredPosition : new Vector2(0f, -Mathf.Max(30f, tRt.rect.height * 1.15f));
-        }
-        for (int i = parent.childCount - 1; i >= 0; i--)
-        {
-            var child = parent.GetChild(i);
-            if (child != null && child.name.StartsWith(ButtonPrefix, StringComparison.Ordinal)) Object.Destroy(child.gameObject);
-        }
-
-        var tabs = ModsPage.TabNames;
-        Selectable previous = template.buttonSelector;
-        int at = template.transform.GetSiblingIndex() + 1;
-        for (int i = 0; i < tabs.Count; i++)
-        {
-            // Made under the hidden holder and set up there, so it wakes up in the column with our label (no localization).
-            var go = Object.Instantiate(template.gameObject, GamePrefabs.EnsureHolder(), false);
-            go.name = ButtonPrefix + tabs[i];
-            go.SetActive(true);
-            StripLocalization(go);
-            var ui = go.GetComponent<ContextUIButtonSelectorWithTextAndIcon>();
-            if (ui == null || ui.buttonSelector == null) { Object.Destroy(go); continue; }
-            var b = new TabButton { Tab = i, Go = go, Ui = ui, Selectable = ui.buttonSelector, Label = (tabs[i] + " mods").ToUpperInvariant() };
-            SetLabel(b);
-            go.transform.SetParent(parent, false);
-            go.transform.SetSiblingIndex(at++);
-            if (!layout && tRt != null)
-            {
-                var rt = go.transform.TryCast<RectTransform>();
-                if (rt != null) rt.anchoredPosition = tRt.anchoredPosition + step * (i + 1);
-            }
-            int tab = i;
-            ui.buttonSelector.add_OnPointerClickOrSubmit(DelegateSupport.ConvertDelegate<Il2CppSystem.Action<UIButtonSelector>>(
-                new Action<UIButtonSelector>(_ => Guard("tab button", () => TabPressed(tab)))));
-            Link(previous, b.Selectable);
-            previous = b.Selectable;
-            Buttons.Add(b);
-        }
-        // The game's own filters are about liveries: pressing one goes back to them.
-        foreach (var f in new[] { _ctx.SubscribedOnlyFilter, _ctx.EnabledOnlyFilter })
-        {
-            if (f == null || f.buttonSelector == null) continue;
-            f.buttonSelector.add_OnPointerClickOrSubmit(DelegateSupport.ConvertDelegate<Il2CppSystem.Action<UIButtonSelector>>(
-                new Action<UIButtonSelector>(_ => Guard("filter", () => { if (Active) Deactivate(false); }))));
-        }
-        UpdateChecks();
-    }
-
-    /// <summary>Puts <paramref name="below"/> under <paramref name="above"/> in the keyboard order, where the game links its filters explicitly.</summary>
-    private static void Link(Selectable above, Selectable below)
-    {
-        if (above == null || below == null) return;
-        var a = above.navigation;
-        var b = below.navigation;
-        if (a.mode != Navigation.Mode.Explicit) return; // automatic: the game finds the new button by position
-        var oldDown = a.selectOnDown;
-        a.selectOnDown = below;
-        above.navigation = a;
-        b.mode = Navigation.Mode.Explicit;
-        b.selectOnUp = above;
-        b.selectOnDown = oldDown;
-        below.navigation = b;
-        if (oldDown != null)
-        {
-            var d = oldDown.navigation;
-            if (d.mode == Navigation.Mode.Explicit && d.selectOnUp != null && d.selectOnUp.Pointer == above.Pointer)
-            {
-                d.selectOnUp = below;
-                oldDown.navigation = d;
-            }
-        }
-    }
-
-    private static void StripLocalization(GameObject go)
-    {
-        foreach (var c in go.GetComponentsInChildren<Component>(true))
-        {
-            if (c == null) continue;
-            string type = c.GetIl2CppType().FullName ?? "";
-            if (type.Contains("Locali", StringComparison.OrdinalIgnoreCase)) Object.DestroyImmediate(c);
-        }
-        foreach (var t in go.GetComponentsInChildren<FunTextTMP>(true))
-        {
-            FunTexts.Register(t);
-        }
-    }
-
-    private static void SetLabel(TabButton b)
-    {
-        TMP_Text label = b.Ui.label;
-        if (label == null) label = b.Go.GetComponentInChildren<TMP_Text>(true);
-        if (label != null && label.text != b.Label) label.text = b.Label;
-    }
-
-    private static void UpdateChecks()
-    {
-        foreach (var b in Buttons)
-        {
-            try { StateLiveryModsMenu.SetFilterChecked(b.Ui, b.Tab == _tab); }
-            catch (Exception e) { Warn("check", "the MODS buttons' check marks: " + e.Message); }
-        }
-    }
-
-    // ---------------------------------------------------------------- opening a tab
-
-    private static void TabPressed(int tab)
-    {
-        if (_tab == tab && _modId == null) Deactivate(true);
-        else Activate(tab, null, false);
-    }
-
-    /// <summary>Shows tab <paramref name="tab"/> (or the page of mod <paramref name="modId"/>). False when the game's
-    /// widgets aren't there: the full view opened instead.</summary>
-    internal static bool Activate(int tab, string modId, bool closeOnBack)
-    {
-        if (!Attached) return false;
-        if (_broken || !GamePrefabs.Ensure() || !EnsurePage())
-        {
-            Warn("templates", "the game's settings widgets were not found (" + GamePrefabs.Summary + "); MODS shows the full view instead");
-            OpenFullViewFor(modId);
-            return false;
-        }
-        var tabs = ModsPage.TabNames;
-        _tab = Mathf.Clamp(tab, 0, Math.Max(0, tabs.Count - 1));
-        var m = ModManager.Find(modId);
-        _modId = m?.Id;
-        _closeOnBack = closeOnBack && _modId != null;
-        HideLiveries();
-        _page.SetVisible(true);
-        _page.Above = ButtonFor(_tab)?.Selectable;
-        _navFrame = -100; // the browser's links into the hidden grid go to the page on the next pass
-        _page.ScrollToTop();
-        _selectFirst = true;
-        UpdateChecks();
-        UpdateCanPop();
-        try { _state.selectedMod = null; } catch { }
-        return true;
-    }
-
-    /// <summary>Back to the game's liveries; <paramref name="select"/> puts the selection on our button.</summary>
-    internal static void Deactivate(bool select)
-    {
-        if (!Attached) return;
-        int was = _tab;
-        _tab = -1;
-        _modId = null;
-        _closeOnBack = false;
-        RestoreNavigation();
-        _page?.SetVisible(false);
-        RestoreLiveries();
-        UpdateChecks();
-        UpdateCanPop();
-        if (select) Select(ButtonFor(was)?.Selectable);
-    }
-
-    /// <summary>Our button for tab <paramref name="tab"/> (a copy that failed is left out, so not by position).</summary>
-    private static TabButton ButtonFor(int tab)
-    {
-        foreach (var b in Buttons) if (b.Tab == tab) return b;
-        return null;
-    }
-
-    private static (int tab, string modId, bool closeOnBack)? _later;
-
-    /// <summary>
-    /// Opens a tab or a mod's page from code (ModsPage.Open while the browser is up): now, or right after the page's
-    /// pass when a row asked for it from inside the pass. A page that was opened straight on a mod keeps closing the
-    /// browser on Esc, so a mod opened from it does too.
-    /// </summary>
-    internal static void OpenLater(int tab, string modId, bool closeOnBack)
-    {
-        bool close = (closeOnBack && !Active) || (_closeOnBack && modId != null);
-        if (RowRecorder.Recording) _later = (tab, modId, close);
-        else Activate(tab, modId, close);
-    }
-
-    // ---------------------------------------------------------------- navigation while a tab of ours shows
-
-    /// <summary>Directions of the browser's own selectables (and our buttons, copies of its filter) we pointed at the
-    /// page, with where they pointed before: (selectable, direction 0 up / 1 down / 2 left / 3 right).</summary>
-    private static readonly Dictionary<(IntPtr sel, int dir), (Selectable s, Selectable before)> NavChanged = new();
-    private static int _navFrame = -100;
-
-    /// <summary>
-    /// The game links its filters to the grid explicitly (StateLiveryModsMenu.Populate → SetFilterLeftNavigation,
-    /// again on every refresh), and explicit links don't skip hidden targets. While a tab of ours shows, every link of
-    /// a selectable outside the hidden parts that goes into them (in any direction) goes to the page's first row
-    /// instead; links we set that point at a row that is gone follow the new first row. Undone by
-    /// <see cref="RestoreNavigation"/>.
-    /// </summary>
-    private static void FixNavigation(bool force)
-    {
-        if (!Active || _page == null || _ctx == null) return;
-        if (!force && Time.frameCount - _navFrame < 15) return;
-        _navFrame = Time.frameCount;
-        var first = _page.First();
-        if (first == null) return;
-        foreach (var s in _ctx.GetComponentsInChildren<Selectable>(true))
-        {
-            if (s == null || InsideVeil(s.transform) || _page.Owns(s)) continue;
-            var n = s.navigation;
-            if (n.mode != Navigation.Mode.Explicit) continue;
-            bool button = ButtonOf(s) != null;
-            bool changed = false;
-            for (int dir = 0; dir < 4; dir++)
-            {
-                var t = NavGet(n, dir);
-                var key = (s.Pointer, dir);
-                bool ours = NavChanged.ContainsKey(key);
-                bool intoHidden = t != null && InsideVeil(t.transform);
-                // a link we set whose row went (or isn't the first any more)
-                bool stale = ours && (t == null || (_page.Owns(t) && t.Pointer != first.Pointer));
-                // our buttons: an empty left / right leads to the page (the way back from the column)
-                bool emptySide = !ours && t == null && (dir == 2 || dir == 3) && button;
-                if (!intoHidden && !stale && !emptySide) continue;
-                if (!ours) NavChanged[key] = (s, t);
-                NavSet(ref n, dir, first);
-                changed = true;
-            }
-            if (changed) s.navigation = n;
-        }
-    }
-
-    private static TabButton ButtonOf(Selectable s)
-    {
-        if (s == null) return null;
-        foreach (var b in Buttons) if (b.Selectable != null && b.Selectable.Pointer == s.Pointer) return b;
-        return null;
-    }
-
-    /// <summary>Puts back the links <see cref="FixNavigation"/> changed (unless the game re-linked them meanwhile).</summary>
-    private static void RestoreNavigation()
-    {
-        foreach (var kv in NavChanged)
-        {
-            try
-            {
-                var (s, before) = kv.Value;
-                if (s == null) continue;
-                var n = s.navigation;
-                var now = NavGet(n, kv.Key.dir);
-                if (now != null && (_page == null || !_page.Owns(now))) continue; // the game set its own link since
-                NavSet(ref n, kv.Key.dir, before);
-                s.navigation = n;
-            }
-            catch { /* went with its screen */ }
-        }
-        NavChanged.Clear();
-    }
-
-    private static Selectable NavGet(Navigation n, int dir) => dir switch
-    {
-        0 => n.selectOnUp,
-        1 => n.selectOnDown,
-        2 => n.selectOnLeft,
-        _ => n.selectOnRight,
-    };
-
-    private static void NavSet(ref Navigation n, int dir, Selectable to)
-    {
-        switch (dir)
-        {
-            case 0: n.selectOnUp = to; break;
-            case 1: n.selectOnDown = to; break;
-            case 2: n.selectOnLeft = to; break;
-            default: n.selectOnRight = to; break;
-        }
-    }
-
-    private static bool InsideVeil(Transform t)
-    {
-        if (t == null) return false;
-        foreach (var h in Hidden)
-            if (h.Go != null && t.IsChildOf(h.Go.transform)) return true;
-        return false;
-    }
-
-    /// <summary>The selection landed in a hidden part (a link the game set a moment ago, a click before it hid): onto the page.</summary>
-    private static void PullSelection()
-    {
-        var es = EventSystem.current;
-        var go = es != null ? es.currentSelectedGameObject : null;
-        if (go == null || !InsideVeil(go.transform)) return;
-        var to = _page?.First() ?? ButtonFor(_tab)?.Selectable;
-        if (to != null) es.SetSelectedGameObject(to.gameObject);
-    }
-
-    private static bool EnsurePage()
-    {
-        if (_page != null && _page.Alive) return true;
-        _page = null;
-        _area = FindGridArea();
-        if (_area == null) return false;
-        _page = GamePage.Create(_area, "OTH_ModsPage");
-        _page.OnInput = OnInput;
-        _page.SetVisible(false);
-        return true;
-    }
-
-    /// <summary>
-    /// The grid of livery cells: its scroll view when it has one, else the cells' parent, else the cells' container;
-    /// never one that also holds the filter column, the details panel or the search field (those stay visible).
-    /// </summary>
-    private static RectTransform FindGridArea()
-    {
-        var content = _ctx.Content;
-        if (content == null) { Warn("grid", "the MOD BROWSER's grid was not found"); return null; }
-        var scroll = content.GetComponentInParent<ScrollRect>();
-        foreach (var t in new[] { scroll != null ? scroll.transform : null, content.parent, content })
-        {
-            if (t == null || t.Pointer == _ctx.transform.Pointer || HoldsOthers(t)) continue;
-            var rt = t.TryCast<RectTransform>();
-            if (rt != null) return rt;
-        }
-        Warn("grid", "the MOD BROWSER's grid shares its container with the other parts");
-        return null;
-    }
-
-    private static bool HoldsOthers(Transform area)
-    {
-        bool Inside(Component c) => c != null && c.transform.IsChildOf(area);
-        bool InsideGo(GameObject g) => g != null && g.transform.IsChildOf(area);
-        if (Inside(_ctx.EnabledOnlyFilter) || Inside(_ctx.SubscribedOnlyFilter) || Inside(_ctx.SearchField) || InsideGo(_ctx.DescriptionPanel)) return true;
-        foreach (var b in Buttons) if (b.Go != null && b.Go.transform.IsChildOf(area)) return true;
-        return false;
-    }
-
-    private static void HideLiveries()
-    {
-        if (Hidden.Count == 0)
-        {
-            Remember(_area != null ? _area.gameObject : null);
-            Remember(_ctx.Pager != null ? _ctx.Pager.gameObject : null);
-            Remember(_ctx.NoModsFoundGO);
-            Remember(_ctx.InstalledLabel);
-            Remember(_ctx.EnabledPanel);
-            Remember(_ctx.SubscribeAction != null ? _ctx.SubscribeAction.gameObject : null);
-            Remember(_ctx.EnableAction != null ? _ctx.EnableAction.gameObject : null);
-            Remember(_ctx.SortAction != null ? _ctx.SortAction.gameObject : null);
-            Remember(_ctx.OrderAction != null ? _ctx.OrderAction.gameObject : null);
-            Remember(_ctx.CurrentFilter != null ? _ctx.CurrentFilter.gameObject : null);
-            Remember(_ctx.CurrentSort != null ? _ctx.CurrentSort.gameObject : null);
-            Remember(_ctx.SortOrderIcon != null ? _ctx.SortOrderIcon.gameObject : null);
-            _details = _ctx.DescriptionPanel;
-            _detailsWasActive = _details != null && _details.activeSelf;
-        }
+        _veil = _content.GetComponent<CanvasGroup>();
+        _veilAdded = _veil == null;
+        if (_veilAdded) _veil = _content.AddComponent<CanvasGroup>();
         KeepHidden();
-        if (_details != null && !_details.activeSelf) _details.SetActive(true);
     }
 
-    private static void Remember(GameObject go)
-    {
-        if (go == null || _page != null && go.Pointer == _page.Root.Pointer) return;
-        // Never a part that holds what stays on screen (the details we write into, our buttons, the page).
-        bool Holds(Component c) => c != null && c.transform.IsChildOf(go.transform);
-        if (Holds(_ctx.ModName) || Holds(_ctx.ModDescription) || (_ctx.DescriptionPanel != null && _ctx.DescriptionPanel.transform.IsChildOf(go.transform))) return;
-        if (_page != null && _page.Root.transform.IsChildOf(go.transform)) return;
-        foreach (var b in Buttons) if (b.Go != null && b.Go.transform.IsChildOf(go.transform)) return;
-        foreach (var h in Hidden) if (h.Go.Pointer == go.Pointer) return;
-        var group = go.GetComponent<CanvasGroup>();
-        var veil = new Veil { Go = go, Group = group, Added = group == null };
-        if (veil.Added) veil.Group = go.AddComponent<CanvasGroup>();
-        else
-        {
-            veil.Alpha = group.alpha;
-            veil.Interactable = group.interactable;
-            veil.Blocks = group.blocksRaycasts;
-        }
-        Hidden.Add(veil);
-    }
-
-    /// <summary>Keeps the hidden parts hidden while a tab of ours is up (the game may fade a group of its own back in).</summary>
     private static void KeepHidden()
     {
-        if (_details != null && !_details.activeSelf) _details.SetActive(true); // a refresh may close the details
-        foreach (var h in Hidden)
-        {
-            var g = h.Group;
-            if (g == null) continue;
-            float alpha = h.Show ? 1f : 0f;
-            if (g.alpha != alpha) g.alpha = alpha;
-            if (g.interactable) g.interactable = false;
-            if (g.blocksRaycasts) g.blocksRaycasts = false;
-        }
+        if (_veil == null) return;
+        if (_veil.alpha != 0f) _veil.alpha = 0f;
+        if (_veil.interactable) _veil.interactable = false;
+        if (_veil.blocksRaycasts) _veil.blocksRaycasts = false;
     }
 
-    private static void RestoreLiveries()
+    /// <summary>The screen's title (LANGUAGE) reads MODS; the game's localization of it is kept off for this screen.</summary>
+    private static void TakeTitle()
     {
-        foreach (var h in Hidden)
-        {
-            try
-            {
-                if (h.Group == null) continue;
-                if (h.Added) Object.Destroy(h.Group);
-                else
-                {
-                    h.Group.alpha = h.Alpha;
-                    h.Group.interactable = h.Interactable;
-                    h.Group.blocksRaycasts = h.Blocks;
-                }
-            }
-            catch { }
-        }
-        Hidden.Clear();
-        RestoreDetails();
-        if (_details != null)
-        {
-            // The game's own empty details (it shows a livery's again once a cell is selected).
-            bool cleared = false;
-            try
-            {
-                _state.ClearModDetails();
-                cleared = true;
-            }
-            catch (Exception e) { Warn("details", "clearing the details panel: " + e.Message); }
-            if (!cleared)
-            {
-                SetDetail(_ctx.ModName, "");
-                SetDetail(_ctx.ModAuthor, "");
-                SetDetail(_ctx.ModDescription, "");
-                SetDetail(_ctx.ModCreationDate, "");
-                SetDetail(_ctx.ModLastUpdateDate, "");
-                if (_details.activeSelf != _detailsWasActive) _details.SetActive(_detailsWasActive);
-            }
-        }
-        _details = null;
+        var t = _root.Find("Title");
+        _title = t != null ? t.GetComponentInChildren<TMP_Text>(true) : null;
+        if (_title == null) return;
+        _titleWas = _title.text;
+        var fun = _title.TryCast<FunTextTMP>();
+        if (fun != null) FunTexts.Register(fun); // its localization doesn't write over ours (SetTitle keeps it anyway)
+        SetTitle();
     }
 
-    // ---------------------------------------------------------------- pages
-
-    private static ModInfo CurrentMod() => _modId == null ? null : ModManager.Find(_modId);
-
-    private static void ShowMod(string modId)
+    private static void SetTitle()
     {
-        _modId = ModManager.Find(modId)?.Id;
-        _closeOnBack = false;
-        _page?.ScrollToTop();
-        _selectFirst = true;
-        UpdateCanPop();
+        string title = _spec != null && !string.IsNullOrEmpty(_spec.Title) ? _spec.Title : "MODS";
+        if (_title != null && _title.text != title) _title.text = title;
     }
 
-    /// <summary>Esc / B: from a mod's page back to the list (or closed when the browser was opened on that page).</summary>
-    private static void Back()
+    /// <summary>The first section of a mod's own screen (its key), or "" when it has none.</summary>
+    private static string FirstSection()
     {
-        if (_modId == null) return;
-        if (_closeOnBack)
-        {
-            GameModsScreen.Close();
-            return;
-        }
-        string was = _modId;
-        _modId = null;
-        _page?.ScrollToTop();
-        _selectFirst = true;
-        _reselectMod = was;
-        _canPopBackFrame = Time.frameCount + 1; // the back press that brought us here must not also close the browser
-        UpdateCanPop();
-    }
-
-    private static string _reselectMod;
-    private static int _mouseFrame = -100;
-
-    /// <summary>The browser must not close on Esc / B while a mod's page is open (that goes back to the list).</summary>
-    private static void UpdateCanPop()
-    {
-        if (_state == null) return;
-        bool block = Active && (_modId != null && !_closeOnBack || KeysElsewhere) || Time.frameCount <= _canPopBackFrame;
         try
         {
-            if (block && !_canPopTaken)
-            {
-                _state.CanPop = false;
-                _canPopTaken = true;
-            }
-            else if (!block && _canPopTaken)
-            {
-                _state.CanPop = true;
-                _canPopTaken = false;
-            }
+            var sections = _spec?.Sections?.Invoke();
+            if (sections != null)
+                foreach (var e in sections)
+                    if (!e.Heading && !string.IsNullOrEmpty(e.Key)) return e.Key;
         }
-        catch (Exception e) { Warn("canpop", "the MOD BROWSER's back key: " + e.Message); }
+        catch (Exception e) { DebugLog.Error("core", e, "GameModsTab.FirstSection"); }
+        return "";
     }
 
-    private static void OnInput(GameRow row, RowInput input)
+    /// <summary>
+    /// The list and the page, where the game's row column was: the list as wide as the Settings menu's buttons from the
+    /// column's left edge, the page as wide as the column after it; both from the column's top down to above the key
+    /// hints, stretching with the screen's height.
+    /// </summary>
+    private static void BuildAreas()
+    {
+        var crt = _content.transform.TryCast<RectTransform>();
+        float left = 78f, top = -141f, rowWidth = 807f;
+        if (crt != null)
+        {
+            if (crt.anchoredPosition.x > 1f) left = crt.anchoredPosition.x;
+            if (crt.anchoredPosition.y < -1f) top = crt.anchoredPosition.y;
+            if (crt.sizeDelta.x > 100f) rowWidth = crt.sizeDelta.x;
+        }
+        float listWidth = ListWidth;
+        try
+        {
+            var mrt = GamePrefabs.MenuButton != null ? GamePrefabs.MenuButton.transform.TryCast<RectTransform>() : null;
+            if (mrt != null && mrt.sizeDelta.x > 120f) listWidth = mrt.sizeDelta.x;
+        }
+        catch { }
+        _listArea = MakeArea("OTH_ModsListArea", left, top, listWidth);
+        _pageArea = MakeArea("OTH_ModsPageArea", left + listWidth + Gap, top, rowWidth);
+    }
+
+    private static RectTransform MakeArea(string name, float x, float top, float width)
+    {
+        var go = new GameObject(name);
+        var rt = go.AddComponent<RectTransform>();
+        rt.SetParent(_root, false);
+        rt.SetSiblingIndex(_content.transform.GetSiblingIndex() + 1);
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(x, top);
+        rt.sizeDelta = new Vector2(width, top - BottomMargin);
+        var le = go.AddComponent<LayoutElement>();
+        le.ignoreLayout = true;
+        return rt;
+    }
+
+    // ---------------------------------------------------------------- opening a mod
+
+    /// <summary>
+    /// Opens <paramref name="modId"/>'s page from code while the screen is up (ModsPage.Open: a row that links to another
+    /// mod's page, e.g. Suspension from a car's page): now, or right after the page's pass when a row asked for it.
+    /// </summary>
+    internal static void OpenLater(string modId, bool closeOnBack)
+    {
+        if (RowRecorder.Recording) _later = (modId, closeOnBack);
+        else OpenMod(modId);
+    }
+
+    private static void OpenMod(string modId)
+    {
+        var m = ModManager.Find(modId);
+        Show(m != null ? m.Id : ModsScreenModel.AllKey);
+        _focusPage = true;
+    }
+
+    private static void Show(string key)
+    {
+        if (string.Equals(key, _key, StringComparison.OrdinalIgnoreCase)) return;
+        _key = key ?? ModsScreenModel.AllKey;
+        _page?.ScrollToTop();
+    }
+
+    private static ModInfo CurrentMod() => _spec == null && ModsScreenModel.IsMod(_key) ? ModManager.Find(_key) : null;
+
+    // ---------------------------------------------------------------- input
+
+    /// <summary>A row of the list pressed: its page shows; with Enter / A (not a click) the selection goes into it.</summary>
+    private static void ListPressed(string key)
+    {
+        Show(key);
+        var mouse = Mouse.current;
+        bool click = mouse != null && (mouse.leftButton.wasPressedThisFrame || mouse.leftButton.wasReleasedThisFrame);
+        if (!click) _focusPage = true;
+    }
+
+    private static void OnListInput(GameRow row, RowInput input)
+    {
+        if (row.Direct != null && input.Kind == RowInputKind.Press) row.Direct();
+    }
+
+    private static void OnPageInput(GameRow row, RowInput input)
     {
         if (row.Direct != null)
         {
@@ -673,161 +354,8 @@ internal static class GameModsTab
         Recorder.Queue(row.Index, input);
     }
 
-    private static void OpenFullViewFor(string modId)
-    {
-        if (_state == null) { ModsPage.Open(modId); return; }
-        ModsPage.OpenOver(_state, FindCanvasGroup(), null, modId);
-    }
-
-    private static CanvasGroup FindCanvasGroup()
-    {
-        try
-        {
-            var group = _state != null ? _state._UICanvasGroup : null;
-            if (group != null) return group;
-            return _ctx != null ? _ctx.GetComponentInParent<CanvasGroup>() ?? _ctx.GetComponentInChildren<CanvasGroup>() : null;
-        }
-        catch { return null; }
-    }
-
-    // ---------------------------------------------------------------- per frame
-
-    /// <summary>Update: the browser's back key, Tab for Advanced, keeping the livery parts hidden.</summary>
-    internal static void Tick()
-    {
-        if (_state == null) return;
-        try
-        {
-            if (_state.WasCollected || _ctx == null || _ctx.WasCollected) { Detach(); return; }
-            // A late language load may re-fill a copied label: ours again, now and then.
-            if (Time.frameCount % 30 == 0) foreach (var b in Buttons) SetLabel(b);
-            if (!Active)
-            {
-                // Left a tab of ours while typing / capturing / just after a back press: the browser's back key comes back.
-                if (!ModsPage.IsClassicOpen) UpdateCanPop();
-                return;
-            }
-            KeepHidden();
-            _page?.Follow(_area);
-            PullSelection();
-            try { if (_state.selectedMod != null) _state.selectedMod = null; } catch { }
-            if (ModsPage.IsClassicOpen) return; // the full view on top has the keys (and the browser's back key)
-            UpdateCanPop();
-            bool focus;
-            try { focus = _state.IsInFocus; } catch { focus = true; }
-            if (!focus) return;
-            if (KeysElsewhere) return; // Esc ends the typing / the key capture, Tab is a character: not ours
-            var kb = Keyboard.current;
-            var pad = Gamepad.current;
-            // Opened straight on a mod's page: the game's own back closes the browser (CanPop stays on), not us.
-            if (!_closeOnBack && ((kb != null && kb.escapeKey.wasPressedThisFrame) || (pad != null && pad.buttonEast.wasPressedThisFrame))) Back();
-            else if ((kb != null && kb.tabKey.wasPressedThisFrame) || (pad != null && pad.selectButton.wasPressedThisFrame))
-            {
-                var m = CurrentMod();
-                if (m != null && ModPageView.HasAdvanced(m)) ModPageView.ToggleAdvanced();
-            }
-            EnablePressed();
-            var mouse = Mouse.current;
-            if (mouse != null && (mouse.delta.ReadValue().sqrMagnitude > 0.01f || mouse.scroll.ReadValue().sqrMagnitude > 0.01f)) _mouseFrame = Time.frameCount;
-            _page?.KeepSelectedVisible(Time.frameCount - _mouseFrame < 30);
-        }
-        catch (Exception e) { Fail("tick", e); }
-    }
-
-    /// <summary>OnGUI (Layout, once a frame): runs the page's draw code as a recording pass and shows its rows.</summary>
-    internal static void Record()
-    {
-        if (!Active || _page == null || _recordedFrame == Time.frameCount || ModsPage.IsClassicOpen) return;
-        var ev = Event.current;
-        if (ev == null || ev.type != EventType.Layout) return;
-        _recordedFrame = Time.frameCount;
-        try
-        {
-            RecordPass();
-            BuildEntries();
-            if (!_page.Show(Entries)) throw new InvalidOperationException("a game widget could not be made (" + GamePrefabs.Summary + ")");
-            FixNavigation(false);
-            if (_selectFirst)
-            {
-                _selectFirst = false;
-                if (!ModsPage.IsClassicOpen && !SelectMod(_reselectMod)) _page.SelectFirst();
-                _reselectMod = null;
-            }
-            UpdateDetails();
-            if (_openNext != null)
-            {
-                string id = _openNext;
-                _openNext = null;
-                ShowMod(id);
-            }
-            if (_later != null)
-            {
-                var l = _later.Value;
-                _later = null;
-                Activate(l.tab, l.modId, l.closeOnBack);
-            }
-        }
-        catch (Exception e)
-        {
-            Recorder.Abort();
-            Fail("page", e);
-        }
-    }
-
-    private static void RecordPass()
-    {
-        Menu.BeginWindow(false);
-        Menu.BeginContent(640f);
-        Recorder.Begin(Menu.Y);
-        try
-        {
-            if (RequiredModsPrompt.Draw()) { }
-            else
-            {
-                var mod = CurrentMod();
-                if (_modId != null && mod == null) _modId = null;
-                if (mod != null) ModPageView.Draw(mod);
-                else if (_tab == 0)
-                {
-                    var open = ModsPage.DrawInstalledList();
-                    if (open != null) _openNext = open.Id;
-                }
-                else ModsPage.DrawTab(_tab);
-            }
-        }
-        finally
-        {
-            Recorder.End(Menu.Y);
-            Menu.EndContent();
-        }
-    }
-
-    private static void BuildEntries()
-    {
-        Entries.Clear();
-        bool prompt = RequiredModsPrompt.Active;
-        if (_modId != null && !prompt) Entries.Add(new GamePage.Entry(_closeOnBack ? CloseRow : BackRow, -1, Back));
-        var rows = Recorder.Rows;
-        for (int i = 0; i < rows.Count; i++) Entries.Add(new GamePage.Entry(rows[i], i, null));
-        if (!Recorder.Untracked) return;
-        // Every part of our pages has a game-widget form. Another creator's page that also draws by hand (raw GUI calls)
-        // gets a row to the full view, where those parts show; anything else is only noted in the log.
-        if (_modId != null && ThirdParty.IsApiMod(_modId)) Entries.Add(new GamePage.Entry(FullViewRow, -1, () => OpenFullViewFor(_modId)));
-        else Warn("untracked " + (_modId ?? "tab " + _tab),
-            $"the MODS page of {(_modId ?? ModsPage.TabNames[Math.Max(0, _tab)])} draws parts by hand (GUI calls); those parts don't show with the game's widgets");
-    }
-
-    private static readonly RowModel FullViewRow = new()
-    {
-        Kind = RowKind.Button, Label = "More settings", Value = "full view",
-        Hint = "This mod draws some of its settings itself: the full view shows them. Esc there comes back here.",
-    };
-
-    private static int _typingFrame = -100;
-    private static int _keysFrame = -100;
-
     /// <summary>True while (or just after) the keys belong to a text box or a hotkey capture (Keybinds): Esc / B
-    /// then ends that, it doesn't go back or close the browser.</summary>
+    /// then ends that, it doesn't go back or close the screen.</summary>
     private static bool KeysElsewhere
     {
         get
@@ -843,276 +371,304 @@ internal static class GameModsTab
     {
         get
         {
-            if (!Active || _page == null) return false;
+            if (_state == null || _page == null) return false;
             if (_page.Typing) _typingFrame = Time.frameCount;
             return Time.frameCount - _typingFrame <= 2;
         }
     }
 
-    /// <summary>Back on the list: the row of the mod that was open is selected again.</summary>
-    private static bool SelectMod(string modId)
+    /// <summary>The game may close the screen on its back input only from the list (Esc / B on the settings goes back to the list).</summary>
+    private static void UpdateCanPop()
     {
-        if (modId == null) return false;
-        var m = ModManager.Find(modId);
-        if (m == null) return false;
-        string name = m.Name ?? m.Id;
-        for (int i = 0; i < Entries.Count; i++)
-        {
-            var e = Entries[i].Model;
-            if (e.Kind == RowKind.ListItem && e.Label == name) return _page.SelectAt(i);
-        }
-        return false;
-    }
-
-    // ---------------------------------------------------------------- the details panel
-
-    /// <summary>True while a MODS list of ours is being recorded with cards (the list's draw code leaves out what
-    /// would split the grid, e.g. a description line under each entry: it shows in the details panel).</summary>
-    internal static bool ShowsCards => RowRecorder.Recording && Active && GamePrefabs.CardsReady;
-
-    private static CardInfo _pageCard;
-
-    private static void UpdateDetails()
-    {
-        if (_ctx == null) return;
-        var selected = _page.SelectedRow(out _);
-        var model = selected?.Model;
-        var mod = CurrentMod();
-        string name, author, desc, line1, line2;
-        string status = Menu.TryStatus(out var s) ? s : "";
-        CardInfo image = null;
-        bool? on = null;
-        bool canSwitch = false;
-        if (mod != null)
-        {
-            bool api = ThirdParty.IsApiMod(mod.Id);
-            name = mod.Name ?? mod.Id;
-            author = api ? ModCards.OtherAuthor : ModCards.OurAuthor;
-            var maturity = ModMaturity.Of(mod, !api);
-            desc = !string.IsNullOrEmpty(model?.Hint) ? model.Hint : ModMaturity.Describe(mod.Description, mod.Id, maturity);
-            string vm = ModMaturity.VersionAndLabel(mod.Version, maturity);
-            line1 = (vm.Length == 0 ? "" : vm + "  ·  ") + RequiredMods.Badge(mod);
-            line2 = status;
-            if (_pageCard == null || !string.Equals(_pageCard.ModId, mod.Id, StringComparison.OrdinalIgnoreCase))
-                _pageCard = new CardInfo { ModId = mod.Id, Seed = mod.Id, Title = name };
-            image = _pageCard;
-            on = ModPageView.IsCore(mod) || ModManager.SwitchedOn(mod.Id);
-        }
-        else if (model != null && model.Kind == RowKind.ListItem && model.Card != null && selected.Kind == WidgetKind.Card)
-        {
-            var c = model.Card;
-            name = model.Label;
-            author = c.Author ?? "";
-            desc = model.Hint ?? "";
-            line1 = ModCards.DetailLine(c);
-            line2 = status.Length > 0 ? status : c.Status ?? "";
-            image = c;
-            if (model.CanStep)
-            {
-                on = model.On;
-                canSwitch = true;
-            }
-        }
-        else if (model != null && model.Kind == RowKind.ListItem)
-        {
-            name = model.Label;
-            author = RowMap.ListLabel(new RowModel { Kind = RowKind.ListItem, Badge = model.Badge, Detail = model.Detail }).Trim();
-            desc = model.Hint ?? "";
-            line1 = status;
-            line2 = "";
-            image = model.Card;
-        }
-        else
-        {
-            var tabs = ModsPage.TabNames;
-            name = _tab >= 0 && _tab < tabs.Count ? (tabs[_tab] + " mods").ToUpperInvariant() : "MODS";
-            int n = ModManager.All.Count;
-            author = _tab == 0 ? $"{n} mod{(n == 1 ? "" : "s")} installed" : "";
-            desc = model?.Hint ?? "";
-            line1 = status;
-            line2 = "";
-        }
-        SetDetail(_ctx.ModName, name);
-        SetDetail(_ctx.ModAuthor, author);
-        SetDetail(_ctx.ModDescription, desc);
-        SetDetail(_ctx.ModCreationDate, line1);
-        SetDetail(_ctx.ModLastUpdateDate, line2);
+        if (_state == null) return;
+        bool may = ModsScreenModel.CanPop(_inPage, _closeOnBack, KeysElsewhere, Time.frameCount <= _canPopBackFrame) && !ModsPage.IsClassicOpen;
         try
         {
-            ShowImage(image);
-            ShowEnabled(on, canSwitch);
+            if (!may && !_canPopTaken)
+            {
+                _state.CanPop = false;
+                _canPopTaken = true;
+            }
+            else if (may && _canPopTaken)
+            {
+                _state.CanPop = true;
+                _canPopTaken = false;
+            }
         }
-        catch (Exception e) { Warn("details image", "the details panel's image / enabled panel: " + e.Message); }
+        catch (Exception e) { Warn("canpop", "the MODS screen's back key: " + e.Message); }
     }
 
-    // What the details panel's image, enabled panel and enable hint showed before we wrote to them (put back with the liveries).
-    private static bool _detailsTaken;
-    private static Sprite _imageSprite;
-    private static bool _imageEnabled, _imageActive, _enabledSelActive, _disabledSelActive;
-    private static string _enableLabel;
-    private static string _shownImage;
-    private static bool? _shownOn;
-    private static bool _shownSwitch;
+    // ---------------------------------------------------------------- per frame
 
-    private static void TakeDetails()
+    /// <summary>Update: which page the list's selection shows, Esc / B, Tab for Advanced.</summary>
+    internal static void Tick()
     {
-        if (_detailsTaken) return;
-        _detailsTaken = true;
-        _shownImage = null;
-        _shownOn = null;
-        _shownSwitch = false;
-        var img = _ctx.ModImage;
-        if (img != null)
+        if (_state == null) return;
+        try
         {
-            _imageSprite = img.sprite;
-            _imageEnabled = img.enabled;
-            _imageActive = img.gameObject.activeSelf;
+            if (_state.WasCollected || _root == null || _root.WasCollected) { Detach(); return; }
+            KeepHidden();
+            if (Time.frameCount % 30 == 0) SetTitle(); // a late language load may re-fill it
+            _list?.Follow(_listArea);
+            _page?.Follow(_pageArea);
+            ModDetails.Follow(_root, _pageArea);
+            if (ModsPage.IsClassicOpen) { UpdateCanPop(); return; } // the full view on top has the keys
+            TrackSelection();
+            UpdateCanPop();
+            bool focus;
+            try { focus = _state.IsInFocus; } catch { focus = true; }
+            if (!focus) return;
+            var kb = Keyboard.current;
+            var pad = Gamepad.current;
+            bool back = (kb != null && kb.escapeKey.wasPressedThisFrame) || (pad != null && pad.buttonEast.wasPressedThisFrame);
+            if (back && ModsScreenModel.Back(_inPage, _closeOnBack, KeysElsewhere) == ModsScreenModel.BackStep.ToList)
+            {
+                _canPopBackFrame = Time.frameCount + 1; // the press that brings us back must not also close the screen
+                SelectListRow(_key);
+                _inPage = false; // the list row's own select sound plays (the game's button)
+                UpdateCanPop();
+            }
+            else if (!KeysElsewhere && ((kb != null && kb.tabKey.wasPressedThisFrame) || (pad != null && pad.selectButton.wasPressedThisFrame)))
+            {
+                var m = CurrentMod();
+                if (m != null && ModPageView.HasAdvanced(m)) ModPageView.ToggleAdvanced();
+            }
+            var mouse = Mouse.current;
+            if (mouse != null && (mouse.delta.ReadValue().sqrMagnitude > 0.01f || mouse.scroll.ReadValue().sqrMagnitude > 0.01f)) _mouseFrame = Time.frameCount;
+            bool usingMouse = Time.frameCount - _mouseFrame < 30;
+            _list?.KeepSelectedVisible(usingMouse);
+            _page?.KeepSelectedVisible(usingMouse);
         }
-        _enabledSelActive = _ctx.EnabledSelected != null && _ctx.EnabledSelected.activeSelf;
-        _disabledSelActive = _ctx.DisabledSelected != null && _ctx.DisabledSelected.activeSelf;
-        _enableLabel = _ctx.EnableAction != null && _ctx.EnableAction.Label != null ? _ctx.EnableAction.Label.text : null;
+        catch (Exception e) { Fail("tick", e); }
     }
 
-    /// <summary>The details panel's image: the selected card's (or the open mod's), hidden when there is none.</summary>
-    private static void ShowImage(CardInfo card)
+    /// <summary>
+    /// The list's selection picks the page with the keyboard and gamepad (moving along the list shows each mod's
+    /// settings); with the mouse a click does, so passing over the list on the way to the settings changes nothing. A
+    /// selection that went elsewhere (the hidden language row the game selects on opening) comes back to the list.
+    /// </summary>
+    private static void TrackSelection()
     {
-        var img = _ctx.ModImage;
-        if (img == null) return;
-        TakeDetails();
-        string key = card?.ImageKey;
-        // Again now and then: a livery's image the game was still loading when the tab opened may land late.
-        if (key == _shownImage && Time.frameCount % 60 != 0) return;
-        if (key != _shownImage && card != null) OverTheHillPlus.CrashTrail.Mark("MODS cards: details of " + (card.Title ?? card.Seed));
-        _shownImage = key;
-        Sprite sprite = card != null ? ModImages.For(card) : null;
-        if (sprite == null)
+        if (_list == null || _page == null) return;
+        var listRow = _list.SelectedRow(out int at);
+        if (listRow != null)
         {
-            if (img.enabled) img.enabled = false;
+            _inPage = false;
+            bool mouse = Time.frameCount - _mouseFrame < 30;
+            if (!mouse && at >= 0 && at < _listModel.Count && !_listModel[at].Heading) Show(_listModel[at].Key);
             return;
         }
-        img.sprite = sprite;
-        img.color = Color.white;
-        if (!img.enabled) img.enabled = true;
-        if (!img.gameObject.activeSelf) img.gameObject.SetActive(true);
-    }
-
-    /// <summary>The enabled panel (on / off of the selected mod) and the enable hint (when the card can be switched).</summary>
-    private static void ShowEnabled(bool? on, bool canSwitch)
-    {
-        TakeDetails();
-        SetShown(_ctx.EnabledPanel, on.HasValue);
-        SetShown(_ctx.EnableAction != null ? _ctx.EnableAction.gameObject : null, canSwitch && EnableInput() != null);
-        if (on == _shownOn && canSwitch == _shownSwitch) return;
-        _shownOn = on;
-        _shownSwitch = canSwitch;
-        if (on.HasValue)
+        if (_page.HasSelection)
         {
-            bool v = on.Value;
-            if (_ctx.EnabledSelected != null && _ctx.EnabledSelected.activeSelf != v) _ctx.EnabledSelected.SetActive(v);
-            if (_ctx.DisabledSelected != null && _ctx.DisabledSelected.activeSelf == v) _ctx.DisabledSelected.SetActive(!v);
-            try { if (_ctx.EnabledIcon != null) _state.ApplyStatusIconColor(_ctx.EnabledIcon, v); } catch { }
-            try { if (_ctx.DisabledIcon != null) _state.ApplyStatusIconColor(_ctx.DisabledIcon, !v); } catch { }
+            _inPage = true;
+            return;
         }
-        var label = _ctx.EnableAction != null ? _ctx.EnableAction.Label : null;
-        if (canSwitch && on.HasValue && label != null)
-        {
-            string word = on.Value ? "Disable" : "Enable";
-            if (_enableLabel != null && _enableLabel.Length > 0 && _enableLabel == _enableLabel.ToUpperInvariant()) word = word.ToUpperInvariant();
-            FunTexts.Register(label); // our word stays (a language reload would put the game's back)
-            if (label.text != word) label.text = word;
-        }
+        var es = EventSystem.current;
+        var go = es != null ? es.currentSelectedGameObject : null;
+        bool lost = go == null || (_content != null && go.transform.IsChildOf(_content.transform));
+        if (lost && Time.frameCount - _mouseFrame >= 30) _selectList = true;
     }
 
-    private static void SetShown(GameObject go, bool show)
+    /// <summary>OnGUI (Layout, once a frame): the list, and the page's draw code run as a recording pass.</summary>
+    internal static void Record()
     {
-        if (go == null) return;
-        foreach (var h in Hidden)
-            if (h.Go != null && h.Go.Pointer == go.Pointer) { h.Show = show; return; }
-    }
-
-    /// <summary>Puts the details panel's image, enabled panel and enable hint back as the game had them.</summary>
-    private static void RestoreDetails()
-    {
-        if (!_detailsTaken || _ctx == null) { _detailsTaken = false; return; }
-        _detailsTaken = false;
-        _shownImage = null;
-        _shownOn = null;
+        if (_state == null || _page == null || _list == null || _recordedFrame == Time.frameCount || ModsPage.IsClassicOpen) return;
+        var ev = Event.current;
+        if (ev == null || ev.type != EventType.Layout) return;
+        _recordedFrame = Time.frameCount;
         try
         {
-            var img = _ctx.ModImage;
-            if (img != null)
+            BuildList();
+            if (!_list.Show(ListEntries)) throw new InvalidOperationException("a button of the list could not be made (" + GamePrefabs.Summary + ")");
+            RecordPass();
+            if (_state == null || _page == null) return; // a row closed the screen during the pass
+            BuildEntries();
+            if (!_page.Show(Entries)) throw new InvalidOperationException("a game widget could not be made (" + GamePrefabs.Summary + ")");
+            LinkSides();
+            if (_focusPage)
             {
-                img.sprite = _imageSprite;
-                img.enabled = _imageEnabled;
-                if (img.gameObject.activeSelf != _imageActive) img.gameObject.SetActive(_imageActive);
+                _focusPage = false;
+                _selectList = false;
+                if (_page.First() != null) { _page.SelectFirst(); _inPage = true; }
+                else SelectListRow(_key);
             }
-            if (_ctx.EnabledSelected != null && _ctx.EnabledSelected.activeSelf != _enabledSelActive) _ctx.EnabledSelected.SetActive(_enabledSelActive);
-            if (_ctx.DisabledSelected != null && _ctx.DisabledSelected.activeSelf != _disabledSelActive) _ctx.DisabledSelected.SetActive(_disabledSelActive);
-            var label = _ctx.EnableAction != null ? _ctx.EnableAction.Label : null;
-            if (label != null)
+            else if (_selectList)
             {
-                try { FunTexts.Ours.Remove(label.Pointer); } catch { }
-                if (_enableLabel != null && label.text != _enableLabel) label.text = _enableLabel;
+                _selectList = false;
+                SelectListRow(_key);
+            }
+            ModDetails.Update(CurrentMod(), _key, _page.SelectedRow(out _)?.Model ?? _list.SelectedRow(out _)?.Model, _listModel);
+            if (_openNext != null)
+            {
+                string id = _openNext;
+                _openNext = null;
+                OpenMod(id);
+            }
+            if (_later != null)
+            {
+                var l = _later.Value;
+                _later = null;
+                OpenMod(l.modId);
             }
         }
-        catch (Exception e) { Warn("restore details", "putting the details panel back: " + e.Message); }
-        _imageSprite = null;
+        catch (Exception e)
+        {
+            Recorder.Abort();
+            Fail("page", e);
+        }
     }
 
-    private static UnityEngine.InputSystem.InputAction _enableAction;
-    private static bool _enableActionLooked;
-
-    /// <summary>The browser's enable input (its EnableAction hint's binding), or null.</summary>
-    private static UnityEngine.InputSystem.InputAction EnableInput()
+    /// <summary>The list's rows, from what is installed now (reused rows only get new texts).</summary>
+    private static void BuildList()
     {
-        if (_enableActionLooked) return _enableAction;
-        _enableActionLooked = true;
-        try { _enableAction = _ctx.EnableAction != null ? StateLiveryModsMenu.ResolveActionFor(_ctx.EnableAction) : null; }
-        catch (Exception e) { Warn("enable input", "the MOD BROWSER's enable input was not found (the mods switch on their pages and with the arrows): " + e.Message); }
-        return _enableAction;
+        if (_spec != null)
+        {
+            _listModel = new List<ModsScreenModel.Entry>(_spec.Sections() ?? Array.Empty<ModsScreenModel.Entry>());
+            if (ModsScreenModel.IndexOf(_listModel, _key) < 0) _key = FirstSection();
+            FillListEntries();
+            return;
+        }
+        ModsScratch.Clear();
+        foreach (var m in ModManager.All)
+        {
+            if (ModManager.IsCareerPart(m)) continue; // listed when no career mod holds it (the cars-only pack)
+            bool core = ModPageView.IsCore(m);
+            ModsScratch.Add(new ModsScreenModel.Mod(m.Id, m.Name, core, ThirdParty.IsApiMod(m.Id), core || ModManager.SwitchedOn(m.Id),
+                ModManager.PendingRestart(m.Id), ModManager.FailedReason(m.Id) != null, AvailableTab.UpdateFor(m) != null));
+        }
+        TabsScratch.Clear();
+        var tabs = ModsPage.TabNames;
+        for (int i = 1; i < tabs.Count; i++) TabsScratch.Add(tabs[i]);
+        bool session = Features.Public.ModTypes.RequiredModsSession.Role == SessionRole.Guest && Features.Public.ModTypes.RequiredModsSession.Advertised != null;
+        _listModel = ModsScreenModel.Build(ModsScratch, session, TabsScratch);
+        if (ModsScreenModel.IndexOf(_listModel, _key) < 0 && !RequiredModsPrompt.Active) _key = ModsScreenModel.AllKey;
+        FillListEntries();
     }
 
-    /// <summary>The browser's enable input on a selected card that can be switched: a step, as the row's arrows gave.</summary>
-    private static void EnablePressed()
+    private static void FillListEntries()
     {
-        if (_modId != null || _page == null) return;
-        var act = EnableInput();
-        if (act == null || !act.WasPressedThisFrame()) return;
-        var row = _page.SelectedRow(out _);
-        if (row == null || row.Kind != WidgetKind.Card || row.Model == null || !row.Model.CanStep) return;
-        if (row.Direct != null) return;
-        Recorder.Queue(row.Index, RowInput.Stepped(row.Model.On ? -1 : 1));
+        ListEntries.Clear();
+        foreach (var e in _listModel)
+        {
+            string id = e.Heading ? "#heading:" + e.Label : e.Key;
+            if (!ListRows.TryGetValue(id, out var row))
+            {
+                row = new RowModel();
+                ListRows[id] = row;
+            }
+            row.Kind = e.Heading ? RowKind.Heading : RowKind.Button;
+            row.Label = e.Label;
+            row.Value = e.Value;
+            row.Enabled = true;
+            row.Hint = null;
+            string key = e.Key;
+            ListEntries.Add(new GamePage.Entry(row, -1, e.Heading ? null : () => ListPressed(key)));
+        }
     }
 
-    private static void SetDetail(TMP_Text t, string text)
+    private static void RecordPass()
     {
-        if (t == null) return;
-        text ??= "";
-        if (t.text != text) t.text = text;
+        Menu.BeginWindow(false);
+        Menu.BeginContent(640f);
+        Recorder.Begin(Menu.Y);
+        try
+        {
+            if (_spec != null)
+            {
+                Menu.BeginGroup(0, "screen/" + _spec.Title + "/" + _key);
+                _spec.Draw(_key);
+            }
+            else if (RequiredModsPrompt.Draw()) { }
+            else if (_key == ModsScreenModel.AllKey)
+            {
+                var open = ModsPage.DrawInstalledList();
+                if (open != null) _openNext = open.Id;
+            }
+            else if (_key == ModsScreenModel.ServerKey) Features.Public.ModTypes.RequiredModsSession.DrawSessionList();
+            else if (ModsScreenModel.TabOf(_key) > 0) ModsPage.DrawTab(ModsScreenModel.TabOf(_key));
+            else
+            {
+                var mod = CurrentMod();
+                if (mod != null) ModPageView.Draw(mod);
+                else _key = ModsScreenModel.AllKey;
+            }
+        }
+        finally
+        {
+            Recorder.End(Menu.Y);
+            Menu.EndContent();
+        }
     }
 
-    // ---------------------------------------------------------------- helpers
-
-    private static void Select(Selectable s)
+    private static void BuildEntries()
     {
-        var es = EventSystem.current;
-        if (es != null && s != null) es.SetSelectedGameObject(s.gameObject);
+        Entries.Clear();
+        var rows = Recorder.Rows;
+        for (int i = 0; i < rows.Count; i++) Entries.Add(new GamePage.Entry(rows[i], i, null));
+        if (!Recorder.Untracked) return;
+        // Every part of our pages has a game-widget form. Another creator's page that also draws by hand (raw GUI calls)
+        // gets a row to the full view, where those parts show; anything else is only noted in the log.
+        string mod = CurrentMod()?.Id;
+        if (mod != null && ThirdParty.IsApiMod(mod)) Entries.Add(new GamePage.Entry(FullViewRow, -1, () => OpenFullViewFor(mod)));
+        else Warn("untracked " + _key, $"the MODS page of {_key} draws parts by hand (GUI calls); those parts don't show with the game's widgets");
     }
 
-    private static void Guard(string where, Action action)
+    /// <summary>Right from the list goes into the page; left from the page's buttons back to the list row of its page.</summary>
+    private static void LinkSides()
     {
-        try { action(); }
-        catch (Exception e) { Fail(where, e); }
+        var first = _page.First();
+        var mine = ListSelectable(_key);
+        bool relinkList = !Same(_list.RightOf, first);
+        bool relinkPage = !Same(_page.LeftOf, mine);
+        if (relinkList)
+        {
+            _list.RightOf = first;
+            _list.Relink();
+        }
+        if (relinkPage)
+        {
+            _page.LeftOf = mine;
+            _page.Above = mine;
+            _page.Relink();
+        }
     }
 
-    /// <summary>Something of ours broke inside the browser: logged once, the liveries come back and the full view opens.</summary>
+    private static bool Same(Selectable a, Selectable b)
+    {
+        if (a == null || b == null) return a == null && b == null;
+        try { return a.Pointer == b.Pointer; }
+        catch { return false; }
+    }
+
+    private static Selectable ListSelectable(string key)
+    {
+        int i = ModsScreenModel.IndexOf(_listModel, key);
+        return i >= 0 ? _list.SelectableAt(i) : null;
+    }
+
+    private static void SelectListRow(string key)
+    {
+        int i = ModsScreenModel.IndexOf(_listModel, key);
+        if (i < 0 || !_list.SelectAt(i)) _list.SelectFirst();
+    }
+
+    private static void OpenFullViewFor(string modId)
+    {
+        if (_state == null) { ModsPage.OpenClassic(modId); return; }
+        CanvasGroup group = null;
+        try { group = _state._UICanvasGroup; } catch { }
+        ModsPage.OpenOver(_state, group, null, modId);
+    }
+
+    /// <summary>Something of ours broke on the screen: logged once, the screen closes and the full view opens.</summary>
     internal static void Fail(string where, Exception e)
     {
-        Warn("fail " + where, $"MODS in the MOD BROWSER failed ({where}): {e}; showing the full view instead");
-        string mod = _modId;
+        Warn("fail " + where, $"the MODS screen failed ({where}): {e}; showing the full view instead");
+        string mod = _spec != null ? _spec.FallbackModId : CurrentMod()?.Id;
         _broken = true;
-        try { Deactivate(false); } catch { }
-        try { OpenFullViewFor(mod); } catch { }
+        try { GameModsScreen.Close(); } catch { } // now, or once a pop-up over it closed
+        try { Detach(); } catch { }
+        try { ModsPage.OpenClassic(mod); } catch { }
     }
 
     private static void Warn(string key, string message)
@@ -1120,29 +676,214 @@ internal static class GameModsTab
         if (Logged.Add(key)) Core.CorePlugin.Logger?.LogWarning("[Core] " + message);
     }
 
-    /// <summary>Logs once where things were found (helps when a game update moves them).</summary>
+    /// <summary>Logs once where things went (helps when a game update moves them).</summary>
     private static void LogLayoutOnce()
     {
         if (!Logged.Add("layout")) return;
         try
         {
-            var area = FindGridArea();
-            string filters = Buttons.Count > 0 && Buttons[0].Go.transform.parent != null ? Path(Buttons[0].Go.transform.parent) : "?";
-            bool layout = Buttons.Count > 0 && Buttons[0].Go.transform.parent != null && Buttons[0].Go.transform.parent.GetComponent<LayoutGroup>() != null;
-            Core.CorePlugin.Logger?.LogInfo($"[Core] MOD BROWSER: MODS buttons in {filters} ({(layout ? "layout group" : "placed by hand")}), " +
-                                            $"page over {(area != null ? Path(area) + " " + area.rect.size : "?")}, details panel {(_ctx.DescriptionPanel != null ? "found" : "missing")}");
+            var rrt = _root.TryCast<RectTransform>();
+            Core.CorePlugin.Logger?.LogInfo($"[Core] MODS screen: list at {_listArea.anchoredPosition} width {_listArea.sizeDelta.x}, settings at {_pageArea.anchoredPosition} " +
+                                            $"width {_pageArea.sizeDelta.x}, screen {(rrt != null ? rrt.rect.size.ToString() : "?")}, list buttons from " +
+                                            (GamePrefabs.MenuButton != null ? "the Settings menu" : "the settings' button row") + ", details " + (ModDetails.Shown ? "shown" : "hidden (narrow screen)"));
         }
         catch { }
     }
 
-    private static string Path(Transform t)
+    // ---------------------------------------------------------------- the details on the right
+
+    /// <summary>
+    /// The right side of the screen: the mod's picture (its card), its name, a line with its version and type (or a
+    /// status message), and the selected row's explanation, in copies of the game's row text. Hidden when the screen is
+    /// too narrow for it beside the settings.
+    /// </summary>
+    private static class ModDetails
     {
-        string p = t.name;
-        for (int i = 0; i < 4 && t.parent != null; i++)
+        private static GameObject _go;
+        private static RectTransform _rt;
+        private static Image _picture;
+        private static LayoutElement _pictureLe;
+        private static TMP_Text _name, _meta, _hint;
+        private static string _shownImage;
+        private static CardInfo _card;
+        private static float _base = 24f;
+
+        internal static bool Shown => _go != null && _go.activeSelf;
+
+        internal static void Create(Transform root, RectTransform page)
         {
-            t = t.parent;
-            p = t.name + "/" + p;
+            Destroy();
+            try
+            {
+                if (GamePrefabs.Label == null) return;
+                _go = new GameObject("OTH_ModsDetails");
+                _rt = _go.AddComponent<RectTransform>();
+                _rt.SetParent(root, false);
+                _rt.anchorMin = new Vector2(1f, 0f);
+                _rt.anchorMax = new Vector2(1f, 1f);
+                _rt.pivot = new Vector2(1f, 1f);
+                var le = _go.AddComponent<LayoutElement>();
+                le.ignoreLayout = true;
+                var v = _go.AddComponent<VerticalLayoutGroup>();
+                v.childControlWidth = true;
+                v.childControlHeight = true;
+                v.childForceExpandWidth = true;
+                v.childForceExpandHeight = false;
+                v.spacing = 10f;
+                v.childAlignment = TextAnchor.UpperLeft;
+
+                var pic = new GameObject("Picture");
+                var prt = pic.AddComponent<RectTransform>();
+                prt.SetParent(_rt, false);
+                _picture = pic.AddComponent<Image>();
+                _picture.preserveAspect = true;
+                _picture.raycastTarget = false;
+                _picture.enabled = false;
+                _pictureLe = pic.AddComponent<LayoutElement>();
+
+                _name = Text("Name");
+                _meta = Text("Meta");
+                _hint = Text("Hint");
+                if (_name != null) _base = Mathf.Max(14f, _name.fontSize);
+                Style(_name, 1.25f, new Color(1f, 0.976f, 0.933f, 1f));
+                Style(_meta, 0.72f, new Color(1f, 0.976f, 0.933f, 0.6f));
+                Style(_hint, 0.8f, new Color(1f, 0.976f, 0.933f, 0.85f));
+                Follow(root, page);
+            }
+            catch (Exception e)
+            {
+                Core.CorePlugin.Logger?.LogWarning("[Core] MODS screen: the details beside the settings could not be made (they stay off): " + e.Message);
+                Destroy();
+            }
         }
-        return p;
+
+        private static TMP_Text Text(string name)
+        {
+            var go = Object.Instantiate(GamePrefabs.Label, GamePrefabs.EnsureHolder(), false);
+            go.name = name;
+            GameRow.Prepare(go, WidgetKind.Text);
+            var t = go.GetComponent<TMP_Text>() ?? go.GetComponentInChildren<TMP_Text>(true);
+            go.transform.SetParent(_rt, false);
+            return t;
+        }
+
+        private static void Style(TMP_Text t, float size, Color color)
+        {
+            if (t == null) return;
+            t.fontSize = _base * size;
+            t.color = color;
+            t.alignment = TextAlignmentOptions.TopLeft;
+            t.enableWordWrapping = true;
+        }
+
+        /// <summary>Beside the page, up to the screen's right margin; hidden when that is too narrow.</summary>
+        internal static void Follow(Transform root, RectTransform page)
+        {
+            if (_go == null || root == null || page == null) return;
+            var rrt = root.TryCast<RectTransform>();
+            float screenW = rrt != null ? rrt.rect.width : 1920f;
+            float from = page.anchoredPosition.x + page.sizeDelta.x + Gap;
+            float width = Mathf.Min(DetailsMaxWidth, screenW - DetailsMargin - from);
+            bool show = width >= DetailsMinWidth;
+            if (_go.activeSelf != show) _go.SetActive(show);
+            if (!show) return;
+            var pos = new Vector2(-DetailsMargin, page.anchoredPosition.y);
+            var size = new Vector2(width, page.sizeDelta.y);
+            if (_rt.anchoredPosition != pos) _rt.anchoredPosition = pos;
+            if (_rt.sizeDelta != size) _rt.sizeDelta = size;
+            float h = Mathf.Round(width * 9f / 16f);
+            if (Mathf.Abs(_pictureLe.preferredHeight - h) > 0.5f) _pictureLe.preferredHeight = _pictureLe.minHeight = h;
+        }
+
+        internal static void Update(ModInfo mod, string key, RowModel selected, List<ModsScreenModel.Entry> list)
+        {
+            if (_go == null || !_go.activeSelf) return;
+            string name, meta, hint;
+            CardInfo card = null;
+            string status = Menu.TryStatus(out var s) ? s : null;
+            bool fromList = selected != null && ListRows.ContainsValue(selected);
+            string rowHint = !fromList && selected != null ? selected.Hint : null;
+            if (mod != null)
+            {
+                bool api = ThirdParty.IsApiMod(mod.Id);
+                var maturity = ModMaturity.Of(mod, !api);
+                name = mod.Name ?? mod.Id;
+                string vm = ModMaturity.VersionAndLabel(mod.Version, maturity);
+                meta = (vm.Length == 0 ? "" : vm + "  ·  ") + RequiredMods.Badge(mod) + (api ? "  ·  " + ModCards.OtherAuthor : "");
+                hint = !string.IsNullOrEmpty(rowHint) ? rowHint : ModMaturity.Describe(mod.Description, mod.Id, maturity);
+                if (_card == null || !string.Equals(_card.ModId, mod.Id, StringComparison.OrdinalIgnoreCase))
+                    _card = new CardInfo { ModId = mod.Id, Seed = mod.Id, Title = name };
+                card = _card;
+            }
+            else if (_spec != null)
+            {
+                int i = ModsScreenModel.IndexOf(list, key);
+                name = i >= 0 ? list[i].Label : _spec.Title;
+                meta = Ask(_spec.Meta, key) ?? "";
+                hint = rowHint ?? Ask(_spec.About, key) ?? "";
+                // a row with a picture (a car, a career) shows it here, big
+                if (!fromList && selected?.Card != null)
+                {
+                    card = selected.Card;
+                    if (!string.IsNullOrEmpty(selected.Label)) name = selected.Label;
+                }
+            }
+            else
+            {
+                int i = ModsScreenModel.IndexOf(list, key);
+                name = i >= 0 ? list[i].Label : "Mods";
+                int n = ModManager.Listed.Count;
+                meta = key == ModsScreenModel.AllKey ? $"{n} mod{(n == 1 ? "" : "s")} installed" : "";
+                hint = rowHint ?? (key == ModsScreenModel.AllKey ? "Switch mods on or off here. It takes effect after you restart the game." : "");
+            }
+            if (RequiredModsPrompt.Active) { name = "Join a server"; card = null; }
+            if (status != null) meta = "<color=" + ModsScreenModel.Yellow + ">" + ModsScreenModel.Plain(status) + "</color>";
+            Set(_name, name);
+            Set(_meta, meta);
+            Set(_hint, hint);
+            ShowPicture(card);
+        }
+
+        private static string Ask(Func<string, string> f, string key)
+        {
+            if (f == null) return null;
+            try { return f(key); }
+            catch (Exception e) { DebugLog.Error("core", e, "GameModsTab.ModDetails.Ask"); return null; }
+        }
+
+        private static void ShowPicture(CardInfo card)
+        {
+            string key = card?.ImageKey;
+            if (key == _shownImage) return;
+            _shownImage = key;
+            Sprite sprite = null;
+            try { sprite = card != null ? ModImages.For(card) : null; }
+            catch (Exception e) { Core.CorePlugin.Logger?.LogDebug("[Core] MODS screen: picture: " + e.Message); }
+            _picture.sprite = sprite;
+            _picture.color = Color.white;
+            _picture.enabled = sprite != null;
+            if (_picture.gameObject.activeSelf != (sprite != null)) _picture.gameObject.SetActive(sprite != null);
+        }
+
+        private static void Set(TMP_Text t, string text)
+        {
+            if (t == null) return;
+            text ??= "";
+            if (t.text != text) t.text = text;
+            bool any = text.Length > 0;
+            if (t.gameObject.activeSelf != any) t.gameObject.SetActive(any);
+        }
+
+        internal static void Destroy()
+        {
+            try { if (_go != null) Object.Destroy(_go); } catch { }
+            _go = null;
+            _rt = null;
+            _picture = null;
+            _pictureLe = null;
+            _name = _meta = _hint = null;
+            _shownImage = null;
+            _card = null;
+        }
     }
 }

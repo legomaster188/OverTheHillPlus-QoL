@@ -34,7 +34,7 @@ public static class CarLiveries
     /// <summary>The id of entry 0, the car's own paint.</summary>
     public const string PaintId = "paint";
     public const string PaintName = "Paint";
-    public const string PaintDescription = "Your own paint and trim colours, set on the MODS page.";
+    public const string PaintDescription = "Just your own paint and trim. Pick them below, or on the MODS page.";
 
     public static bool IsValidId(string id)
     {

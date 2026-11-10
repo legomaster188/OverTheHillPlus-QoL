@@ -78,6 +78,23 @@ internal static class MapMarkers
         Routes[owner] = new Route { From = from, To = to, Color = color };
     }
 
+    /// <summary>
+    /// Where the route of a mod that leads somewhere ends (Race Mode's next checkpoint before any other mod's), for mods that
+    /// only read it (Pace Notes+). False when no mod shows a route.
+    /// </summary>
+    public static bool TryRouteEnd(out string owner, out Vector3 to)
+    {
+        if (Routes.TryGetValue("race", out var race)) { owner = "race"; to = race.To; return true; }
+        foreach (var kv in Routes) { owner = kv.Key; to = kv.Value.To; return true; }
+        owner = null;
+        to = default;
+        return false;
+    }
+
+    /// <summary>The pins a mod shows on the map now, in its order (null when it has none). Read only.</summary>
+    public static IReadOnlyList<Spot> SpotsOf(string owner) =>
+        !string.IsNullOrEmpty(owner) && SpotsByOwner.TryGetValue(owner, out var list) ? list : null;
+
     // ---------------------------------------------------------------- hooks
 
     private static void EnsureInstalled()

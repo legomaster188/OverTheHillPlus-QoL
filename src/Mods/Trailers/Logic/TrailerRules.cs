@@ -175,6 +175,8 @@ public struct DespawnInput
     /// <summary>How long the owner has had no car, seconds.</summary>
     public float NoCarFor;
     public float Height;
+    /// <summary>The owner changing car doesn't take this trailer away (a boat trailer whose boat is out: <see cref="BoatRules.KeepThroughCarChange"/>).</summary>
+    public bool KeepThroughCarChange;
 }
 
 /// <summary>The despawn rules, in order. Pure code (unit-tested).</summary>
@@ -191,8 +193,11 @@ public static class DespawnRules
         if (!i.ModActive) return DespawnReason.ModOff;
         if (i.SceneChanging) return DespawnReason.SceneChanged;
         if (!i.OwnerPresent) return DespawnReason.OwnerLeft;
-        if (i.OwnerCarNow != 0 && i.OwnerCarNow != i.OwnerCarAtSpawn) return DespawnReason.CarChanged;
-        if (i.OwnerCarNow == 0 && i.NoCarFor >= NoCarGrace) return DespawnReason.CarChanged;
+        if (!i.KeepThroughCarChange)
+        {
+            if (i.OwnerCarNow != 0 && i.OwnerCarNow != i.OwnerCarAtSpawn) return DespawnReason.CarChanged;
+            if (i.OwnerCarNow == 0 && i.NoCarFor >= NoCarGrace) return DespawnReason.CarChanged;
+        }
         if (!float.IsFinite(i.Height) || i.Height < FloorY) return DespawnReason.FellOut;
         return DespawnReason.Keep;
     }

@@ -25,7 +25,7 @@ internal sealed class GearboxFeature : IFeature
         });
     }
 
-    private static void KeyRow(string label, BepInEx.Configuration.ConfigEntry<Key> entry)
+    private static void KeyRow(string label, OverTheHillPlus.Config.ConfigEntry<Key> entry)
     {
         var key = entry.Value;
         KeyValue(label, key == Key.None ? "none" : KeybindEditor.KeyName(key));

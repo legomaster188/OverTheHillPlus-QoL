@@ -45,6 +45,9 @@ internal static class LiveryPacksSimple
             string line = pack.Folder + ": " + state + warn;
             SimpleMenu.Button(pack.Folder, $"{pack.Loadable} livery(s)", state + warn, () => Menu.SetStatus(line));
         }
+
+        SimpleMenu.Heading("Also changes the look");
+        SimpleMenu.Links(TuneGroups.LookPages, LiveryPacksPlugin.ModId);
     }
 
     /// <summary>
@@ -55,28 +58,23 @@ internal static class LiveryPacksSimple
     {
         var cars = Api.Cars.Registered;
         if (cars.Count == 0) return;
+        // The skin of each modded car is picked on that car's own page (Looks > Skin): a row here shows which one is on and
+        // opens that page, so the same setting is not listed twice.
         SimpleMenu.Heading("Modded cars");
         foreach (var car in cars)
         {
             var skins = Api.Cars.SkinsFor(car.Id);
             string current = Api.Cars.CurrentSkin(car.Id);
-            var labels = new string[skins.Count + 1];
-            labels[0] = "None";
-            int index = current == null ? 0 : -1;
-            for (int i = 0; i < skins.Count; i++)
+            string shown = "No skin";
+            if (current != null)
             {
-                labels[i + 1] = skins[i].Name;
-                if (current != null && skins[i].Key == current) index = i + 1;
+                shown = "Not found";
+                foreach (var s in skins)
+                    if (s.Key == current) { shown = s.Name; break; }
             }
-            string hint = skins.Count == 0
-                ? $"No skins found for this car: a pack entry with \"car\": \"{car.LiveryCar}\" makes one."
-                : index > 0 ? (skins[index - 1].Source == Api.Cars.SkinSource.Pack ? $"From the pack {skins[index - 1].Pack}." : $"From {skins[index - 1].From}.") +
-                              " A full skin replaces the car's paint; a see-through one sits on it."
-                : $"{skins.Count} skin(s) found (pack entries with \"car\": \"{car.LiveryCar}\").";
             string id = car.Id;
-            SimpleMenu.Choice(car.DisplayName, hint, index, labels,
-                i => Api.Cars.ApplySkin(id, i == 0 ? null : skins[i - 1].Key), skins.Count > 0 || current != null,
-                index < 0 ? "Not found" : null);
+            string hint = $"{skins.Count} skin(s) found (pack entries with \"car\": \"{car.LiveryCar}\"). Pick the skin on the car's page.";
+            SimpleMenu.Button(car.DisplayName, shown, hint, () => ModsPage.Open(id), Core.Manager.ModManager.Find(id) != null);
         }
     }
 

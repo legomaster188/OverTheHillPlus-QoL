@@ -21,6 +21,23 @@ internal sealed class BigLobbyFeature : IFeature
         Registry.OnTick(BigLobby.Tick);
         Registry.Section(Registry.PlusMode, Menu.LobbyTab, DrawLobbySize, CardOrder);
         Registry.Section(Registry.PlusMode, Menu.LobbyTab, DrawStability, CardOrder + 1);
+        // The host settings screen's Players section: the same setting as the Simple row and Create Server's Max Players.
+        ServerSettings.AddHostRow(new ServerSettingRow
+        {
+            Id = "maxplayers", Label = "Max players", Order = 10, ModId = BigLobbiesPlugin.ModId,
+            Options = () => SizeLabels,
+            Selected = () => Math.Clamp(BigLobbiesSimple.LobbySize - 2, 0, SizeLabels.Length - 1),
+            Choose = i => BigLobbiesSimple.SetLobbySize(i + 2),
+        });
+    }
+
+    private static readonly string[] SizeLabels = Sizes();
+
+    private static string[] Sizes()
+    {
+        var l = new string[LobbyRules.MaxPlayers - 1];
+        for (int i = 0; i < l.Length; i++) l[i] = (i + 2).ToString();
+        return l;
     }
 
     // The text typed in "Exact size" and the setting value it stands for: when the setting changes elsewhere (the

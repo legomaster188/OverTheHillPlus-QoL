@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using BepInEx;
+using OverTheHillPlus.Loader;
 using OverTheHillPlus.ServerBrowser;
 using UnityEngine;
 
@@ -36,7 +36,7 @@ internal static class Favourites
     /// <summary>Bumped on every add/remove so cached views (rows, sort) know to refresh.</summary>
     public static int Version { get; private set; }
 
-    private static string FilePath => Path.Combine(Paths.ConfigPath, "OverTheHillPlus.favourites.json");
+    private static string FilePath => Path.Combine(OthLoader.ConfigDir, "OverTheHillPlus.favourites.json");
 
     public static int Count { get { EnsureLoaded(); return _entries.Count; } }
 

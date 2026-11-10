@@ -169,6 +169,8 @@ internal static class Theme
     /// <summary>Solid rounded fill in any color (styles cached per color/radius).</summary>
     public static void Fill(Rect r, Color color, int radius = 4)
     {
+        // In a mod's HUD group, fills are part of the game-style HUD layer.
+        if (HudKit.HudCanvas.FillRounded(r, color, radius)) return;
         var e = Event.current;
         if (e == null || e.type != EventType.Repaint || r.width <= 0f || r.height <= 0f) return;
         // Inside the native-style menu, fills become part of the game-styled canvas (same rect, colour, rounding).

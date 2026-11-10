@@ -161,19 +161,19 @@ internal static class BrowserPlayersPanel
         if (!Visible) { _hovered = null; return; }
         bool panel = ServerPlayersFeature.ShowPanel.Value, tip = ServerPlayersFeature.ShowTooltip.Value;
         if (!panel && !tip) return;
+        if (!UI.HudKit.HudDraw.Repaint) return; // nothing here takes input
+        if (!UI.HudKit.HudDraw.Begin("serverplayers", UI.HudKit.HudLayer.Screen)) return;
         var prevMatrix = GUI.matrix;
         try
         {
             float now = Time.unscaledTime;
-            if (Event.current.type == EventType.Repaint)
-            {
-                UpdateHover(now);
-                if (panel) UpdatePolaroid(now);
-            }
+            UpdateHover(now);
+            if (panel) UpdatePolaroid(now);
             Theme.Ensure();
             EnsureStyles();
             float scale = Mathf.Max(1f, Screen.height / 1080f);
             GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
+            UI.HudKit.HudCanvas.Sync();
             float sw = Screen.width / scale, sh = Screen.height / scale;
 
             if (panel && _polaroid.x >= 0f) DrawPanel(now, scale, sw, sh);
@@ -187,7 +187,11 @@ internal static class BrowserPlayersPanel
                 ServerCreatorPlugin.Logger.LogError("[ServerPlayers] browser panel failed (further errors suppressed): " + e);
             }
         }
-        finally { GUI.matrix = prevMatrix; }
+        finally
+        {
+            GUI.matrix = prevMatrix;
+            UI.HudKit.HudDraw.End();
+        }
     }
 
     private static void DrawPanel(float now, float scale, float sw, float sh)
@@ -217,14 +221,12 @@ internal static class BrowserPlayersPanel
         x = Mathf.Clamp(x, 0f, Mathf.Max(0f, sw - w));
         y = Mathf.Clamp(y, 0f, Mathf.Max(0f, sh - h));
         var r = new Rect(x, y, w, h);
-        Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.9f), 8);
-        Theme.Fill(new Rect(r.x, r.y, 3f, r.height), Theme.Accent, 2);
-        GUI.Label(new Rect(r.x + 12f, r.y + 6f, w - 20f, 20f), header, _header);
+        Shared.WorldOverlay.PanelBox(r, Theme.Accent, UI.HudKit.HudLook.PanelStrong);
+        UI.HudKit.HudDraw.Label(new Rect(r.x + 12f, r.y + 6f, w - 20f, 20f), header, _header);
         float ly = r.y + 28f;
         foreach (var (text, muted) in lines)
         {
-            _line.normal.textColor = muted ? Theme.Muted : Theme.Text;
-            GUI.Label(new Rect(r.x + 12f, ly, w - 20f, lineH), text, _line);
+            UI.HudKit.HudDraw.Label(new Rect(r.x + 12f, ly, w - 20f, lineH), text, _line, muted ? Theme.Muted : Theme.Text);
             ly += lineH;
         }
     }
@@ -247,13 +249,12 @@ internal static class BrowserPlayersPanel
         x = Mathf.Clamp(x, 0f, Mathf.Max(0f, sw - w));
         y = Mathf.Clamp(y, 0f, Mathf.Max(0f, sh - h));
         var r = new Rect(x, y, w, h);
-        Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.95f), 6);
-        GUI.Label(new Rect(r.x + 10f, r.y + 4f, w - 16f, 18f), header, _header);
+        Theme.Fill(r, new Color(0f, 0f, 0f, 0.8f), HudLayout.PanelRadius);
+        UI.HudKit.HudDraw.Label(new Rect(r.x + 10f, r.y + 4f, w - 16f, 18f), header, _header);
         float ly = r.y + 24f;
         foreach (var (text, muted) in lines)
         {
-            _tip.normal.textColor = muted ? Theme.Muted : Theme.Text;
-            GUI.Label(new Rect(r.x + 10f, ly, w - 16f, lineH), text, _tip);
+            UI.HudKit.HudDraw.Label(new Rect(r.x + 10f, ly, w - 16f, lineH), text, _tip, muted ? Theme.Muted : Theme.Text);
             ly += lineH;
         }
     }

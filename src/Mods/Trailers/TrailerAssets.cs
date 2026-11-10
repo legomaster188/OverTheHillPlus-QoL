@@ -18,9 +18,21 @@ internal sealed class TrailerModel
     /// hauler's wheel chock; null on a model without them.</summary>
     public Mesh Coupler, Chock;
     public readonly List<Mesh> Colliders = new();
+    /// <summary>The collider parts' names, in the order of <see cref="Colliders"/>.</summary>
+    public readonly List<string> ColliderNames = new();
     /// <summary>Wheel anchors in axle order (wheel_L1, wheel_R1, ...).</summary>
     public List<MeshAnchor> Wheels;
     public float WheelRadius;
+
+    /// <summary>The landing gear (a semi-trailer's), drawn as its own node; null on a model without it.</summary>
+    public Mesh Gear;
+    /// <summary>The boat trailer's own boat (its runabout), drawn as its own node so it can come off; null on the others.</summary>
+    public Mesh Load;
+    /// <summary>The material of a trailer with its own texture (null: the shared one).</summary>
+    public Material Material;
+
+    /// <summary>Where the trailer hitches, trailer space: the coupler's ball socket, or a semi-trailer's kingpin.</summary>
+    public Vector3 HitchPoint => Anchor(TrailerSpecs.HitchAnchor(Spec), Vector3.zero);
 
     public Vector3 Anchor(string name, Vector3 fallback)
     {
@@ -60,6 +72,11 @@ internal static class TrailerAssets
             Models[spec.Kind] = m;
         }
         if (Read(TextureFile) == null) return $"its texture {TextureFile} is not in the DLL";
+        foreach (var spec in TrailerSpecs.All)
+        {
+            if (spec.Texture != null && Read(spec.Texture) == null) return $"its texture {spec.Texture} is not in the DLL";
+            if (spec.Occlusion != null && Read(spec.Occlusion) == null) return $"its texture {spec.Occlusion} is not in the DLL";
+        }
         DebugLog.Info(TrailersPlugin.ModId, $"{Models.Count} trailer models read and checked from the DLL");
         return null;
     }
@@ -86,20 +103,42 @@ internal static class TrailerAssets
     {
         if (m.Body != null) return;
         var name = "Trailer_" + m.Spec.Kind;
-        m.Body = BuildMesh(name + "_Body", m.Blob.PartsOf(MeshPartKind.Body), false);
+        // a model's body LODs (body_lod1, body_lod2) are of kind Body too: the full body only
+        var bodyParts = m.Blob.PartsOf(MeshPartKind.Body);
+        bodyParts.RemoveAll(p => p.Name.Contains("_lod", StringComparison.Ordinal));
+        m.Body = BuildMesh(name + "_Body", bodyParts, false);
         var wheelParts = m.Blob.PartsOf(MeshPartKind.Wheel);
         wheelParts.AddRange(m.Blob.PartsOf(MeshPartKind.Tyre));
         m.Wheel = BuildMesh(name + "_Wheel", wheelParts, true);
         foreach (var c in m.Blob.PartsOf(MeshPartKind.Collider))
+        {
             m.Colliders.Add(BuildMesh(name + "_" + c.Name, new List<MeshPart> { c }, false));
+            m.ColliderNames.Add(c.Name);
+        }
+        var load = m.Blob.Part(LoadPart);
+        if (load != null) m.Load = BuildMesh(name + "_Load", new List<MeshPart> { load }, false);
         var coupler = m.Blob.Part(CouplerPart);
         if (coupler != null) m.Coupler = BuildMesh(name + "_Coupler", new List<MeshPart> { coupler }, false);
+        var gear = m.Blob.Part(GearPart);
+        if (gear != null) m.Gear = BuildMesh(name + "_Gear", new List<MeshPart> { gear }, false);
         var chock = m.Blob.Part(ChockPart);
         if (chock != null) m.Chock = BuildMesh(name + "_Chock", new List<MeshPart> { chock }, false);
     }
 
     /// <summary>Extra parts' names in a trailer blob (kind Other).</summary>
-    public const string CouplerPart = "coupler", ChockPart = "chock";
+    public const string CouplerPart = "coupler", ChockPart = "chock", GearPart = "gear", LoadPart = "load";
+    /// <summary>The collider part that goes with the load (the boat's hull on the boat trailer).</summary>
+    public const string LoadColliderPart = "collider_load";
+
+    private static readonly Dictionary<string, Texture2D> Own = new();
+
+    /// <summary>A trailer's own texture (albedo, or its baked occlusion when <paramref name="linear"/>), made once.</summary>
+    public static Texture2D OwnTexture(string file, bool linear)
+    {
+        if (file == null) return null;
+        if (Own.TryGetValue(file, out var t) && t != null) return t;
+        return Own[file] = Texture(file, linear);
+    }
 
     public static Texture2D Albedo => _albedo ??= Texture(TextureFile);
 
@@ -120,10 +159,10 @@ internal static class TrailerAssets
         }
     }
 
-    private static Texture2D Texture(string name)
+    private static Texture2D Texture(string name, bool linear = false)
     {
         var bytes = Read(name) ?? throw new InvalidOperationException($"{name} is missing");
-        var t = new Texture2D(2, 2, TextureFormat.RGBA32, true, false) { name = "Trailer_" + Path.GetFileNameWithoutExtension(name) };
+        var t = new Texture2D(2, 2, TextureFormat.RGBA32, true, linear) { name = "Trailer_" + Path.GetFileNameWithoutExtension(name) };
         if (!ImageConversion.LoadImage(t, new Il2CppStructArray<byte>(bytes), true))
             throw new InvalidOperationException($"{name} is not a readable PNG");
         t.wrapMode = TextureWrapMode.Clamp;
@@ -139,22 +178,21 @@ internal static class TrailerAssets
     {
         int nv = 0, ni = 0;
         foreach (var p in parts) { nv += p.VertexCount; ni += p.Indices.Length; }
-        var verts = new Il2CppStructArray<Vector3>(nv);
-        var norms = new Il2CppStructArray<Vector3>(nv);
-        var uvs = new Il2CppStructArray<Vector2>(nv);
-        var tris = new Il2CppStructArray<int>(ni);
+        var verts = new Vector3[nv];
+        var norms = new Vector3[nv];
+        var uvs = new Vector2[nv];
+        var tris = new int[ni];
         int vo = 0, io = 0;
+        // Plain floats straight into the arrays: Unity's vector and matrix calls cost a trip into the game per vertex here.
+        var vf = System.Runtime.InteropServices.MemoryMarshal.Cast<Vector3, float>(verts.AsSpan());
+        var nf = System.Runtime.InteropServices.MemoryMarshal.Cast<Vector3, float>(norms.AsSpan());
+        var uf = System.Runtime.InteropServices.MemoryMarshal.Cast<Vector2, float>(uvs.AsSpan());
         foreach (var p in parts)
         {
             var m = Matrix4x4.TRS(hubFrame ? Vector3.zero : V(p.Position),
                                   new Quaternion(p.Rotation.X, p.Rotation.Y, p.Rotation.Z, p.Rotation.W), V(p.Scale));
-            for (int i = 0; i < p.VertexCount; i++)
-            {
-                verts[vo + i] = m.MultiplyPoint3x4(new Vector3(p.Positions[i * 3], p.Positions[i * 3 + 1], p.Positions[i * 3 + 2]));
-                var n = m.MultiplyVector(new Vector3(p.Normals[i * 3], p.Normals[i * 3 + 1], p.Normals[i * 3 + 2]));
-                norms[vo + i] = n.sqrMagnitude > 1e-12f ? n.normalized : Vector3.up;
-                uvs[vo + i] = new Vector2(p.Uv0[i * 2], p.Uv0[i * 2 + 1]);
-            }
+            MeshMath.Transform(CarAssets.Rows(m), p.Positions, p.Normals, p.VertexCount, vf.Slice(vo * 3), nf.Slice(vo * 3));
+            p.Uv0.AsSpan(0, p.VertexCount * 2).CopyTo(uf.Slice(vo * 2));
             for (int i = 0; i < p.Indices.Length; i++) tris[io + i] = p.Indices[i] + vo;
             vo += p.VertexCount;
             io += p.Indices.Length;

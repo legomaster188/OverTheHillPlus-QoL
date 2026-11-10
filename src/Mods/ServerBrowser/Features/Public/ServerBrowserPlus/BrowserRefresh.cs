@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using HarmonyLib;
 using OverTheHillPlus.ServerBrowser;
 using UnityEngine;

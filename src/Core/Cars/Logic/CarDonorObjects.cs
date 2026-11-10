@@ -174,6 +174,9 @@ public sealed class CarBodyBox
 {
     public MeshVec3 Center, Size;
     public CarBodyBox(MeshVec3 center, MeshVec3 size) { Center = center; Size = size; }
+    /// <summary>The name of the box's node under the car's Collider node (the nth box of the definition).</summary>
+    public static string NodeName(int index) => NodePrefix + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    public const string NodePrefix = "OTHP_body_box_";
     public float MinY => Center.Y - Size.Y * 0.5f;
     public float MinZ => Center.Z - Size.Z * 0.5f;
     public float MaxZ => Center.Z + Size.Z * 0.5f;

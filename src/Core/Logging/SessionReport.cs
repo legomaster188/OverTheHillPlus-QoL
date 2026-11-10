@@ -6,9 +6,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
-using BepInEx;
-using BepInEx.Unity.IL2CPP;
 using UnityEngine;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Logging;
 
@@ -35,7 +34,7 @@ internal static class SessionReport
             _header = BuildHeader(out string summary);
             DebugLog.Write("HEAD", "core", "=== session header ===\n" + _header + "\n=== end of header ===");
             Core.CorePlugin.Logger?.LogInfo("[Debug] " + summary + $"; debug log: {DebugLog.FilePath ?? "off"} (level {DebugLog.Level}, " +
-                                            "[Debug] Level in BepInEx/config/oth.core.cfg)");
+                                            "[Debug] Level in " + LoaderText.ConfigDir + "/oth.core.cfg)");
         }
         catch (Exception e) { Core.CorePlugin.Logger?.LogWarning("[Debug] session header: " + e.Message); }
         try { ConfigLog.SnapshotAll(); } catch (Exception e) { DebugLog.Error("core", e, "SessionReport.FirstFrame config"); }
@@ -65,12 +64,11 @@ internal static class SessionReport
         var sb = new StringBuilder(2048);
         string game = Safe(() => Application.productName) + " " + Safe(() => Application.version);
         string unity = Safe(() => Application.unityVersion);
-        string bepinex = Safe(() => typeof(Paths).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-                                    ?? typeof(Paths).Assembly.GetName().Version?.ToString());
+        string bepinex = Safe(() => OthLoader.Version);
         string gpu = Safe(() => $"{SystemInfo.graphicsDeviceName} ({SystemInfo.graphicsDeviceType}, {SystemInfo.graphicsMemorySize} MB, {SystemInfo.graphicsDeviceVersion})");
         sb.Append("started: ").Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).Append(" local, ").Append(DateTime.UtcNow.ToString("HH:mm:ss")).Append(" UTC\n");
         sb.Append("game: ").Append(game).Append(", Unity ").Append(unity).Append('\n');
-        sb.Append("BepInEx: ").Append(bepinex).Append(", .NET ").Append(Environment.Version).Append('\n');
+        sb.Append(OthLoader.Name).Append(": ").Append(bepinex).Append(", .NET ").Append(Environment.Version).Append('\n');
         sb.Append("OS: ").Append(Safe(() => RuntimeInformation.OSDescription)).Append(" (").Append(Safe(() => SystemInfo.operatingSystem)).Append(")\n");
         sb.Append("CPU: ").Append(Safe(() => $"{SystemInfo.processorType}, {SystemInfo.processorCount} threads; RAM {SystemInfo.systemMemorySize} MB")).Append('\n');
         sb.Append("GPU: ").Append(gpu).Append('\n');
@@ -94,18 +92,18 @@ internal static class SessionReport
         int others = 0;
         try
         {
-            foreach (var kv in IL2CPPChainloader.Instance.Plugins)
+            foreach (var kv in OthLoader.Plugins)
             {
-                var meta = kv.Value?.Metadata;
-                if (meta == null || meta.GUID.StartsWith("com.oth.", StringComparison.OrdinalIgnoreCase)) continue;
+                var meta = kv.Value;
+                if (meta?.Guid == null || meta.Guid.StartsWith("com.oth.", StringComparison.OrdinalIgnoreCase)) continue;
                 others++;
-                string version = Safe(() => meta.GetType().GetProperty("Version")?.GetValue(meta)?.ToString());
-                sb.Append("  ").Append(meta.GUID).Append(" (").Append(meta.Name).Append(") ").Append(version).Append('\n');
+                string version = meta.Version;
+                sb.Append("  ").Append(meta.Guid).Append(" (").Append(meta.Name).Append(") ").Append(version).Append('\n');
             }
         }
         catch { }
         if (others == 0) sb.Append("  (none)\n");
-        summary = $"session: {game}, Unity {unity}, BepInEx {bepinex}, GPU {Safe(() => SystemInfo.graphicsDeviceName)}; {on} of {total} mods on, {others} other plugins";
+        summary = $"session: {game}, Unity {unity}, {OthLoader.Name} {bepinex}, GPU {Safe(() => SystemInfo.graphicsDeviceName)}; {on} of {total} mods on, {others} other plugins";
         return sb.ToString().TrimEnd('\n');
     }
 }
@@ -145,7 +143,7 @@ internal static class CrashReports
     {
         try
         {
-            string dir = Path.Combine(Paths.BepInExRootPath, "oth-debug");
+            string dir = Path.Combine(OthLoader.DataDir, "oth-debug");
             if (!Directory.Exists(dir)) { parts.NotesMissing = "(no debug log: [Debug] Level was Off)"; return; }
             var files = new List<string>(Directory.GetFiles(dir, "*" + LogFiles.DebugExt));
             files.Sort((a, b) => string.CompareOrdinal(Path.GetFileName(b), Path.GetFileName(a)));
@@ -199,7 +197,7 @@ internal static class CrashReports
         {
             ReadDebugLog(parts);
             parts.WindowsEvents = events ? WindowsEvents(parts.EndedUtc, exe) : "(not read: [Debug] WindowsEvents = false)";
-            string dir = Path.Combine(Paths.BepInExRootPath, "oth-reports");
+            string dir = Path.Combine(OthLoader.DataDir, "oth-reports");
             Directory.CreateDirectory(dir);
             var names = new List<string>();
             foreach (var f in Directory.GetFiles(dir, LogFiles.CrashPrefix + "*" + LogFiles.CrashExt)) names.Add(Path.GetFileName(f));

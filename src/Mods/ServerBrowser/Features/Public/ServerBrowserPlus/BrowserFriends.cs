@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using HarmonyLib;
 using OverTheHillPlus.Features.Public.ServerPlayers;
 using OverTheHillPlus.ServerBrowser;

@@ -1,9 +1,17 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Shared;
 using UnityEngine;
+#if MELON
+using ItemType = Il2Cpp.InventoryItemScriptableObject.ItemType;
+#else
 using ItemType = InventoryItemScriptableObject.ItemType;
+#endif
 using Object = UnityEngine.Object;
 
 namespace OverTheHillPlus.Cars;
@@ -249,12 +257,12 @@ internal sealed class CarLiveryParts
     public int Mounted(VehicleCustomizationController vcc)
     {
         if (_entries.Count < 2 || vcc == null) return 0;
-        BitSet256 bits;
-        try { bits = vcc.EnabledUpgrades; }
+        ulong[] words;
+        try { words = UpgradeBits.OnCar(vcc); }
         catch (Exception ex) { DebugLog.Error(_car.Id, ex, "CarLiveryParts.Mounted"); return 0; }
         var b = new int[_entries.Count];
         foreach (var e in _entries) b[e.Index] = e.Bit;
-        return CarLiveries.MountedEntry(b, i => bits.IsSet(i));
+        return CarLiveries.MountedEntry(b, i => UpgradeWords.IsSet(words, i));
     }
 
     /// <summary>The entry of a Livery part, or -1 when it isn't one of this car's.</summary>

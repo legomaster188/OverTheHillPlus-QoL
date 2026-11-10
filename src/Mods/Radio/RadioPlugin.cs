@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Radio;
@@ -14,9 +16,13 @@ using OverTheHillPlus.Core.Manager;
 /// station) through the game's audio, with keys for next / previous track and station and the volume, a "now
 /// playing" notice, and turning itself down while the game's own music plays. Only you hear it.
 /// </summary>
+#if MELON
+public class RadioPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class RadioPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.radio";
     public const string Name = "Radio+";
@@ -25,7 +31,7 @@ public class RadioPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.radio.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "radio";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()
@@ -37,7 +43,7 @@ public class RadioPlugin : BasePlugin
             Id = ModId,
             Side = ModSide.Client,
             Name = Name,
-            Description = "Plays your own mp3, ogg and wav files while you drive, from BepInEx/config/oth.radio (each " +
+            Description = "Plays your own mp3, ogg and wav files while you drive, from " + OverTheHillPlus.Loader.LoaderText.ConfigDir + "/oth.radio (each " +
                           "sub-folder is a station). Keys for track, station and volume, a \"now playing\" notice, and " +
                           "it turns down while the game's music plays. Only you hear it.",
             Version = Version,

@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+#if MELON
+using Il2CppDistantLands.Cozy;
+#else
 using DistantLands.Cozy;
+#endif
 using UnityEngine;
 
 namespace OverTheHillPlus.Features.Public.Graphics.Water;
@@ -42,7 +46,8 @@ internal static class WeatherParticles
 
     private static readonly Dictionary<IntPtr, Fx> Fxs = new();
     private static readonly Dictionary<IntPtr, Ps> Systems = new();
-    private static float _nextScan;
+    private static float _nextApply;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer ScanPace = WorldScan.Pace("weather particles", 2.5f);
     private static int _applied = -1;
     private static bool _active;
 
@@ -68,10 +73,10 @@ internal static class WeatherParticles
         _active = true;
 
         float now = Time.unscaledTime;
-        if (now >= _nextScan)
+        if (WorldScan.Due(ScanPace, now)) Scan();
+        if (now >= _nextApply)
         {
-            _nextScan = now + 2.5f;
-            Scan();
+            _nextApply = now + 2.5f;
             ApplySystems();
         }
         // re-apply right away (debounced) when a slider moves
@@ -111,6 +116,8 @@ internal static class WeatherParticles
         if (!WaterCfg.WeatherOn.Value || __instance == null) return;
         try
         {
+            // The weather made or woke an effect: a look at what it brought.
+            if (!Fxs.ContainsKey(__instance.Pointer)) ScanPace.Again();
             var fx = Get(__instance);
             fx.LastWeight = weight;
             fx.Played = true;
@@ -124,6 +131,8 @@ internal static class WeatherParticles
         if (!WaterCfg.WeatherOn.Value || __instance == null) return;
         try
         {
+            // The weather made or woke an effect: a look at what it brought.
+            if (!Fxs.ContainsKey(__instance.Pointer)) ScanPace.Again();
             var fx = Get(__instance);
             fx.LastWeight = -1f;
             fx.Played = true;
@@ -340,6 +349,7 @@ internal static class WeatherParticles
         Fxs.Clear();
         _active = false;
         _applied = -1;
-        _nextScan = 0f;
+        ScanPace.Again();
+        _nextApply = 0f;
     }
 }

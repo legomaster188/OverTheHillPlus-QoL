@@ -1,0 +1,36 @@
+{
+  "id": "spare_carrier",
+  "name": "Swing-Out Spare Carrier",
+  "cosmeticType": "RearSection",
+  "slot": "Visual/Rear",
+  "price": 18,
+  "paintable": true,
+  "fits": {
+    "Aro": {
+      "pos": [
+        0.0,
+        0.44,
+        -2.049
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Bastion": {
+      "pos": [
+        0.0,
+        0.58,
+        -2.508
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    }
+  }
+}

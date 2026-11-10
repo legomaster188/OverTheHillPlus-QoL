@@ -1,6 +1,7 @@
 using System;
 using OverTheHillPlus.UI;
 using OverTheHillPlus.UI.GameMenu;
+using OverTheHillPlus.UI.HudKit;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -13,7 +14,7 @@ namespace OverTheHillPlus.Stacking;
 /// screen, else the row around the submit hint, SubmitButtonText), placed next to it, without its key icon and
 /// navigation, with our text (its FunTextTMP is registered with core's FunTexts so the game's localization never writes
 /// over it). Shown only while the cosmetics screen is the open one. When no row can be copied, a plain shadowed label
-/// is drawn at the bottom of the screen instead (GUI.Label only).
+/// is drawn at the bottom of the screen instead.
 /// </summary>
 internal static class StackHint
 {
@@ -182,10 +183,15 @@ internal static class StackHint
     }
 
     /// <summary>The stand-in label (IMGUI, Repaint only).</summary>
+    /// <summary>False while <see cref="Gui"/> has no line to show (pure managed read).</summary>
+    internal static bool GuiWanted() => _drawGui;
+
     internal static void Gui()
     {
-        if (!_drawGui || Event.current == null || Event.current.type != EventType.Repaint) return;
-        try { OverlayDraw.Label(Screen.width * 0.5f, Screen.height - 46f, Text(), 17, Theme.Text); }
+        if (!_drawGui || !HudDraw.Repaint) return;
+        if (!HudDraw.Begin(Mod, HudLayer.Screen)) return;
+        try { OverlayDraw.Label(Screen.width * 0.5f, Screen.height - 46f, Text(), 17, HudLook.Cream); }
         catch (Exception e) { DebugLog.Error(Mod, e, "StackHint.Gui"); _drawGui = false; }
+        finally { HudDraw.End(); }
     }
 }

@@ -1,5 +1,9 @@
 using System;
+#if MELON
+using Il2CppFunCore.Managers;
+#else
 using FunCore.Managers;
+#endif
 using HarmonyLib;
 using Il2CppInterop.Runtime;
 using OverTheHillPlus.Features.Public.ServerBrowserPlus;
@@ -213,6 +217,27 @@ internal static class RejoinCore
         EnterSeeking();
     }
 
+    /// <summary>
+    /// Joins a server from "Players with the mod" (core's ModPlayers) through the same path as a rejoin: find it in its
+    /// region's list by session name or room code, then the game's own JoinSession. Null when it started, else why not.
+    /// </summary>
+    internal static string JoinListed(OverTheHillPlus.Core.Shared.ModPlayers.Player p)
+    {
+        if (p == null || !p.Joinable) return "That player's server can't be joined from here.";
+        if (AnySession(out _)) return "Leave your current session first.";
+        if (Active) return "A join is already on its way.";
+        var e = new LastServerStore.Entry
+        {
+            SessionName = p.Session.Length > 0 ? p.Session : p.Code,
+            DisplayName = p.Server.Length > 0 ? p.Server : p.Name,
+            Region = p.Region.Length > 0 ? p.Region : null,
+            RoomCode = LastServerStore.NormaliseCode(p.Code),
+            Private = false,
+        };
+        StartManual(e);
+        return Active ? null : "Couldn't start the join.";
+    }
+
     // ---------------------------------------------------------------- after a restart for a server's mods
 
     private const long RejoinAfterRestartSeconds = 30 * 60;
@@ -224,7 +249,7 @@ internal static class RejoinCore
 
     /// <summary>
     /// Once per start: when the join prompt of a server that needs mods saved it as the pending join (PendingJoinStore,
-    /// at most 30 minutes ago), join it as soon as the main menu has been up for a moment. The file is used once.
+    /// at most 30 minutes ago), join it once the main menu has been up for a moment and the added cars are registered (at most 2 minutes). The file is used once.
     /// </summary>
     private static void StepRejoinAfterRestart(float now)
     {
@@ -245,6 +270,8 @@ internal static class RejoinCore
         if (!Is<StateMainMenu>(TopState())) { _afterRestartMenuSince = -1f; return; }
         if (_afterRestartMenuSince < 0f) _afterRestartMenuSince = now;
         if (now - _afterRestartMenuSince < 2f) return;
+        // The join marker lists the cars the game has registered so far; a join sent before they are all in can be refused.
+        if (Core.Shared.NetPrefabRegistry.AnyPending && now - _afterRestartMenuSince < 120f) return;
         _afterRestartDone = true;
         PendingJoinStore.Clear();
         ServerBrowserPlugin.Logger.LogInfo($"[Rejoin] joining '{Name(target)}' after the restart for its mods");

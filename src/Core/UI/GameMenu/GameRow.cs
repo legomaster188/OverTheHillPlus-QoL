@@ -1,8 +1,16 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFunCore.Style;
+#else
 using FunCore.Style;
+#endif
 using Il2CppInterop.Runtime;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -68,6 +76,23 @@ internal sealed class GameRow
     private string[] _options;
     private int _carouselIndex = -1;
     private float _gameMin, _gameMax = 1f;
+    // A slider's own range, kept while a stepped model (RowModel.Step) puts it on whole positions.
+    private float _origMin, _origMax = 1f;
+    private bool _origWhole, _stepped;
+
+    // A swatch strip: for each colour its frame (cream when it is the marked one) and its face.
+    private readonly List<Image> _swatchFrames = new(), _swatchFaces = new();
+    private readonly List<GameObject> _swatchCells = new();
+    private int _swatchMark = -2;
+    private string _swatchColours = "";
+    private bool _swatchEnabled = true;
+
+    private const float SwatchSize = 30f, SwatchGap = 8f, SwatchInset = 4f;
+    private static readonly Color HeadingGrey = new(1f, 0.976f, 0.933f, 0.5f);
+    private static readonly Color SwatchMarked = new(1f, 0.976f, 0.933f, 1f); // the game's cream text colour #FFF9EE
+
+    /// <summary>Set when the swatch strip could not be built: swatch rows then show as a line of colour blocks.</summary>
+    internal static bool SwatchStripBroken;
     private bool _suppress;
     private float _baseSize = -1f;
 
@@ -94,9 +119,13 @@ internal sealed class GameRow
                 Text = LabelOf(go);
                 if (_bar != null)
                 {
-                    _gameMin = _bar.minValue;
-                    _gameMax = _bar.maxValue;
+                    _gameMin = _origMin = _bar.minValue;
+                    _gameMax = _origMax = _bar.maxValue;
+                    _origWhole = _bar.wholeNumbers;
                 }
+                break;
+            case WidgetKind.Swatches:
+                Selectable = null;
                 break;
             case WidgetKind.Button:
                 Text = go.GetComponentInChildren<TMP_Text>(true);
@@ -144,9 +173,10 @@ internal sealed class GameRow
     };
 
     /// <summary>Clones the game's widget for <paramref name="kind"/> onto <paramref name="parent"/> (null when the template is missing).</summary>
-    internal static GameRow Create(WidgetKind kind, Transform parent)
+    internal static GameRow Create(WidgetKind kind, Transform parent, GameObject templateOverride = null)
     {
-        var template = TemplateFor(kind);
+        if (kind == WidgetKind.Swatches) return CreateSwatches(parent);
+        var template = templateOverride != null ? templateOverride : TemplateFor(kind);
         var holder = GamePrefabs.Holder;
         if (template == null || holder == null || parent == null) return null;
         GameObject go;
@@ -195,6 +225,103 @@ internal sealed class GameRow
     }
 
     /// <summary>
+    /// A swatch strip: a row of small squares of plain UI parts (no template of the game is cloned), as tall as it needs and
+    /// not selectable. The squares are added by <see cref="Bind"/> as the colours need them. Null (and
+    /// <see cref="SwatchStripBroken"/>) when it could not be made: the page then shows the colours as a line of text blocks.
+    /// </summary>
+    private static GameRow CreateSwatches(Transform parent)
+    {
+        try
+        {
+            if (parent == null) return null;
+            var go = new GameObject("OTH_Row_Swatches");
+            var rt = go.AddComponent<RectTransform>();
+            rt.SetParent(parent, false);
+            var h = go.AddComponent<HorizontalLayoutGroup>();
+            h.childControlWidth = true;
+            h.childControlHeight = true;
+            h.childForceExpandWidth = false;
+            h.childForceExpandHeight = false;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.spacing = SwatchGap - SwatchInset * 0.5f;
+            h.padding = new RectOffset(16, 8, 0, 4);
+            var le = go.AddComponent<LayoutElement>();
+            le.preferredHeight = le.minHeight = SwatchSize + SwatchInset + 4f;
+            le.flexibleHeight = 0f;
+            var row = new GameRow(WidgetKind.Swatches, go);
+            row.Hook();
+            return row;
+        }
+        catch (Exception e)
+        {
+            SwatchStripBroken = true;
+            Core.CorePlugin.Logger?.LogWarning("[Core] MODS pages: the colour swatch strip could not be made, colours show as text: " + e.Message);
+            return null;
+        }
+    }
+
+    private void AddSwatch(int i)
+    {
+        var cell = new GameObject("OTH_Swatch" + i);
+        var crt = cell.AddComponent<RectTransform>();
+        crt.SetParent(Go.transform, false);
+        var frame = cell.AddComponent<Image>(); // the mark: cream round the marked colour, else see-through (still takes the click)
+        var le = cell.AddComponent<LayoutElement>();
+        le.preferredWidth = le.minWidth = SwatchSize + SwatchInset;
+        le.preferredHeight = le.minHeight = SwatchSize + SwatchInset;
+
+        var face = new GameObject("Face");
+        var frt = face.AddComponent<RectTransform>();
+        frt.SetParent(crt, false);
+        frt.anchorMin = Vector2.zero;
+        frt.anchorMax = Vector2.one;
+        frt.offsetMin = new Vector2(SwatchInset * 0.5f, SwatchInset * 0.5f);
+        frt.offsetMax = new Vector2(-SwatchInset * 0.5f, -SwatchInset * 0.5f);
+        var faceImage = face.AddComponent<Image>();
+        faceImage.raycastTarget = false;
+
+        var button = cell.AddComponent<Button>();
+        button.targetGraphic = frame;
+        button.transition = UnityEngine.UI.Selectable.Transition.None;
+        var nav = button.navigation;
+        nav.mode = Navigation.Mode.None; // the choice row above is what the keyboard / gamepad use; a click never takes the selection
+        button.navigation = nav;
+        int index = i;
+        button.onClick.AddListener(DelegateSupport.ConvertDelegate<UnityEngine.Events.UnityAction>(new Action(() => Send(RowInput.Picked(index)))));
+
+        _swatchCells.Add(cell);
+        _swatchFrames.Add(frame);
+        _swatchFaces.Add(faceImage);
+    }
+
+    private void BindSwatches(RowModel m)
+    {
+        var colors = m.Colors ?? Array.Empty<int>();
+        while (_swatchCells.Count < colors.Length) AddSwatch(_swatchCells.Count);
+        string key = string.Join(",", colors);
+        bool changed = key != _swatchColours || m.Index != _swatchMark || m.Enabled != _swatchEnabled;
+        if (!changed) return;
+        _swatchColours = key;
+        _swatchMark = m.Index;
+        _swatchEnabled = m.Enabled;
+        for (int i = 0; i < _swatchCells.Count; i++)
+        {
+            bool used = i < colors.Length;
+            if (_swatchCells[i].activeSelf != used) _swatchCells[i].SetActive(used);
+            if (!used) continue;
+            var face = FromRgb(colors[i] & 0xFFFFFF);
+            if (!m.Enabled) face.a = 0.35f;
+            _swatchFaces[i].color = face;
+            var mark = SwatchMarked;
+            if (i != m.Index) mark.a = 0f;
+            else if (!m.Enabled) mark.a = 0.35f;
+            _swatchFrames[i].color = mark;
+            var button = _swatchCells[i].GetComponent<Button>();
+            if (button != null && button.interactable != m.Enabled) button.interactable = m.Enabled;
+        }
+    }
+
+    /// <summary>
     /// A text row: the settings rows' label on the left and a copy of the browser's search field on the right, side by
     /// side in a row as tall as the option rows.
     /// </summary>
@@ -230,7 +357,7 @@ internal sealed class GameRow
     }
 
     /// <summary>Localization components removed, the FunTextTMP clones registered with FunTexts (our texts stay), sizes left to our layout, text lines set up to wrap.</summary>
-    private static void Prepare(GameObject go, WidgetKind kind)
+    internal static void Prepare(GameObject go, WidgetKind kind)
     {
         foreach (var c in go.GetComponentsInChildren<Component>(true))
         {
@@ -353,7 +480,11 @@ internal sealed class GameRow
     private void SliderChanged()
     {
         if (_suppress || _bar == null || Model == null) return;
-        Send(RowInput.Slid(RowMap.FromGame(_bar.value, Model.Min, Model.Max, _gameMin, _gameMax)));
+        // A stepped slider sits on whole positions: the position the bar shows is the value (the end is the exact maximum).
+        float value = _stepped && Model.Step > 0f
+            ? RowMap.ValueAt(Mathf.RoundToInt(_bar.value), Model.Min, Model.Max, Model.Step)
+            : RowMap.FromGame(_bar.value, Model.Min, Model.Max, _gameMin, _gameMax);
+        Send(RowInput.Slid(value));
     }
 
     /// <summary>Enter / A / a click on an option row (from the UISelector patch).</summary>
@@ -377,6 +508,7 @@ internal sealed class GameRow
             case WidgetKind.Button: SetText(Text, RowMap.ButtonText(m)); break;
             case WidgetKind.TextField: BindField(m); break;
             case WidgetKind.Card: BindCard(m); break;
+            case WidgetKind.Swatches: BindSwatches(m); break;
             case WidgetKind.Heading: BindLine(m, true); break;
             default: BindLine(m, false); break;
         }
@@ -638,8 +770,26 @@ internal sealed class GameRow
     private void BindSlider(RowModel m)
     {
         SetText(Text, m.Label);
+        // Stepped: whole positions 0..n on the game's slider (arrows and the mouse move one step at a time); else its own range.
+        bool stepped = m.Step > 0f;
+        float want = stepped ? RowMap.Positions(m.Min, m.Max, m.Step) - 1 : _origMax;
+        if (stepped != _stepped || stepped && Mathf.Abs(_gameMax - want) > 0.01f)
+        {
+            _suppress = true;
+            try
+            {
+                _bar.wholeNumbers = stepped || _origWhole;
+                _bar.minValue = stepped ? 0f : _origMin;
+                _bar.maxValue = want;
+            }
+            finally { _suppress = false; }
+            _gameMin = stepped ? 0f : _origMin;
+            _gameMax = want;
+            _stepped = stepped;
+        }
+        // After the range change: the game's own handler may have written its text meanwhile.
         if (_sliderValue != null) SetText(_sliderValue, m.Value ?? "");
-        float g = RowMap.ToGame(m.Number, m.Min, m.Max, _gameMin, _gameMax);
+        float g = stepped ? RowMap.PositionOf(m.Number, m.Min, m.Max, m.Step) : RowMap.ToGame(m.Number, m.Min, m.Max, _gameMin, _gameMax);
         if (Mathf.Abs(_bar.value - g) > Mathf.Abs(_gameMax - _gameMin) * 0.002f)
         {
             _suppress = true;
@@ -668,14 +818,17 @@ internal sealed class GameRow
         if (Text == null) return;
         if (_baseSize < 0f) _baseSize = Mathf.Max(12f, Text.fontSize);
         string text = heading ? (m.Label ?? "").ToUpperInvariant() : RowMap.LineText(m);
-        Color color = heading ? SimpleMenu.Yellow
+        // A section title is small, grey and upper case (the game keeps its yellow for the selected row); text lines are cream.
+        Color color = heading ? HeadingGrey
             : m.Kind == RowKind.Banner ? FromRgb(m.Color)
-            : m.Kind == RowKind.KeyValue ? new Color(1f, 1f, 1f, 0.75f)
-            : new Color(1f, 1f, 1f, 0.62f);
-        float size = heading ? _baseSize * 0.9f : _baseSize * 0.72f;
+            : m.Kind == RowKind.KeyValue ? new Color(1f, 0.976f, 0.933f, 0.8f)
+            : new Color(1f, 0.976f, 0.933f, 0.62f);
+        float size = heading ? _baseSize * 0.75f : _baseSize * 0.72f;
         if (Math.Abs(Text.fontSize - size) > 0.01f) Text.fontSize = size;
         if (Text.color != color) Text.color = color;
-        if (heading && Text.fontStyle != FontStyles.Bold) Text.fontStyle = FontStyles.Bold;
+        FontStyles style = heading ? FontStyles.Normal : Text.fontStyle;
+        if (heading && Text.fontStyle != style) Text.fontStyle = style;
+        if (heading && Math.Abs(Text.characterSpacing - 4f) > 0.01f) Text.characterSpacing = 4f;
         SetText(Text, text);
     }
 

@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Logging;
+using OverTheHillPlus.Loader;
 using Il2CppInterop.Runtime;
 using OverTheHillPlus.Logging;
 using UnityEngine;
@@ -20,13 +20,13 @@ namespace OverTheHillPlus;
 internal static class ErrorTap
 {
     private const int MaxReports = 200;
-    private static ManualLogSource _log;
+    private static ModLog _log;
     private static bool _busy, _tracesOn, _canTrace;
     private static int _reported;
     private static StackTraceLogType _error, _exception, _assert;
     private static readonly TraceGate Gate = new();
 
-    internal static void Start(ManualLogSource log)
+    internal static void Start(ModLog log)
     {
         _log = log;
         try

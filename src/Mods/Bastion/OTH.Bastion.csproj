@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <AssemblyName>OTH.Bastion</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonCarPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.Bastion.BastionPlugin</OthPluginClass>
     <RootNamespace>OverTheHillPlus</RootNamespace>
   </PropertyGroup>
 

@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Api;

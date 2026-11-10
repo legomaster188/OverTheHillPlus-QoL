@@ -210,6 +210,25 @@ public static class CarCosmetics
         return true;
     }
 
+    /// <summary>The whip-light items (Visual/Rear/WhipLights_01..07) hold two poles each at the donor's spacing
+    /// (the Marshal's 1.70 m). A model with these anchors gets each pole on its own corner: the pole left of the centre
+    /// line on <see cref="WhipPoleL"/>, the other on <see cref="WhipPoleR"/>; with one of them only, the other pole goes
+    /// to its mirror image.</summary>
+    public const string WhipSlot = "Visual/Rear", WhipItemPrefix = "WhipLights_", WhipPoleL = "cosm_WhipLight_L", WhipPoleR = "cosm_WhipLight_R";
+
+    /// <summary>Where a whip pole goes: the anchor to take (null: the pole stays in its item) and whether to mirror its x.
+    /// <paramref name="x"/> is the pole's car-root x.</summary>
+    public static string WhipPoleAnchor(float x, bool hasL, bool hasR, out bool mirror)
+    {
+        mirror = false;
+        bool left = x < 0f;
+        if (left && hasL) return WhipPoleL;
+        if (!left && hasR) return WhipPoleR;
+        if (!hasL && !hasR) return null;
+        mirror = true;
+        return left ? WhipPoleR : WhipPoleL;
+    }
+
     /// <summary>Null when the table is usable: every entry has a <c>cosm_</c> anchor, a slot and a target inside that
     /// slot, no target twice; otherwise what is wrong.</summary>
     public static string Check(IReadOnlyList<CarCosmeticAnchor> table)

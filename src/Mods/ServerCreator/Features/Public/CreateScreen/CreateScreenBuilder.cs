@@ -2,7 +2,11 @@ using System;
 using System.Collections.Generic;
 using Il2CppInterop.Runtime;
 using OverTheHillPlus.ServerCreator;
+#if MELON
+using Il2CppTMPro;
+#else
 using TMPro;
+#endif
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;

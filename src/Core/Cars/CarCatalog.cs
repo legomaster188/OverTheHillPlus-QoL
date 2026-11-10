@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if MELON
+using ItemType = Il2Cpp.InventoryItemScriptableObject.ItemType;
+#else
 using ItemType = InventoryItemScriptableObject.ItemType;
+#endif
 using Object = UnityEngine.Object;
 
 namespace OverTheHillPlus.Cars;
@@ -49,7 +53,7 @@ internal sealed class CarCatalog
 
     /// <summary>Addressables keys to try for the base car's CarInfo: the game's own address helper, then the keys the
     /// game's catalog lists for its cars (the helper's address has not always resolved after game updates).</summary>
-    private static IEnumerable<string> BaseKeys(string want)
+    internal static IEnumerable<string> BaseKeys(string want)
     {
         string helper = null;
         try { helper = GameConstants.ADDRESSABLES_PATHS.GetCarInfoAddress(want); } catch (Exception ex) { DebugLog.Error("core", ex, "CarCatalog.BaseKeys"); }
@@ -85,6 +89,30 @@ internal sealed class CarCatalog
             if (found != null) return found;
         }
         return null;
+    }
+
+    /// <summary>The first of <paramref name="keys"/> some Addressables catalog has (null: none), for a background load
+    /// ahead of <see cref="LoadByKeys"/>.</summary>
+    internal static string FirstKnownKey(IEnumerable<string> keys)
+    {
+        foreach (var key in keys)
+            try { if (!string.IsNullOrEmpty(key) && OverTheHillPlus.Shared.RuntimeAddressables.HasKey(key)) return key; }
+            catch (Exception ex) { DebugLog.Error("core", ex, "CarCatalog.FirstKnownKey"); }
+        return null;
+    }
+
+    /// <summary>The game's item catalog is loaded and has the garage base car (<see cref="Prepare"/> then needs no load).</summary>
+    public bool HasBaseInCatalog()
+    {
+        string want = _car.Config.GarageBaseName;
+        var cat = PlayerInventoryManager.InventoryItemsCatalog;
+        if (cat?.IdToSO == null) return false;
+        foreach (var kv in cat.IdToSO)
+        {
+            var ci = kv.Value?.TryCast<CarInfo>();
+            if (ci != null && string.Equals(ci.name, want, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 
     /// <summary>Keys to try for a car's garage model (the game's address helper first, then the catalog's names).</summary>

@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Logging;
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Logging;
 
@@ -9,7 +9,7 @@ namespace OverTheHillPlus.Logging;
 /// creators' plugins) and puts each distinct one once into the debug log, blamed on a mod by its stack frames or its
 /// log source, with repeat counts. Unity's own log (source "Unity") is left to ErrorTap. Any thread.
 /// </summary>
-internal sealed class ErrorListener : ILogListener
+internal sealed class ErrorListener
 {
     [ThreadStatic] private static bool _busy;
 
@@ -18,27 +18,23 @@ internal sealed class ErrorListener : ILogListener
     // many were left out.
     private static readonly KeyedRateLimiter<string> LineLimit = new(1.0, 20, 128);
 
-    public LogLevel LogLevelFilter => LogLevel.Fatal | LogLevel.Error | LogLevel.Warning | LogLevel.Message | LogLevel.Info;
-
     internal static void Install()
     {
-        try { Logger.Listeners.Add(new ErrorListener()); }
-        catch (Exception e) { Core.CorePlugin.Logger?.LogWarning("[Debug] errors of the BepInEx log are not collected: " + e.Message); }
+        try { OthLoader.AddLogListener(LogEvent); }
+        catch (Exception e) { Core.CorePlugin.Logger?.LogWarning("[Debug] errors of the loader's log are not collected: " + e.Message); }
     }
 
-    public void LogEvent(object sender, LogEventArgs eventArgs)
+    private static void LogEvent(string sourceName, LogKind level, string text)
     {
-        if (_busy || !DebugLog.On || eventArgs == null) return;
-        var level = eventArgs.Level;
-        bool error = (level & (LogLevel.Fatal | LogLevel.Error)) != 0;
-        bool warning = (level & LogLevel.Warning) != 0;
+        if (_busy || !DebugLog.On) return;
+        bool error = level == LogKind.Fatal || level == LogKind.Error;
+        bool warning = level == LogKind.Warning;
         if (!error && !warning && !DebugLog.IsVerbose) return; // plain info lines only at Verbose
         _busy = true;
         try
         {
-            string source = eventArgs.Source?.SourceName ?? "?";
+            string source = sourceName ?? "?";
             if (source.StartsWith("Unity", StringComparison.OrdinalIgnoreCase)) return; // ErrorTap has those, with their stack
-            string text = eventArgs.Data?.ToString();
             if (string.IsNullOrEmpty(text)) return;
             if (text.StartsWith("[ErrorTap]", StringComparison.Ordinal) || text.StartsWith("[Debug]", StringComparison.Ordinal) ||
                 text.StartsWith("[CrashTrail]", StringComparison.Ordinal)) return;
@@ -51,7 +47,7 @@ internal sealed class ErrorListener : ILogListener
             if (DebugLog.TakeSameAsLast(text)) return; // DebugLog.Error has it already
             Note(source, level, text);
         }
-        catch { /* never throw into BepInEx's logger */ }
+        catch { /* never throw into the loader's logger */ }
         finally { _busy = false; }
     }
 
@@ -69,7 +65,7 @@ internal sealed class ErrorListener : ILogListener
         DebugLog.Write(warning ? "WARN" : "LOG", mod, text);
     }
 
-    private static void Note(string source, LogLevel level, string text)
+    private static void Note(string source, LogKind level, string text)
     {
         var blame = StackText.Classify(text, ModMap.ModOfType, null);
         string mod = blame.Blame == Blame.Ours && blame.ModId != "?" ? blame.ModId : ModMap.ModOfSource(source) ?? source;
@@ -82,6 +78,4 @@ internal sealed class ErrorListener : ILogListener
         string who = blame.Blame == Blame.Ours ? $"blamed on {mod} by its stack ({blame.OurFrame ?? blame.TopFrame})" : $"blamed on {mod} by its log source";
         DebugLog.Write("ERROR", mod, $"logged by {source} ({level}), {who}:\n{text}\n{DebugLog.Where()}");
     }
-
-    public void Dispose() { }
 }

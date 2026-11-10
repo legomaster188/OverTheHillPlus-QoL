@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.Photo;
@@ -13,9 +15,13 @@ using OverTheHillPlus.Core.Manager;
 /// Photo &amp; Spectate: high-resolution screenshots, clean view (HUD hidden), cinematic chase-camera presets, wider
 /// photo mode limits, and watching another player's car with your own camera. Only changes your own view and files.
 /// </summary>
+#if MELON
+public class PhotoPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class PhotoPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.photo";
     public const string Name = "Photo+";
@@ -24,7 +30,7 @@ public class PhotoPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.photo.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "photo";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()

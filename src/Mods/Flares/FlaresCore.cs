@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using OverTheHillPlus.Features.Public.ModNet;
 using OverTheHillPlus.Features.Public.PlayerList;

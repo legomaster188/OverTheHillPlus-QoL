@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
-using BepInEx;
+using OverTheHillPlus.Loader;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using UnityEngine;
 
 namespace OverTheHillPlus.ServerBrowser;
@@ -31,7 +35,7 @@ internal static class FirstSeenTracker
     private static bool _dirty;
     private static float _nextSave;
 
-    private static string FilePath => Path.Combine(Paths.ConfigPath, "OverTheHillPlus.firstseen.json");
+    private static string FilePath => Path.Combine(OthLoader.ConfigDir, "OverTheHillPlus.firstseen.json");
 
     public static int Count => _entries.Count;
 

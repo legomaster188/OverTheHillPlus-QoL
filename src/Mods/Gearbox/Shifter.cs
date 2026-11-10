@@ -1,7 +1,11 @@
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 
 namespace OverTheHillPlus.GearboxPlus;
 

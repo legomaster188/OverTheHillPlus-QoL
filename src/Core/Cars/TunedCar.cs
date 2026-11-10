@@ -2,7 +2,11 @@ using System;
 using System.Collections.Generic;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 
 namespace OverTheHillPlus.Cars;
 
@@ -39,10 +43,19 @@ internal sealed class TunedCar
         EngineMass = 256,
         /// <summary>The parametric inertia box's width and length (<see cref="CarRuntimeFit.ChassisX"/>).</summary>
         Chassis = 512,
+        /// <summary>Every wheel's suspension travel (an upgrade layer's lift, <see cref="CarUpgradeEffect.Suspension"/>). Bound
+        /// only once a layer asks for it.</summary>
+        Suspension = 1024,
+        /// <summary>The winch's max and stall tension and its reel speed (<see cref="CarUpgradeEffect.Winch"/>). Bound only once a
+        /// layer asks for it.</summary>
+        Winch = 2048,
         /// <summary>What a profile's own multipliers tune (the default; the host tools' tuning uses it).</summary>
         Profile = Mass | Engine | Revs | TopSpeed | Drivetrain,
-        /// <summary>Everything a modded car tunes at runtime: the profile's values and the physics fit's.</summary>
-        Modded = Profile | Brakes | Clutch | EngineMass | Chassis,
+        /// <summary>Everything a modded car tunes at runtime: the profile's values and the physics fit's (and an upgrade
+        /// layer's lift and winch).</summary>
+        Modded = Profile | Brakes | Clutch | EngineMass | Chassis | Suspension | Winch,
+        /// <summary>What core's stock-car tuner touches for upgrade layers (<see cref="CarLayerTuner"/>).</summary>
+        Layer = Profile | Brakes | Suspension | Winch,
     }
 
     private readonly VPVehicleController _car;
@@ -53,6 +66,14 @@ internal sealed class TunedCar
     private readonly HashSet<IntPtr> _gearArrays = new();
     private readonly List<Il2CppStructArray<float>> _keepAlive = new();
     private CarTuneSlot _mass;
+    // An upgrade layer's lift and winch: bound the first time a layer asks for them (most cars never have one).
+    private readonly List<CarTuneSlot> _travel = new(), _winch = new();
+    private readonly List<IntPtr> _wheelPtrs = new();
+    private IntPtr _winchPtr;
+    private bool _wantTravel, _wantWinch, _wantOwnBrakes;
+    private float _nextWheelCheck;
+    // The car's own copy of a brakes object its class shares (made only for an upgrade layer's brakes).
+    private Brakes.Settings _ownBrakes;
 
     public TunedCar(VPVehicleController car, Parts parts = Parts.Profile)
     {
@@ -129,7 +150,7 @@ internal sealed class TunedCar
             Drop(_lock);
             if (st != null && Has(Parts.Steering)) _lock.Add(new CarTuneSlot(() => st.maxSteerAngle, v => st.maxSteerAngle = v));
         }
-        var brk = Has(Parts.Brakes) ? Own(_car.brakes, "brakes") : null;
+        var brk = BrakesToTune();
         if (P(brk) != _brk)
         {
             _brk = P(brk);
@@ -205,6 +226,87 @@ internal sealed class TunedCar
         }
     }
 
+    /// <summary>The brakes object to tune: the car's own; a class's shared one only through a copy the car gets for itself, made
+    /// when an upgrade layer changes the brakes (so a stock car's upgrade never changes its whole class).</summary>
+    private Brakes.Settings BrakesToTune()
+    {
+        if (!Has(Parts.Brakes)) return null;
+        var live = _car.brakes;
+        if (live == null) return null;
+        if (_ownBrakes != null && live.Pointer == _ownBrakes.Pointer) return live;
+        if (!_wantOwnBrakes) return Own(live, "brakes");
+        try
+        {
+            var mine = new Brakes.Settings
+            {
+                maxBrakeTorque = live.maxBrakeTorque, brakeBias = live.brakeBias, handbrakeTorque = live.handbrakeTorque,
+                handbrakeAxle = live.handbrakeAxle, combinedRetarderBrake = live.combinedRetarderBrake, fullBrakeThreshold = live.fullBrakeThreshold,
+            };
+            _car.brakes = mine;
+            var block = _car.m_brakes;
+            if (block != null) block.settings = mine;
+            _ownBrakes = mine;
+            return mine;
+        }
+        catch (Exception e)
+        {
+            DebugLog.Error("core", e, "TunedCar.BrakesToTune");
+            _wantOwnBrakes = false; // not again for this car: its brakes stay the game's
+            return Own(live, "brakes");
+        }
+    }
+
+    /// <summary>Binds (or rebinds, when the car's wheels or winch changed) the lift and winch slots an upgrade layer asks for.
+    /// Checked at most every few seconds: the components rarely change.</summary>
+    private void BindLayerParts()
+    {
+        if (!(_wantTravel && Has(Parts.Suspension)) && !(_wantWinch && Has(Parts.Winch))) return;
+        float now = Time.unscaledTime;
+        if (now < _nextWheelCheck && now >= _nextWheelCheck - 10f) return;
+        _nextWheelCheck = now + 5f;
+        if (_wantTravel && Has(Parts.Suspension))
+        {
+            try
+            {
+                var wcs = _car.GetComponentsInChildren<VPFunselektor3DRaycastWheelCollider>(true);
+                bool same = wcs.Length == _wheelPtrs.Count;
+                for (int i = 0; same && i < wcs.Length; i++) same = wcs[i] != null && wcs[i].Pointer == _wheelPtrs[i];
+                if (!same)
+                {
+                    Drop(_travel);
+                    _wheelPtrs.Clear();
+                    foreach (var wc in wcs)
+                    {
+                        if (wc == null) continue;
+                        var w = wc;
+                        _wheelPtrs.Add(w.Pointer);
+                        _travel.Add(new CarTuneSlot(() => w.suspensionTravel, v => w.suspensionTravel = v));
+                    }
+                }
+            }
+            catch (Exception e) { DebugLog.Error("core", e, "TunedCar.BindLayerParts wheels"); }
+        }
+        if (_wantWinch && Has(Parts.Winch))
+        {
+            try
+            {
+                var ws = _car.GetComponent<VehicleWinchSystem>();
+                if (P(ws) != _winchPtr)
+                {
+                    Drop(_winch);
+                    _winchPtr = P(ws);
+                    if (ws != null)
+                    {
+                        _winch.Add(new CarTuneSlot(() => ws.maxTension, v => ws.maxTension = v));
+                        _winch.Add(new CarTuneSlot(() => ws.stallTension, v => ws.stallTension = v));
+                        _winch.Add(new CarTuneSlot(() => ws.winchReelSpeed, v => ws.winchReelSpeed = v));
+                    }
+                }
+            }
+            catch (Exception e) { DebugLog.Error("core", e, "TunedCar.BindLayerParts winch"); }
+        }
+    }
+
     private void AddGears(Il2CppStructArray<float> arr)
     {
         if (arr == null || !_gearArrays.Add(arr.Pointer)) return;
@@ -223,25 +325,41 @@ internal sealed class TunedCar
     }
 
     /// <summary>Writes the profile's multipliers on top of the game's own values. <paramref name="towPower"/> and
-    /// <paramref name="towSpeed"/> are the extra multipliers of an overloaded tow (<see cref="TowRules"/>), 1 when none.</summary>
-    public void Apply(CarTuningProfile p, float towPower = 1f, float towSpeed = 1f, CarRuntimeFit fit = null)
+    /// <paramref name="towSpeed"/> are the extra multipliers of an overloaded tow (<see cref="TowRules"/>), 1 when none.
+    /// <paramref name="up"/> is the car's upgrade layers (<see cref="CarTuneLayers"/>), multiplied in on top (null: none).</summary>
+    public void Apply(CarTuningProfile p, float towPower = 1f, float towSpeed = 1f, CarRuntimeFit fit = null, CarUpgradeEffect up = null)
     {
+        up ??= CarUpgradeEffect.None;
+        // The parts a layer asks for are bound from the first time it does, and kept (they write the game's values back
+        // once the layer goes): most cars never have one.
+        if (!_wantTravel && Math.Abs(up.Suspension - 1f) > 1e-4f) _wantTravel = true;
+        if (!_wantWinch && Math.Abs(up.Winch - 1f) > 1e-4f) _wantWinch = true;
+        if (!_wantOwnBrakes && Math.Abs(up.Brakes - 1f) > 1e-4f) _wantOwnBrakes = true;
         Rebind();
+        BindLayerParts();
         fit ??= CarRuntimeFit.None;
         foreach (var s in _engMass) s.Write(CarTuningProfile.Scale(s.Sync(), fit.EngineMass));
-        foreach (var s in _brakes) s.Write(CarTuningProfile.Scale(s.Sync(), fit.Brakes));
+        foreach (var s in _brakes) s.Write(CarTuningProfile.Scale(s.Sync(), fit.Brakes * up.Brakes));
         foreach (var s in _clutch) s.Write(CarTuningProfile.Scale(s.Sync(), fit.Clutch));
         foreach (var s in _clutchRpm) s.Write(CarTuningProfile.Scale(s.Sync(), fit.ClutchRpm, 300f));
         foreach (var s in _boxX) s.Write(CarTuningProfile.Scale(s.Sync(), fit.ChassisX, 0.2f));
         foreach (var s in _boxZ) s.Write(CarTuningProfile.Scale(s.Sync(), fit.ChassisZ, 0.2f));
-        _mass?.Write(CarTuningProfile.Scale(_mass.Sync(), p.Mass, 50f));
-        foreach (var s in _torque) s.Write(CarTuningProfile.Scale(s.Sync(), p.Torque * towPower));
-        foreach (var s in _power) s.Write(CarTuningProfile.Scale(s.Sync(), p.Power * towPower));
-        foreach (var s in _revs) s.Write(CarTuningProfile.Scale(s.Sync(), p.RevRange, 1000f));
-        foreach (var s in _limit) s.Write(CarTuningProfile.Scale(s.Sync(), p.TopSpeed * towSpeed, 1f));
+        _mass?.Write(CarTuningProfile.Scale(_mass.Sync(), p.Mass * up.Mass, 50f));
+        // _torque is idle, peak, cap: a turbo's top-end boost (PeakTorque) leaves the idle torque alone.
+        for (int i = 0; i < _torque.Count; i++)
+        {
+            var s = _torque[i];
+            float m = p.Torque * towPower * up.Torque * (i == 0 ? 1f : up.PeakTorque);
+            s.Write(CarTuningProfile.Scale(s.Sync(), m));
+        }
+        foreach (var s in _power) s.Write(CarTuningProfile.Scale(s.Sync(), p.Power * towPower * up.Power));
+        foreach (var s in _revs) s.Write(CarTuningProfile.Scale(s.Sync(), p.RevRange * up.Revs, 1000f));
+        foreach (var s in _limit) s.Write(CarTuningProfile.Scale(s.Sync(), p.TopSpeed * towSpeed * up.TopSpeed, 1f));
         foreach (var s in _lock) s.Write(CarTuningProfile.Scale(s.Sync(), p.SteeringLock, 5f));
-        foreach (var s in _gears) s.Write(CarTuningProfile.Scale(s.Sync(), p.GearRatios));
-        foreach (var s in _final) s.Write(CarTuningProfile.Scale(s.Sync(), p.FinalDrive));
+        foreach (var s in _gears) s.Write(CarTuningProfile.Scale(s.Sync(), p.GearRatios * up.Gears));
+        foreach (var s in _final) s.Write(CarTuningProfile.Scale(s.Sync(), p.FinalDrive * up.FinalDrive));
+        foreach (var s in _travel) s.Write(CarTuningProfile.Scale(s.Sync(), up.Suspension, 0.02f));
+        foreach (var s in _winch) s.Write(CarTuningProfile.Scale(s.Sync(), up.Winch));
     }
 
     /// <summary>Gives the game's own gear ratios back (and forgets them) so another mod can read the car's real table; the next
@@ -256,12 +374,14 @@ internal sealed class TunedCar
     public void Restore()
     {
         _mass?.Restore();
-        foreach (var l in new[] { _torque, _power, _revs, _limit, _lock, _gears, _final, _engMass, _brakes, _clutch, _clutchRpm, _boxX, _boxZ })
+        foreach (var l in new[] { _torque, _power, _revs, _limit, _lock, _gears, _final, _engMass, _brakes, _clutch, _clutchRpm, _boxX, _boxZ, _travel, _winch })
             foreach (var s in l) s.Restore();
         // Forget the bindings so the next Apply re-reads the game's values as the new bases.
-        _eng = _gb = _hl = _diff = _input = _sc = _steer = _table = _brk = _clu = _inr = IntPtr.Zero;
+        _eng = _gb = _hl = _diff = _input = _sc = _steer = _table = _brk = _clu = _inr = _winchPtr = IntPtr.Zero;
         _torque.Clear(); _power.Clear(); _revs.Clear(); _limit.Clear(); _lock.Clear(); _gears.Clear(); _final.Clear();
         _engMass.Clear(); _brakes.Clear(); _clutch.Clear(); _clutchRpm.Clear(); _boxX.Clear(); _boxZ.Clear();
+        _travel.Clear(); _winch.Clear(); _wheelPtrs.Clear();
+        _nextWheelCheck = 0f;
         _gearArrays.Clear(); _keepAlive.Clear();
     }
 

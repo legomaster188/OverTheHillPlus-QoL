@@ -1,4 +1,4 @@
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using UnityEngine.InputSystem;
 
 namespace OverTheHillPlus.Features.Public.Autosave;
@@ -18,11 +18,11 @@ internal static class AutosaveConfig
 
     public static void Bind(ConfigFile cfg)
     {
-        Enabled = cfg.Bind(Section, "Enabled", true,
+        Enabled = cfg.Bind(Section, "Enabled", false,
             "Ask the game to save every few minutes while you play solo or host (the game's own save, same as when you reach a point of interest).");
         IntervalMinutes = cfg.Bind(Section, "IntervalMinutes", 10f, new ConfigDescription(
             "Minutes between autosaves. Any save by the game itself restarts the countdown.", new AcceptableValueRange<float>(2f, 60f)));
-        SaveBeforeQuit = cfg.Bind(Section, "SaveBeforeQuit", true,
+        SaveBeforeQuit = cfg.Bind(Section, "SaveBeforeQuit", false,
             "When you quit to the menu or the desktop, make sure a save happens even if the game would skip its own exit save.");
         ShowToast = cfg.Bind(Section, "ShowToast", true, "Show a small notice when the mod's autosave or 'Save now' has saved.");
         ToastGameSaves = cfg.Bind(Section, "ToastGameSaves", false, "Also show the notice when the game saves on its own (points of interest, shop, ...).");

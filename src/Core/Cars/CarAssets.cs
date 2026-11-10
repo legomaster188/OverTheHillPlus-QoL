@@ -37,18 +37,45 @@ internal sealed class CarAssets
     public string Load()
     {
         string mesh = _car.Def.MeshFile;
-        byte[] bytes = Read(mesh);
-        if (bytes == null) return $"its model ({mesh}) is not in the DLL";
-        MeshBlob blob;
-        try { blob = MeshBlob.Read(bytes); }
-        catch (MeshBlobException e) { return "its model could not be read: " + e.Message; }
+        // read ahead by core while the mods load (AssetPrefetch); here if it wasn't, or it failed and is to say why
+        MeshBlob blob = AssetPrefetch.TakeModel(_car.AssetAssembly, _n + "/" + mesh);
+        if (blob == null)
+        {
+            byte[] bytes = Read(mesh);
+            if (bytes == null) return $"its model ({mesh}) is not in the DLL";
+            try { blob = MeshBlob.Read(bytes); }
+            catch (MeshBlobException e) { return "its model could not be read: " + e.Message; }
+        }
         if (blob.IsPlaceholder) return $"the model is not installed yet (this build has the placeholder {mesh})";
         string missing = blob.CheckDrivable();
         if (missing != null) return "its model is incomplete: " + missing;
         foreach (var png in new[] { _car.Def.AssetFile("albedo_base"), _car.Def.AssetFile("ao"), _car.Def.AssetFile("lights"), _car.Def.AssetFile("mask") })
-            if (Read(png) == null) return $"its texture {png} is not in the DLL";
+            if (!Has(png)) return $"its texture {png} is not in the DLL";
         Blob = blob;
+        Prefetch();
         return null;
+    }
+
+    // The textures the car's build needs, being decoded on core's background thread.
+    private readonly Dictionary<string, TextureJob> _ahead = new(StringComparer.Ordinal);
+
+    private void Prefetch()
+    {
+        if (!Logging.DebugConfig.Get(Logging.DebugConfig.TexturesAhead, true)) return;
+        foreach (var kind in new[] { "albedo_base", "ao", "lights", "mask" })
+        {
+            string file = _car.Def.AssetFile(kind);
+            _ahead[file] = AssetPrefetch.Add(_car.AssetAssembly, _n + "/" + file, _car.Def.ItemId);
+        }
+    }
+
+    /// <summary>The texture of this kind is ready to be made without waiting for the decoder. Asking moves the car's
+    /// textures to the front of the queue. Main thread.</summary>
+    public bool TextureReady(string kind)
+    {
+        if (!_ahead.TryGetValue(_car.Def.AssetFile(kind), out var job) || job.Done) return true;
+        foreach (var j in _ahead.Values) if (!j.Done) AssetPrefetch.Want(j);
+        return false;
     }
 
     /// <summary>An embedded asset's bytes ("&lt;n&gt;/&lt;name&gt;"), or null when the DLL has none. Any thread.</summary>
@@ -67,11 +94,19 @@ internal sealed class CarAssets
         catch (Exception ex) { DebugLog.Error("core", ex, "CarAssets.Read"); return null; }
     }
 
+    /// <summary>The DLL has the embedded asset (by name: nothing is read; at start every car read each of its 2048 px
+    /// PNGs in full just to see that it was there). Any thread.</summary>
+    private bool Has(string name)
+    {
+        try { return _car.AssetAssembly?.GetManifestResourceInfo(_n + "/" + name) != null; }
+        catch (Exception ex) { DebugLog.Error("core", ex, "CarAssets.Has"); return false; }
+    }
+
     private string ZonesFile => _car.Def.AssetFile("zones");
 
     /// <summary>The build has the paint zones (&lt;n&gt;_zones.png): paint colours can be changed. Without it the car keeps
     /// its base albedo (skins still work).</summary>
-    public bool HasZones => _hasZones ??= Read(ZonesFile) != null;
+    public bool HasZones => _hasZones ??= Has(ZonesFile);
     private bool? _hasZones;
 
     private byte[] _basePixels, _zonePixels;
@@ -158,7 +193,7 @@ internal sealed class CarAssets
             if (_iconTried) return _icon;
             _iconTried = true;
             string f = _car.Def.AssetFile("icon");
-            if (Read(f) != null) _icon = Texture(f, linear: false);
+            if (Has(f)) _icon = Texture(f, linear: false);
             return _icon;
         }
     }
@@ -175,7 +210,7 @@ internal sealed class CarAssets
             if (_pictureTried) return _picture;
             _pictureTried = true;
             string f = _car.Def.AssetFile(CarDefinition.PictureSuffix);
-            if (Read(f) != null) _picture = Texture(f, linear: false);
+            if (Has(f)) _picture = Texture(f, linear: false);
             return _picture;
         }
     }
@@ -185,8 +220,10 @@ internal sealed class CarAssets
 
     private Texture2D Texture(string name, bool linear, bool full = false)
     {
+        var t = Decoded(name, linear, full);
+        if (t != null) return t;
         var bytes = Read(name) ?? throw new InvalidOperationException($"{name} is missing");
-        var t = new Texture2D(2, 2, TextureFormat.RGBA32, true, linear) { name = _car.Def.CarName + "_" + Path.GetFileNameWithoutExtension(name) };
+        t = new Texture2D(2, 2, TextureFormat.RGBA32, true, linear) { name = _car.Def.CarName + "_" + Path.GetFileNameWithoutExtension(name) };
         // Loaded readable first: LoadImage may reset ignoreMipmapLimit, and it can only be set again while the texture is
         // readable. Then Apply makes it non-readable: the pixels live on the GPU only (nothing reads them back), which
         // halves the memory they take.
@@ -198,6 +235,37 @@ internal sealed class CarAssets
         t.hideFlags = HideFlags.DontUnloadUnusedAsset;
         Object.DontDestroyOnLoad(t);
         return t;
+    }
+
+    /// <summary>
+    /// The texture from the pixels decoded ahead: the same object <see cref="Texture"/> makes with the game's decoder, in the
+    /// same order of steps, without decoding on the main thread. Null when it wasn't decoded ahead.
+    /// </summary>
+    private Texture2D Decoded(string name, bool linear, bool full)
+    {
+        if (!_ahead.TryGetValue(name, out var job)) return null;
+        _ahead.Remove(name);
+        if (!job.Done) AssetPrefetch.Want(job);
+        while (!job.Done) System.Threading.Thread.Sleep(1);
+        var px = job.Pixels;
+        job.Pixels = null;
+        AssetPrefetch.Taken(job, px);
+        if (px == null) return null;
+        var t = new Texture2D(job.Width, job.Height, TextureFormat.RGBA32, true, linear) { name = _car.Def.CarName + "_" + Path.GetFileNameWithoutExtension(name) };
+        if (full && !t.ignoreMipmapLimit) t.ignoreMipmapLimit = true;
+        Upload(t, px);
+        Sampling(t, full);
+        t.Apply(false, true);
+        t.hideFlags = HideFlags.DontUnloadUnusedAsset;
+        Object.DontDestroyOnLoad(t);
+        return t;
+    }
+
+    /// <summary>Hands raw pixels to a texture straight from managed memory: the byte[] overload would copy them into a new
+    /// array on the game's heap first (21 MB for a car's texture, for its collector to sweep).</summary>
+    internal static unsafe void Upload(Texture2D t, byte[] pixels)
+    {
+        fixed (byte* p = pixels) t.LoadRawTextureData((IntPtr)p, pixels.Length);
     }
 
     // ---------------------------------------------------------------- mesh helpers (shared by every car)
@@ -216,16 +284,14 @@ internal sealed class CarAssets
         var uvs = new Vector2[nv];
         var tris = new int[ni];
         int vo = 0, io = 0;
+        // Plain floats straight into the arrays: Unity's vector and matrix calls cost a trip into the game per vertex here.
+        var vf = System.Runtime.InteropServices.MemoryMarshal.Cast<Vector3, float>(verts.AsSpan());
+        var nf = System.Runtime.InteropServices.MemoryMarshal.Cast<Vector3, float>(norms.AsSpan());
+        var uf = System.Runtime.InteropServices.MemoryMarshal.Cast<Vector2, float>(uvs.AsSpan());
         foreach (var p in parts)
         {
-            var m = toLocal * PartMatrix(p);
-            for (int i = 0; i < p.VertexCount; i++)
-            {
-                verts[vo + i] = m.MultiplyPoint3x4(new Vector3(p.Positions[i * 3], p.Positions[i * 3 + 1], p.Positions[i * 3 + 2]));
-                var n = m.MultiplyVector(new Vector3(p.Normals[i * 3], p.Normals[i * 3 + 1], p.Normals[i * 3 + 2]));
-                norms[vo + i] = n.sqrMagnitude > 1e-12f ? n.normalized : Vector3.up;
-                uvs[vo + i] = new Vector2(p.Uv0[i * 2], p.Uv0[i * 2 + 1]);
-            }
+            MeshMath.Transform(Rows(toLocal * PartMatrix(p)), p.Positions, p.Normals, p.VertexCount, vf.Slice(vo * 3), nf.Slice(vo * 3));
+            p.Uv0.AsSpan(0, p.VertexCount * 2).CopyTo(uf.Slice(vo * 2));
             for (int i = 0; i < p.Indices.Length; i++) tris[io + i] = p.Indices[i] + vo;
             vo += p.VertexCount;
             io += p.Indices.Length;
@@ -255,23 +321,19 @@ internal sealed class CarAssets
         return m;
     }
 
+    /// <summary>The top three rows of a matrix, for <see cref="MeshMath"/>.</summary>
+    internal static float[] Rows(Matrix4x4 m) => new[] { m.m00, m.m01, m.m02, m.m03, m.m10, m.m11, m.m12, m.m13, m.m20, m.m21, m.m22, m.m23 };
+
     public static Vector3 V(MeshVec3 v) => new(v.X, v.Y, v.Z);
 
     /// <summary>Bounds of the parts in car root space (after each part's transform).</summary>
     public static Bounds RootBounds(IEnumerable<MeshPart> parts)
     {
         bool any = false;
+        var box = new float[6];
+        foreach (var p in parts) any = MeshMath.Encapsulate(Rows(PartMatrix(p)), p.Positions, box, any);
         var b = new Bounds();
-        foreach (var p in parts)
-        {
-            var m = PartMatrix(p);
-            for (int i = 0; i + 2 < p.Positions.Length; i += 3)
-            {
-                var v = m.MultiplyPoint3x4(new Vector3(p.Positions[i], p.Positions[i + 1], p.Positions[i + 2]));
-                if (!any) { b = new Bounds(v, Vector3.zero); any = true; }
-                else b.Encapsulate(v);
-            }
-        }
+        if (any) b.SetMinMax(new Vector3(box[0], box[1], box[2]), new Vector3(box[3], box[4], box[5]));
         return b;
     }
 }

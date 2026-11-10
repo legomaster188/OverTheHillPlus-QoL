@@ -1,10 +1,12 @@
+#if !MELON
+using BepInEx;
+using BepInEx.Unity.IL2CPP;
+#endif
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using BepInEx;
-using BepInEx.Logging;
-using BepInEx.Unity.IL2CPP;
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 using OverTheHillPlus.Features;
 
@@ -20,9 +22,13 @@ using OverTheHillPlus.Core.Manager;
 /// The parts: <see cref="UnreleasedCars"/> (catalog, addresses, names), <see cref="SaveGuard"/> (the save file
 /// never holds them), <see cref="GuestGate"/> (guests), <see cref="UnreleasedPatches"/> (hooks).
 /// </summary>
+#if MELON
+public class UnreleasedPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class UnreleasedPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.unreleased";
     public const string Name = "Unreleased Cars";
@@ -31,7 +37,7 @@ public class UnreleasedPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.unreleased.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "unreleased";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     /// <summary>Why the mod turned itself off this session (shown on its page), or null.</summary>
     internal static string FailedReason { get; private set; }
     internal static Harmony Harmony;

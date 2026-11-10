@@ -52,7 +52,7 @@ internal sealed class CameraFeature : IFeature
         });
     }
 
-    private static void Fov(BepInEx.Configuration.ConfigEntry<float> entry)
+    private static void Fov(OverTheHillPlus.Config.ConfigEntry<float> entry)
     {
         float v = RawSlider("Field of view", entry.Value, 0f, 120f, entry.Value < 10f ? "game's" : $"{entry.Value:0}°", true);
         float rounded = v < 10f ? 0f : Mathf.Round(v);

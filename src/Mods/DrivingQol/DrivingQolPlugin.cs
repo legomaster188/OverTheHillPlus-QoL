@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 using HarmonyLib;
 
 namespace OverTheHillPlus.DrivingQol;
@@ -12,11 +14,15 @@ using OverTheHillPlus.Core.Manager;
 /// <summary>
 /// Driving+: everyday tweaks that give no advantage. A higher frame-rate cap, a background cap and keep running when
 /// alt-tabbed, the driving camera's field of view, compass range, auto headlights, skipping the logo screens, faster
-/// fades, no tutorial hints, the unstuck button and the garage's live suspension lift preview.
+/// fades, no tutorial hints and the unstuck button. (The garage's lift preview moved to core: Cars/GarageLift.)
 /// </summary>
+#if MELON
+public class DrivingQolPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class DrivingQolPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.drivingqol";
     public const string Name = "Driving+";
@@ -25,7 +31,7 @@ public class DrivingQolPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.drivingqol.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "drivingqol";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
     internal static Harmony Harmony;
 
     public override void Load()
@@ -38,8 +44,7 @@ public class DrivingQolPlugin : BasePlugin
             Side = ModSide.Client,
             Name = Name,
             Description = "Everyday tweaks: higher frame-rate cap, keep running when alt-tabbed, field of view, auto " +
-                          "headlights, skip the logo screens, hide tutorial hints, an unstuck button for your car, and a live ride " +
-                          "height preview for suspension lifts in the garage.",
+                          "headlights, skip the logo screens, hide tutorial hints and an unstuck button for your car.",
             Version = Version,
             DrawSimple = DrivingQolSimple.Draw,
         });

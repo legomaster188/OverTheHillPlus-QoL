@@ -1,0 +1,78 @@
+{
+  "id": "roof_lightbar",
+  "name": "Curved LED Light Bar",
+  "cosmeticType": "RoofLights",
+  "slot": "Visual/Roof_Bar",
+  "price": 25,
+  "paintable": false,
+  "light": {
+    "flares": true
+  },
+  "fits": {
+    "Vera": {
+      "pos": [
+        0.0,
+        1.742,
+        0.21
+      ],
+      "rot": [
+        8,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Tercel": {
+      "pos": [
+        0.0,
+        1.459,
+        -0.08
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Aro": {
+      "pos": [
+        0.0,
+        1.93,
+        0.41
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Hilo": {
+      "pos": [
+        0.0,
+        1.606,
+        0.38
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Bastion": {
+      "pos": [
+        0.0,
+        1.765,
+        0.32
+      ],
+      "rot": [
+        8,
+        0,
+        0
+      ],
+      "scale": 1.0
+    }
+  }
+}

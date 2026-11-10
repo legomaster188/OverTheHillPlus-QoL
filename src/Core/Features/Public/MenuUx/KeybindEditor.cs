@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -44,11 +44,8 @@ internal static class KeybindEditor
                 {
                     foreach (var file in files)
                         foreach (var kv in file)
-                            if (kv.Value is ConfigEntry<Key> k) Entries.Add(k);
+                            if (kv.Value is ConfigEntry<Key> k && !ReferenceEquals(k, CoreConfig.OpenKey)) Entries.Add(k); // the debug key stays hidden
                     Entries.Sort((a, b) => string.CompareOrdinal(a.Definition.Section + a.Definition.Key, b.Definition.Section + b.Definition.Key));
-                    // The MODS page key first, it's the one everybody looks for.
-                    int menu = Entries.IndexOf(CoreConfig.OpenKey);
-                    if (menu > 0) { Entries.RemoveAt(menu); Entries.Insert(0, CoreConfig.OpenKey); }
                 }
                 catch (Exception e) { DebugLog.Error("core", e, "KeybindEditor.All"); MenuUx.LogOnce("keybind list", e); }
             }

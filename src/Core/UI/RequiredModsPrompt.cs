@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using OverTheHillPlus.Core.Install;
 using OverTheHillPlus.Features.Public.ModTypes;
+using OverTheHillPlus.UI.GameMenu;
 using OverTheHillPlus.UI.Native;
 using UnityEngine;
 
@@ -11,16 +12,18 @@ namespace OverTheHillPlus.UI;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// The MODS page's "this server needs mods" prompt, shown in place of the tabs when the server browser holds a join
-/// (Server Browser+ asks for it with <see cref="Show"/>; core never calls the browser). It lists the server's issues
+/// The "this server needs mods" question, asked when the server browser holds a join (Server Browser+ asks for it with
+/// <see cref="Show"/>; core never calls the browser). It shows in the game's own pop-up (<see cref="GameModal"/>: the
+/// title, a short text with the server's mods and what happens to each, and a column of the game's buttons); when that
+/// pop-up can't be opened, the same content shows as rows on the MODS screen. It lists the server's issues
 /// (RequiredMods.Compare) and offers what RequiredMods.PlanJoin allows:
 /// <list type="bullet">
-/// <item><b>Install &amp; join</b>: downloads the missing mods with the AVAILABLE tab's installer (the prompt says
+/// <item><b>Install &amp; join</b>: downloads the missing mods with the AVAILABLE tab's installer (the question says
 ///   which files from GitHub first, like every download), switches on the ones that are off, then the browser
 ///   remembers the server so it is rejoined after the restart (<see cref="Request.PrepareRejoin"/>).</item>
 /// <item><b>Switch on &amp; restart</b>: only switched-off mods: switches them on, same rejoin after the restart.</item>
 /// <item><b>Join anyway / Join without them</b>: unless another major version blocks the join, and never when a mod
-///   with network prefabs (cars, trailers) differs from the host's: the host refuses that join, so the prompt names
+///   with network prefabs (cars, trailers) differs from the host's: the host refuses that join, so the question names
 ///   the difference (RequiredMods.PrefabSummary) and offers install / switch on / switch off &amp; restart instead.</item>
 /// </list>
 /// </summary>
@@ -33,7 +36,7 @@ internal static class RequiredModsPrompt
         public List<RequiredModIssue> Issues = new();
         /// <summary>Server mods the host runs that did not fit into its list.</summary>
         public int More;
-        /// <summary>Joins as things are (null: can't). Called from OnGUI: the browser runs the join on its next Update.</summary>
+        /// <summary>Joins as things are (null: can't). The browser runs the join on its next Update.</summary>
         public Action Join;
         /// <summary>Remembers the server so the browser rejoins it after the restart.</summary>
         public Action PrepareRejoin;
@@ -41,18 +44,32 @@ internal static class RequiredModsPrompt
 
     private enum Step { Ask, Downloading, Restart, Failed }
 
+    /// <summary>What the question shows right now, for both looks (the pop-up and the rows).</summary>
+    private sealed class Content
+    {
+        public string Title;
+        public string Lead;
+        /// <summary>0 info, 1 warning, 2 bad, 3 good (the rows' banner colour).</summary>
+        public int LeadTone;
+        public readonly List<ModsScreenModel.Line> Lines = new();
+        public readonly List<string> Notes = new();
+        public readonly List<(string label, string value, string hint, Action act, bool enabled)> Buttons = new();
+    }
+
     private static Request _req;
     private static Step _step;
     private static string _error;
     private static int _lastDrawFrame = -100;
     private static bool _drawn;
-    // Downloading in the background: the prompt is hidden (the tabs show again) and reports in the status line.
+    // Downloading in the background: the question is hidden and comes back when the downloads end.
     private static bool _hidden;
+    // Shown in the game's pop-up (else as rows on the MODS screen).
+    private static bool _inModal;
 
-    /// <summary>True while a prompt is waiting on the MODS page.</summary>
+    /// <summary>True while a question is waiting.</summary>
     public static bool Active => _req != null;
 
-    /// <summary>Opens the MODS page on the prompt (replacing any earlier one).</summary>
+    /// <summary>Asks (replacing any earlier question): in the game's pop-up, else on the MODS screen.</summary>
     public static void Show(Request request)
     {
         if (request == null) return;
@@ -63,21 +80,58 @@ internal static class RequiredModsPrompt
         _drawn = false;
         _hidden = false;
         AvailableTab.EnsureList(); // names and downloads come from the mod list
-        ModsPage.Open();
+        Present();
+    }
+
+    /// <summary>The pop-up when it can be opened, else the MODS screen (its rows).</summary>
+    private static void Present()
+    {
+        _inModal = true; // before Show: only its callbacks (cancel, failed) turn it off again
+        bool shown = GameModal.Show(BuildModal, Dismiss, () =>
+        {
+            _inModal = false;
+            if (_req != null && !_hidden) ModsPage.Open();
+        });
+        if (!shown)
+        {
+            _inModal = false;
+            ModsPage.Open();
+        }
         MenuNav.Reset(MenuNav.UsedKeyboardRecently);
     }
 
     public static void Dismiss()
     {
         if (_req == null) return;
+        // Closing the question while downloads run only hides it: they carry on, and it comes back when they end.
+        if (_step == Step.Downloading)
+        {
+            _hidden = true;
+            _inModal = false;
+            return;
+        }
         _req = null;
+        _inModal = false;
         MenuNav.Reset(MenuNav.UsedKeyboardRecently);
     }
 
-    /// <summary>Draws the prompt in the MODS page's content area. True while it is shown (the tab draws nothing).</summary>
+    // ---------------------------------------------------------------- the two looks
+
+    private static GameModal.View BuildModal()
+    {
+        if (_req == null || _hidden) return null;
+        var c = Compose();
+        var v = new GameModal.View { Title = c.Title, Body = ModsScreenModel.Body(c.Lead, c.Lines, c.Notes) };
+        foreach (var b in c.Buttons)
+            v.Add(string.IsNullOrEmpty(b.value) ? b.label : b.label + "  <alpha=#99><size=80%>" + ModsScreenModel.Plain(b.value) + "</size></alpha>", b.act, b.enabled);
+        return v;
+    }
+
+    /// <summary>The question as rows on the MODS screen (when the pop-up can't be used). True while it is shown (the
+    /// page draws nothing else).</summary>
     internal static bool Draw()
     {
-        if (_req == null || _hidden) return false;
+        if (_req == null || _hidden || _inModal) return false;
         // Left behind (the page was closed): dropped, unless its downloads are still running.
         if (_drawn && Time.frameCount - _lastDrawFrame > 2 && _step != Step.Downloading)
         {
@@ -87,91 +141,106 @@ internal static class RequiredModsPrompt
         _drawn = true;
         _lastDrawFrame = Time.frameCount;
 
+        var c = Compose();
+        SimpleMenu.Heading(c.Title);
+        if (!string.IsNullOrEmpty(c.Lead))
+            Menu.Banner(c.Lead, c.LeadTone switch { 1 => Theme.Warn, 2 => Theme.Bad, 3 => Theme.Good, _ => Theme.Info });
+        foreach (var l in c.Lines)
+            SimpleMenu.ListRow(l.Name, l.Text, null, l.Tag, l.Tone < 2, l.Text, false, out _);
+        foreach (var n in c.Notes) SimpleMenu.Note(n);
+        foreach (var b in c.Buttons) SimpleMenu.Button(b.label, b.value, b.hint, b.act, b.enabled);
+        return true;
+    }
+
+    // ---------------------------------------------------------------- what it says
+
+    private static Content Compose()
+    {
         var req = _req;
+        var c = new Content();
         string server = string.IsNullOrWhiteSpace(req.ServerName) ? "this server" : req.ServerName;
-        SimpleMenu.Heading("Join " + server);
+        c.Title = "Join " + ModsScreenModel.Plain(server);
         switch (_step)
         {
             case Step.Downloading:
-                Menu.Banner("Downloading the mods this server needs...", Theme.Info);
-                SimpleMenu.Note("They take effect after you restart the game; Server Browser+ then rejoins " + server + ".");
-                SimpleMenu.Button("Hide", null, "The downloads carry on; the status line says when they are done.", Hide);
-                return true;
+                c.Lead = "Getting the mods this server needs...";
+                c.Notes.Add("They take effect after you restart the game. Then Server Browser+ rejoins " + ModsScreenModel.Plain(server) + ".");
+                c.Buttons.Add(("Hide", null, "The downloads carry on. This comes back when they're done.", Hide, true));
+                return c;
             case Step.Restart:
-                Menu.Banner("Ready. Restart the game to finish: once it has started, Server Browser+ rejoins " + server + ".", Theme.Good);
-                SimpleMenu.Button("Quit the game", null, "Closes the game. Start it again (from Steam) and the rejoin starts by itself.", Application.Quit);
-                SimpleMenu.Button("Close", null, "Restart later: the rejoin waits up to 30 minutes.", Close);
-                return true;
+                c.Lead = "All set. Restart the game to finish: once it's up again, Server Browser+ rejoins " + ModsScreenModel.Plain(server) + ".";
+                c.LeadTone = 3;
+                c.Buttons.Add(("Quit the game", null, "Closes the game. Start it again from Steam and the rejoin starts by itself.", Application.Quit, true));
+                c.Buttons.Add(("Later", null, "Restart later: the rejoin waits up to 30 minutes.", Close, true));
+                return c;
             case Step.Failed:
-                Menu.Banner("Download failed: " + _error, Theme.Bad);
-                SimpleMenu.Button("Back", null, "Back to the list of mods this server needs.", () => _step = Step.Ask);
-                SimpleMenu.Button("Cancel", null, "Doesn't join.", Close);
-                return true;
+                c.Lead = "The download failed: " + _error;
+                c.LeadTone = 2;
+                c.Buttons.Add(("Back", null, "Back to the list of mods this server needs.", () => _step = Step.Ask, true));
+                c.Buttons.Add(("Cancel", null, "Doesn't join.", Close, true));
+                return c;
         }
 
         var plan = RequiredMods.PlanJoin(req.Issues, id => AvailableTab.Listed(id)?.Version);
         string prefab = plan.PrefabIssues ? RequiredMods.PrefabSummary(req.Issues, RequiredModsSession.NameOf) : null;
         if (plan.Blocking.Count > 0)
-            Menu.Banner("You can't join yet: " + Names(plan.Blocking) + (plan.Blocking.Count == 1 ? " is" : " are") +
-                        " another major version than the server's. Install the same version as the server, then join again.", Theme.Bad);
+        {
+            c.Lead = "You can't join yet: " + Names(plan.Blocking) + (plan.Blocking.Count == 1 ? " is" : " are") +
+                     " another major version than the server's. Install the same version as the server, then join again.";
+            c.LeadTone = 2;
+        }
         else if (prefab != null)
-            Menu.Banner(prefab + (plan.CanFix ? " Fix it below, then the game rejoins after a restart." : " You can't join until they match."),
-                plan.CanFix ? Theme.Warn : Theme.Bad);
+        {
+            c.Lead = prefab + (plan.CanFix ? " Fix it below and the game rejoins after a restart." : " You can't join until they match.");
+            c.LeadTone = plan.CanFix ? 1 : 2;
+        }
         else if (plan.WarningsOnly)
-            Menu.Banner("Some of your mods are another minor version than the server's. That should still work.", Theme.Warn);
-        else
-            Menu.Banner("This server runs mods that everyone in it needs.", Theme.Info);
+        {
+            c.Lead = "Some of your mods are on another minor version than the server's. That should still work.";
+            c.LeadTone = 1;
+        }
+        else c.Lead = "This server runs mods that everyone in it needs.";
 
         foreach (var i in req.Issues)
         {
-            string badge = i.Kind switch
+            string tag = i.Kind switch
             {
-                RequiredIssueKind.Missing => "MISSING",
-                RequiredIssueKind.Off => "OFF",
+                RequiredIssueKind.Missing => plan.Install.Contains(i.Id) ? "DOWNLOAD" : i.Prefab ? "MISSING" : "NOT LISTED",
+                RequiredIssueKind.Off => "SWITCH ON",
                 RequiredIssueKind.VersionMinor => "VERSION",
-                RequiredIssueKind.PrefabExtra => "EXTRA",
+                RequiredIssueKind.PrefabExtra => "SWITCH OFF",
                 RequiredIssueKind.PrefabNotReady => "FAILED",
-                RequiredIssueKind.PrefabBuild => "BUILD",
-                _ => "BLOCKED",
-            };
-            string value = i.Kind switch
-            {
-                RequiredIssueKind.Missing => plan.Install.Contains(i.Id) ? "Download" : i.Prefab ? "Can't join" : "Not listed",
-                RequiredIssueKind.Off => "Switch on",
-                RequiredIssueKind.VersionMinor => "Warning",
-                RequiredIssueKind.PrefabExtra => "Switch off",
-                _ => plan.Install.Contains(i.Id) ? "Download" : "Can't join",
+                RequiredIssueKind.PrefabBuild => plan.Install.Contains(i.Id) ? "DOWNLOAD" : "BUILD",
+                _ => plan.Install.Contains(i.Id) ? "DOWNLOAD" : "BLOCKED",
             };
             bool fixable = i.Kind is RequiredIssueKind.Off or RequiredIssueKind.VersionMinor or RequiredIssueKind.PrefabExtra || plan.Install.Contains(i.Id) ||
                            plan.MissingUnlisted.Contains(i.Id);
-            SimpleMenu.ListRow(RequiredModsSession.NameOf(i.Id), RequiredMods.IssueText(i), badge, value, fixable,
-                RequiredMods.IssueText(i), false, out _);
+            c.Lines.Add(new ModsScreenModel.Line(RequiredModsSession.NameOf(i.Id), tag, RequiredMods.IssueText(i), i.Blocks && !plan.Install.Contains(i.Id) ? 2 : fixable ? 1 : 2));
         }
         if (req.More > 0)
-            SimpleMenu.Note($"The server runs {req.More} more server mod{(req.More == 1 ? "" : "s")} it couldn't list.");
+            c.Notes.Add($"The server runs {req.More} more server mod{(req.More == 1 ? "" : "s")} it couldn't list.");
 
         bool needList = plan.MissingUnlisted.Count > 0 || plan.Blocking.Count > 0 || plan.PrefabBlocking.Count > 0;
         if (needList && !AvailableTab.ListReady)
         {
-            if (AvailableTab.ListChecking) SimpleMenu.Note("Checking the list of mods you can download...");
-            else if (AvailableTab.ListError != null) Menu.Banner("Couldn't get the list of mods: " + AvailableTab.ListError, Theme.Warn);
+            if (AvailableTab.ListChecking) c.Notes.Add("Checking the list of mods you can download...");
+            else if (AvailableTab.ListError != null) c.Notes.Add("Couldn't get the list of mods: " + AvailableTab.ListError);
         }
         else if (plan.MissingUnlisted.Count > 0)
-            SimpleMenu.Note(Names(plan.MissingUnlisted) + (plan.MissingUnlisted.Count == 1 ? " isn't" : " aren't") +
-                            " on the AVAILABLE tab: get it from whoever made it, or join without it.");
+            c.Notes.Add(Names(plan.MissingUnlisted) + (plan.MissingUnlisted.Count == 1 ? " isn't" : " aren't") +
+                        " in Get more mods: get it from whoever made it, or join without it.");
 
         if (plan.CanFix)
         {
             var downloads = Downloads(plan, out long total, out string files);
             if (plan.Install.Count > 0)
             {
-                SimpleMenu.Note("Download " + files + " from GitHub? " +
-                                "They are checked (size and SHA-256) before they are used, and take effect after you restart the game.");
-                SimpleMenu.Button("Install & join", ModVersion.FormatSize(total),
+                c.Notes.Add("Downloads " + files + " from GitHub. They're checked (size and SHA-256) before use and take effect after a restart.");
+                c.Buttons.Add(("Install & join", ModVersion.FormatSize(total),
                     "Downloads them" + (plan.SwitchOn.Count > 0 ? ", switches on " + Names(plan.SwitchOn) : "") +
                     (plan.SwitchOff.Count > 0 ? ", switches off " + Names(plan.SwitchOff) : "") +
                     ", then rejoins this server after you restart the game.",
-                    () => InstallAndJoin(plan, downloads), !AvailableTab.Busy);
+                    () => InstallAndJoin(plan, downloads), !AvailableTab.Busy));
             }
             else
             {
@@ -182,15 +251,15 @@ internal static class RequiredModsPrompt
                 string what = (plan.SwitchOn.Count > 0 ? "Switches on " + Names(plan.SwitchOn) : "") +
                               (plan.SwitchOn.Count > 0 && plan.SwitchOff.Count > 0 ? " and switches off " : plan.SwitchOff.Count > 0 ? "Switches off " : "") +
                               (plan.SwitchOff.Count > 0 ? Names(plan.SwitchOff) : "");
-                SimpleMenu.Button(label, Names(all), what + " (the change takes effect when the game starts), then rejoins this server after you restart.",
-                    () => SwitchAndRestart(plan));
+                c.Buttons.Add((label, Names(all), what + " (it takes effect when the game starts), then rejoins this server after you restart.",
+                    () => SwitchAndRestart(plan), true));
             }
         }
         if (plan.CanJoinNow && req.Join != null)
-            SimpleMenu.Button(plan.WarningsOnly ? "Join anyway" : "Join without them", null,
-                plan.WarningsOnly ? "Joins the server." : "Joins the server; these mods' features are off for you there.", JoinNow);
-        SimpleMenu.Button("Cancel", null, "Doesn't join.", Close);
-        return true;
+            c.Buttons.Add((plan.WarningsOnly ? "Join anyway" : "Join without them", null,
+                plan.WarningsOnly ? "Joins the server." : "Joins the server; these mods' features are off for you there.", JoinNow, true));
+        c.Buttons.Add(("Cancel", null, "Doesn't join.", Close, true));
+        return c;
     }
 
     private static List<ManifestEntry> Downloads(JoinPlan plan, out long total, out string files)
@@ -210,6 +279,8 @@ internal static class RequiredModsPrompt
         return list;
     }
 
+    // ---------------------------------------------------------------- the choices
+
     private static void InstallAndJoin(JoinPlan plan, List<ManifestEntry> downloads)
     {
         var req = _req;
@@ -222,7 +293,7 @@ internal static class RequiredModsPrompt
             {
                 _error = error;
                 _step = Step.Failed;
-                if (_hidden) Finish("Failed: " + error); // nothing was switched on
+                if (Unseen) ComeBack(); // nothing was switched on
                 return;
             }
             // Only now, so a cancelled or failed download leaves the switches as they were. An update of a
@@ -232,7 +303,7 @@ internal static class RequiredModsPrompt
             foreach (string id in plan.SwitchOn) ModManager.SetEnabled(id, true);
             foreach (string id in plan.SwitchOff) ModManager.SetEnabled(id, false);
             Prepare(req);
-            if (_hidden) Finish($"The mods for {req.ServerName ?? "the server"} are downloaded: restart the game to rejoin it.");
+            if (Unseen) ComeBack();
         });
         if (!started)
         {
@@ -257,34 +328,44 @@ internal static class RequiredModsPrompt
         MenuNav.Reset(MenuNav.UsedKeyboardRecently);
     }
 
-    /// <summary>Hides the prompt while its downloads run; the tabs show again.</summary>
+    /// <summary>Hides the question while its downloads run (it comes back when they end).</summary>
     private static void Hide()
     {
         _hidden = true;
+        if (_inModal) GameModal.Close();
+        _inModal = false;
         MenuNav.Reset(MenuNav.UsedKeyboardRecently);
     }
 
-    /// <summary>A hidden prompt's downloads ended: say so in the status line, and the prompt is done.</summary>
-    private static void Finish(string status)
+    /// <summary>Nobody sees the question now: hidden, or its rows left behind (the MODS screen was closed meanwhile).</summary>
+    private static bool Unseen => _hidden || (!_inModal && Time.frameCount - _lastDrawFrame > 2);
+
+    /// <summary>A hidden question's downloads ended: it shows again with how it went.</summary>
+    private static void ComeBack()
     {
-        Menu.SetStatus(status);
-        _req = null;
         _hidden = false;
+        _drawn = false;
+        Menu.SetStatus(_step == Step.Failed ? "Failed: " + _error : $"The mods for {_req?.ServerName ?? "the server"} are ready: restart the game to rejoin it.");
+        Present();
     }
 
     private static void JoinNow()
     {
         var join = _req?.Join;
         Close();
-        Menu.CloseRequested = true; // give the game's UI back: the join runs in its menus
         try { join?.Invoke(); }
         catch (Exception e) { DebugLog.Error("core", e, "RequiredModsPrompt.JoinNow"); Core.CorePlugin.Logger?.LogWarning("[ModTypes] join failed: " + e.Message); }
     }
 
     private static void Close()
     {
-        Dismiss();
-        Menu.CloseRequested = true;
+        bool modal = _inModal;
+        _req = null;
+        _inModal = false;
+        _hidden = false;
+        MenuNav.Reset(MenuNav.UsedKeyboardRecently);
+        if (modal) GameModal.Close();
+        else Menu.CloseRequested = true; // give the game's UI back: the join runs in its menus
     }
 
     private static string Names(List<string> ids)

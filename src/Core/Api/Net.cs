@@ -1,5 +1,9 @@
 using System;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Features.Public.ModNet;
 
 namespace OverTheHillPlus.Api;

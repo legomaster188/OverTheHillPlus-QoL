@@ -2,15 +2,6 @@ using UnityEngine;
 
 namespace OverTheHillPlus;
 
-/// <summary>Screen corner a HUD panel sits in.</summary>
-internal enum HudCorner
-{
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight,
-}
-
 /// <summary>
 /// Placing the mods' small HUD panels (Trip Stats, HUD+, Minimap, Auto Screenshot) in a screen corner, in 1080p units
 /// scaled to the screen like the driving HUD, so they line up with each other and with that HUD.
@@ -20,19 +11,40 @@ internal static class HudLayout
     public const float Margin = 24f;
     public static readonly string[] CornerNames = { "Top left", "Top right", "Bottom left", "Bottom right" };
 
-    /// <summary>The GUI scale for 1080p units (never below 1).</summary>
-    public static float Scale => Mathf.Max(1f, Screen.height / 1080f);
+    /// <summary>The cream of the game's HUD text (#FFF9EE).</summary>
+    public static readonly Color Cream = new(1f, 0.976f, 0.933f, 1f);
 
-    /// <summary>Sets GUI.matrix to 1080p units and returns the screen size in those units.</summary>
+    /// <summary>The small grey of a panel's title: the cream at half strength.</summary>
+    public static readonly Color Grey = new(1f, 0.976f, 0.933f, 0.55f);
+
+    /// <summary>A panel's black at 40%, as the game's own HUD panels.</summary>
+    public static readonly Color PanelBlack = new(0f, 0f, 0f, 0.4f);
+
+    /// <summary>The corners of a panel, in HUD units.</summary>
+    public const int PanelRadius = 5;
+
+    /// <summary>The GUI scale for the HUD's units now: they follow the screen's width (1920 across is 1 : 1), like the
+    /// game's own HUD (see <see cref="HudScale"/>).</summary>
+    public static float Scale => HudScale.For(Screen.width);
+
+    /// <summary>Draws a panel in the game's HUD style: black at 40% with 5 unit corners. Call between Begin and End.</summary>
+    public static void Panel(Rect r) => UI.Theme.Fill(r, PanelBlack, PanelRadius);
+
+    /// <summary>Sets GUI.matrix to HUD units (1920 across) and returns the screen size in those units.</summary>
     public static Vector2 Begin(float extraScale = 1f)
     {
         float s = Scale * Mathf.Clamp(extraScale, 0.5f, 3f);
         GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(s, s, 1f));
+        UI.HudKit.HudCanvas.Sync();
         return new Vector2(Screen.width / s, Screen.height / s);
     }
 
     /// <summary>Puts GUI.matrix back to identity (call after drawing).</summary>
-    public static void End() => GUI.matrix = Matrix4x4.identity;
+    public static void End()
+    {
+        GUI.matrix = Matrix4x4.identity;
+        UI.HudKit.HudCanvas.Sync();
+    }
 
     /// <summary>
     /// A <paramref name="w"/> x <paramref name="h"/> panel in <paramref name="corner"/> of a screen of
@@ -43,10 +55,9 @@ internal static class HudLayout
     {
         bool right = corner is HudCorner.TopRight or HudCorner.BottomRight;
         bool bottom = corner is HudCorner.BottomLeft or HudCorner.BottomRight;
-        float x = right ? screen.x - w - Margin : Margin;
         float top = Margin;
         if (corner == HudCorner.TopRight && DrivingHud.Shown) top += DrivingHud.Height + 12f;
-        float y = bottom ? screen.y - h - Margin - offset : top + offset;
+        var (x, y) = UI.HudKit.HudRules.Place(right, bottom, screen.x, screen.y, w, h, Margin, top, offset);
         return new Rect(x, y, w, h);
     }
 

@@ -136,7 +136,8 @@ internal static class CarTandemWheels
             {
                 if (!car.Catalog.IsThis(fp.GetComponent<VehicleCustomizationController>())) continue;
                 var blob = car.Assets.Blob;
-                var offsets = CarTandem.AxleOffsets(blob);
+                // a live car's offsets are from its physical rear axle, which may sit ahead of the model's (CarBody)
+                var offsets = CarTandem.PhysicalOffsets(blob, car.Def.PhysicalRearShift);
                 if (offsets.Length == 0) break;
                 for (int i = 0; i < wm.childCount; i++)
                 {

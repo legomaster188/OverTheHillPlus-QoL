@@ -1,15 +1,24 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+using Il2CppGPUInstancerPro;
+#else
 using Fusion;
 using GPUInstancerPro;
+#endif
 using Il2CppInterop.Runtime;
 using OverTheHillPlus.Features.Public.NetPerf;
 using OverTheHillPlus.Features.Public.PlayerList;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
+#if MELON
+using Il2CppTND.Upscaling.Framework;
+#else
 using TND.Upscaling.Framework;
+#endif
 using C = OverTheHillPlus.Features.Public.HostGovernor.HostGovernorFeature;
 using OverTheHillPlus.ServerUtils;
 

@@ -1,5 +1,9 @@
 using System;
+#if MELON
+using Il2CppDistantLands.Cozy;
+#else
 using DistantLands.Cozy;
+#endif
 using UnityEngine;
 
 namespace OverTheHillPlus.Features.Public.Graphics.Water;

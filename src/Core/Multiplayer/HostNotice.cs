@@ -98,5 +98,9 @@ internal static class HostNotice
     new[] { typeof(Color), typeof(string), typeof(string), typeof(float), typeof(float), typeof(float) })]
 internal static class HostNoticeDisplayPatch
 {
-    private static void Prefix(ref string text) => HostNotice.CleanUp(ref text);
+    private static void Prefix(ref string text, string eventRefAddressablePath, float fadeInTime, float deactivationTime, float fadeOutTime)
+    {
+        HostNotice.CleanUp(ref text);
+        UI.GameMenu.GameToast.Seen(eventRefAddressablePath, fadeInTime, deactivationTime, fadeOutTime);
+    }
 }

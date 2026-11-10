@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.UI;
 using UnityEngine;
 using OverTheHillPlus.BigLobbies;

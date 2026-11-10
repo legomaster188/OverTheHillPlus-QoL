@@ -19,14 +19,14 @@ public static class GemseDefinition
     /// <summary>CarInfo.name and the livery car name ("car": "Gemse" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Gemse";
     public const string Guid = "bd987891ab964d219c2209f8aa17e39c";
-    public const int Protocol = 1;
+    /// <summary>3: the frame's body box.</summary>
+    public const int Protocol = 3;
 
     /// <summary>Single items that can't sit right on this body: the camping lantern and the pan hang from a roof rack's
     /// overhang the hardtop doesn't have.</summary>
     public static readonly string[] Hidden =
     {
-        "Visual/Rear/CampingLantern", "Visual/Rear/Pan",
-    };
+        "Visual/Rear/CampingLantern", "Visual/Rear/Pan", "Visual/Fender/Mudflap_FL", "Visual/Fender/Mudflap_FR" };
 
     public static CarDefinition Create() => new()
     {
@@ -49,6 +49,9 @@ public static class GemseDefinition
         // (7.50R16), so the car sits about 12 cm lower than the Marshal on its 0.53 m tyres.
         DefaultDonor = "Car_Marshal",
         DefaultGarageBase = "Marshal",
+        // The model's collider stops at the cargo floor, 0.59 m up: the frame rails and the axle beams under it had nothing
+        // solid, so they sank 30 cm into rocks. One box along the frame, from behind the front bumper to the rear crossmember.
+        BodyBoxes = new[] { new CarBodyBox(new MeshVec3(0f, 0.52f, -0.35f), new MeshVec3(0.90f, 0.20f, 4.50f)) },
         AssetName = "gemse",
         // the built-in steps under the doors replace the game's side steps (and the side Christmas lights in that slot)
         HiddenSlots = new[] { "Visual/Side_Step" },

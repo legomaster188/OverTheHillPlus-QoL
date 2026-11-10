@@ -53,11 +53,14 @@ internal static class PatchReport
         if (harmony == null || asm == null) return 0;
         modId ??= "?";
         int failed = 0;
+        long began = System.Diagnostics.Stopwatch.GetTimestamp();
         foreach (var type in AccessTools.GetTypesFromAssembly(asm))
         {
             if (include != null && !include(type)) continue;
             try
             {
+                // Harmony would read every attribute of every class to find this out (closures and all)
+                if (!type.IsDefined(typeof(HarmonyAttribute), true)) continue;
                 // Types without patch attributes patch nothing: only real patch classes count as ok.
                 var patched = harmony.CreateClassProcessor(type).Patch();
                 if (patched != null && patched.Count > 0)
@@ -80,6 +83,7 @@ internal static class PatchReport
             }
         }
         FailedByMod[modId] = Failed(modId) + failed;
+        Logging.BootReport.Patched(modId, System.Diagnostics.Stopwatch.GetTimestamp() - began);
         string line = SummaryLine(modId);
         if (line != null) DebugLog.Info(modId, "patches: " + line);
         if (failed > 0)

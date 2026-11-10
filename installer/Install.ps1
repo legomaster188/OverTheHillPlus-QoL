@@ -582,7 +582,7 @@ function NextSteps([string]$game) {
     Say ""
     Say "Next steps" "Cyan"
     Say "  1. Start the game. The first start after installing takes a few minutes while BepInEx gets ready."
-    Say "  2. In the game, press F7 (or Esc, then MODS) to open the mods page."
+    Say "  2. In the game, open Settings, then MODS, for the mods page."
     Say "  3. If something is wrong, look at BepInEx\LogOutput.log in the game folder, and see the README."
 }
 

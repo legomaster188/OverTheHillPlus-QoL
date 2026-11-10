@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+using Il2CppFusion.Addons.InterestManagement;
+#else
 using Fusion;
 using Fusion.Addons.InterestManagement;
+#endif
 using Il2CppInterop.Runtime;
 using UnityEngine;
 using Object = UnityEngine.Object;

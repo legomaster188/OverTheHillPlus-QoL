@@ -1,4 +1,4 @@
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 
 namespace OverTheHillPlus.DrivingQol;
 
@@ -34,5 +34,16 @@ internal static class DrivingQolConfig
         CompassRange = cfg.Bind("QoL", "CompassRangeMultiplier", 1f, "How far away places still show on the compass.");
         AutoHeadlights = cfg.Bind("QoL", "AutoHeadlights", false, "Headlights on at night (19:00-07:00), off in the day.");
         HideTutorialHints = cfg.Bind("QoL", "HideTutorialHints", false, "Don't show tutorial hint pop-ups.");
+        HandOverGarageLift(cfg);
+    }
+
+    /// <summary>The garage lift preview moved to core ([GarageLift] in oth.core.cfg): an older Driving+'s values go there
+    /// once and leave this file.</summary>
+    private static void HandOverGarageLift(ConfigFile cfg)
+    {
+        if (OverTheHillPlus.Cars.GarageLiftFeature.Preview == null) return; // core's side isn't bound (MODS page only): keep them for later
+        foreach (var key in new[] { "Preview", "ShowText", "EaseSeconds" })
+            if (cfg.TakeOrphan(OverTheHillPlus.Cars.GarageLiftFeature.Section, key, out string value))
+                OverTheHillPlus.Cars.GarageLiftFeature.TakeOver(key, value);
     }
 }

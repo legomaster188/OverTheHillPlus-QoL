@@ -1,5 +1,5 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
 using HarmonyLib;
 using OverTheHillPlus.ServerBrowser;
 using OverTheHillPlus.UI;
@@ -48,6 +48,8 @@ internal sealed class RejoinFeature : IFeature
         Registry.Section(Registry.PlusMode, "Servers", DrawMenu, -20);
         Registry.OnTick(Tick);
         Registry.OnGui(DrawPanel);
+        // "Players with the mod" (the browser's panel and the market's page) join through the rejoin path.
+        OverTheHillPlus.Core.Shared.ModPlayers.Join = RejoinCore.JoinListed;
     }
 
     private static bool MenuOpen => Time.frameCount - Menu.DrawnFrame <= 2;
@@ -155,14 +157,14 @@ internal sealed class RejoinFeature : IFeature
     private static void DrawPanel()
     {
         if (!PanelVisible) { _hover = false; return; }
+        // The screen layer, every event: the panel's buttons take clicks and it shows over the menus.
+        if (!UI.HudKit.HudDraw.Begin("rejoin", UI.HudKit.HudLayer.Screen)) return;
         var prevMatrix = GUI.matrix;
         try
         {
             Theme.Ensure();
             EnsureStyles();
-            float scale = Mathf.Max(1f, Screen.height / 1080f);
-            GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
-            float sw = Screen.width / scale;
+            float sw = HudLayout.Begin().x;
             // Below the server browser's PLUS quick bar (top centre).
             var r = new Rect((sw - PanelW) / 2f, 96f, PanelW, PanelH);
             var ev = Event.current;
@@ -170,17 +172,15 @@ internal sealed class RejoinFeature : IFeature
 
             var state = RejoinCore.State;
             var accent = state == RejoinCore.Phase.Failed ? Theme.Bad : state == RejoinCore.Phase.Done ? Theme.Good : Theme.Accent;
-            Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.94f), 10);
-            Theme.Fill(new Rect(r.x, r.y, 4f, r.height), accent, 2);
+            Shared.WorldOverlay.PanelBox(r, accent, UI.HudKit.HudLook.PanelStrong);
 
             bool countdown = state == RejoinCore.Phase.Countdown;
             bool cancellable = RejoinCore.Active && state != RejoinCore.Phase.Joining;
             float buttons = (countdown ? 2 : cancellable ? 1 : 0) * 96f;
             float textW = PanelW - 28f - buttons;
 
-            _title.normal.textColor = accent;
-            GUI.Label(new Rect(r.x + 16f, r.y + 8f, textW, 18f), "PLUS REJOIN", _title);
-            GUI.Label(new Rect(r.x + 16f, r.y + 28f, textW, 34f), StatusLine(), _line);
+            UI.HudKit.HudDraw.Label(new Rect(r.x + 16f, r.y + 8f, textW, 18f), "PLUS REJOIN", _title, accent);
+            UI.HudKit.HudDraw.Label(new Rect(r.x + 16f, r.y + 28f, textW, 34f), StatusLine(), _line);
 
             float bx = r.xMax - 12f - 88f, by = r.y + (PanelH - 32f) / 2f;
             if (cancellable)
@@ -198,11 +198,17 @@ internal sealed class RejoinFeature : IFeature
                 ServerBrowserPlugin.Logger.LogError("[Rejoin] panel failed (further errors suppressed): " + e);
             }
         }
-        finally { GUI.matrix = prevMatrix; }
+        finally
+        {
+            GUI.matrix = prevMatrix;
+            UI.HudKit.HudCanvas.Sync();
+            UI.HudKit.HudDraw.End();
+        }
     }
 
     private static bool Chip(Rect r, string label)
     {
+        if (UI.HudKit.HudDraw.Native) return UI.HudKit.HudDraw.Button(r, label, Theme.Chip);
         bool hover = r.Contains(Event.current.mousePosition);
         Theme.Fill(r, hover ? Theme.AccentDim : Theme.Hex(0x222B36), 6);
         _center.normal.textColor = hover ? Theme.Text : Theme.Muted;

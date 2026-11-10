@@ -1,0 +1,50 @@
+{
+  "id": "safari_snorkel",
+  "name": "Safari Snorkel",
+  "cosmeticType": "SideSection",
+  "slot": "Performance/Snorkel",
+  "price": 20,
+  "paintable": false,
+  "group": "snorkel",
+  "fits": {
+    "Hilo": {
+      "pos": [
+        -0.762,
+        1.122,
+        0.976
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Bastion": {
+      "pos": [
+        -0.897,
+        1.166,
+        0.863
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Vera": {
+      "pos": [
+        -0.865,
+        1.247,
+        0.848
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    }
+  }
+}

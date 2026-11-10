@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using OverTheHillPlus.Features.Public.Filter;
 using Net = OverTheHillPlus.Features.Public.ModNet.ModNet;

@@ -3,9 +3,13 @@
   <PropertyGroup>
     <AssemblyName>OTH.Core</AssemblyName>
     <RootNamespace>OverTheHillPlus.Core</RootNamespace>
+    <!-- Also built for MelonLoader (src/MelonCarPack.slnf, -p:Loader=Melon), started before every mod. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.Core.CorePlugin</OthPluginClass>
+    <OthMelonPriority>-1000</OthMelonPriority>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(Loader)' != 'Melon'">
     <!-- INativeDetour (ModNet's native receive hook) derives from MonoMod's IDetour -->
     <Reference Include="$(BepInExDir)\core\MonoMod.RuntimeDetour.dll" Private="false" />
   </ItemGroup>

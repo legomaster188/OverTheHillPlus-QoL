@@ -2,7 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using OverTheHillPlus.Features.Public.ServerPlayers;
+#if MELON
+using Il2CppSteamworks;
+#else
 using Steamworks;
+#endif
 using UnityEngine;
 
 namespace OverTheHillPlus.Features.Public.ServerBrowserPlus;

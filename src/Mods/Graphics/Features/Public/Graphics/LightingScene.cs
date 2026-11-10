@@ -1,13 +1,26 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppHorizonBasedAmbientOcclusion.Universal;
+#else
 using HorizonBasedAmbientOcclusion.Universal;
+#endif
 using Il2CppInterop.Runtime;
+#if MELON
+using Il2CppOccaSoftware.LSPP.Runtime;
+using Il2CppTND.Upscaling.Framework;
+#else
 using OccaSoftware.LSPP.Runtime;
 using TND.Upscaling.Framework;
+#endif
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+#if MELON
+using BeautifyFx = Il2CppBeautify.Universal.Beautify;
+#else
 using BeautifyFx = global::Beautify.Universal.Beautify;
+#endif
 using Object = UnityEngine.Object;
 using OverTheHillPlus.Graphics;
 
@@ -36,7 +49,7 @@ internal static class LightingScene
     public static LightScatteringPostProcess MainGodRays;
     public static BeautifyFx MainBeautify;
 
-    private static float _nextScan;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer ScanPace = WorldScan.Pace("volumes", 3f);
     private static bool _scanFailedLogged;
 
     public static bool Alive(Object o)
@@ -68,8 +81,8 @@ internal static class LightingScene
     {
         float now = Time.unscaledTime;
         bool lost = (Upscalers != null && !Alive(Upscalers)) || (MainHbao != null && !Alive(MainHbao));
-        if (!force && !lost && now < _nextScan) return;
-        _nextScan = now + 3f;
+        if (force || lost) ScanPace.Again();
+        if (!WorldScan.Due(ScanPace, now)) return;
         try { Scan(); }
         catch (Exception e)
         {

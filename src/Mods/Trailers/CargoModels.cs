@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFunCore.Managers;
+#else
 using FunCore.Managers;
+#endif
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -114,6 +118,55 @@ internal static class CargoModels
         seatOut = null;
         string name = CarName(itemId);
         if (name == null) return null;
+        var go = Stripped(name);
+        if (go == null) return null;
+        // measured asleep, in the car's own space, from the meshes (not Renderer.bounds: the copy has never been
+        // drawn), seated by its tyres: the garage model's shadow box reaches 0.5-1.2 m under them and lifted the car
+        var seat = Measure(go, out int tyres);
+        float flatRear = float.NaN, front = float.NaN;
+        if (model != null)
+        {
+            var deckAt = model.Anchor("deck", Vector3.zero);
+            var nan = new Vector3(0f, 0f, float.NaN);
+            flatRear = model.Anchor("deck_flat_rear", nan).z - deckAt.z;
+            front = model.Anchor("deck_front", nan).z - deckAt.z;
+        }
+        var s = CargoFit.Seat(seat.tyres, seat.lo, seat.hi, flatRear, front);
+        DebugLog.Verbose(TrailersPlugin.ModId, () => $"load {name}: {tyres} tyres, seated at ({s.X:0.00}, {s.Y:0.00}, {s.Z:0.00}), {s.Chocks.Count} chocks{(s.Fits ? "" : ", too long for the deck")}");
+        if (model != null) Fit[name] = s.Fits;
+        seatOut = s;
+        return go;
+    }
+
+    /// <summary>A boat's garage model (a boat mod's car, Prefabs/Cars/MerchantDummies/Car_&lt;name&gt;_Dummy), stripped like a
+    /// hauler's load, not parented to anything (it is drawn on a boat trailer's bunks or moored on the water), with its
+    /// visible bounds in its root's space (<paramref name="lo"/>.y is the keel). Null when it can't be loaded.</summary>
+    public static GameObject Boat(uint itemId, out Vector3 lo, out Vector3 hi)
+    {
+        lo = hi = Vector3.zero;
+        string name = CarName(itemId);
+        if (name == null) return null;
+        var go = Stripped(name);
+        if (go == null) return null;
+        // the hull only: the outboard (a moving part) hangs aft and, tilted or not, isn't what sits on the bunks or floats
+        var m = Measure(go, out _, skipMoving: true);
+        lo = new Vector3(m.lo.Item1, m.lo.Item2, m.lo.Item3);
+        hi = new Vector3(m.hi.Item1, m.hi.Item2, m.hi.Item3);
+        if (!(hi.z - lo.z > 1f))
+        {
+            TrailersPlugin.LogOnce("boat-size-" + name, $"[Trailers] {name}: its garage model measures {hi.z - lo.z:0.00} m long, not a boat for the trailer.");
+            try { Object.DestroyImmediate(go); } catch (Exception ex) { DebugLog.Error("trailers", ex, "CargoModels.Boat"); }
+            return null;
+        }
+        go.name = "OTH_TrailerBoat_" + name;
+        go.transform.SetParent(null, false);
+        return go;
+    }
+
+    /// <summary>A car's garage model, instantiated asleep under the workshop holder and stripped there of its joints,
+    /// bodies, colliders and scripts (none of them ever runs in the world); null when it can't be loaded.</summary>
+    private static GameObject Stripped(string name)
+    {
         GameObject src;
         try
         {
@@ -142,28 +195,13 @@ internal static class CargoModels
         t.localPosition = Vector3.zero;
         t.localRotation = Quaternion.identity;
         t.localScale = Vector3.one;
-        // measured asleep, in the car's own space, from the meshes (not Renderer.bounds: the copy has never been
-        // drawn), seated by its tyres: the garage model's shadow box reaches 0.5-1.2 m under them and lifted the car
-        var seat = Measure(go, out int tyres);
-        float flatRear = float.NaN, front = float.NaN;
-        if (model != null)
-        {
-            var deckAt = model.Anchor("deck", Vector3.zero);
-            var nan = new Vector3(0f, 0f, float.NaN);
-            flatRear = model.Anchor("deck_flat_rear", nan).z - deckAt.z;
-            front = model.Anchor("deck_front", nan).z - deckAt.z;
-        }
-        var s = CargoFit.Seat(seat.tyres, seat.lo, seat.hi, flatRear, front);
-        DebugLog.Verbose(TrailersPlugin.ModId, () => $"load {name}: {tyres} tyres, seated at ({s.X:0.00}, {s.Y:0.00}, {s.Z:0.00}), {s.Chocks.Count} chocks{(s.Fits ? "" : ", too long for the deck")}");
-        if (model != null) Fit[name] = s.Fits;
-        seatOut = s;
         return go;
     }
 
     /// <summary>The load's tyres and its visible body's bounds, in its root's space. Helper meshes (shadow box,
     /// vegetation quads, wheel colliders' meshes, track stamps) are switched off and left out; so is anything switched
     /// off in the model (unmounted cosmetics).</summary>
-    private static (List<CargoTyre> tyres, (float, float, float) lo, (float, float, float) hi) Measure(GameObject go, out int tyreCount)
+    private static (List<CargoTyre> tyres, (float, float, float) lo, (float, float, float) hi) Measure(GameObject go, out int tyreCount, bool skipMoving = false)
     {
         var root = go.transform;
         var toRoot = root.worldToLocalMatrix;
@@ -188,6 +226,7 @@ internal static class CargoModels
                 continue;
             }
             if (mesh == null || !r.enabled || !ShownUnder(r.transform, root)) continue;
+            if (skipMoving && Under(r.transform, root, OverTheHillPlus.Cars.CarMovingParts.HolderName)) continue;
             var m = toRoot * r.transform.localToWorldMatrix;
             var b = mesh.bounds;
             for (int i = 0; i < 8; i++)
@@ -208,6 +247,17 @@ internal static class CargoModels
         }
         tyreCount = tyres.Count;
         return (tyres, (lo.x, lo.y, lo.z), (hi.x, hi.y, hi.z));
+    }
+
+    /// <summary>Somewhere under a node of that name below the model's root.</summary>
+    private static bool Under(Transform x, Transform root, string node)
+    {
+        for (var p = x; p != null; p = p.parent)
+        {
+            if (p.Pointer == root.Pointer) return false;
+            if (p.name == node) return true;
+        }
+        return false;
     }
 
     /// <summary>Switched on in the model: the object and every parent up to the model's root (the root itself sits

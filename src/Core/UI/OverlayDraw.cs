@@ -1,10 +1,12 @@
+using OverTheHillPlus.UI.HudKit;
 using UnityEngine;
 
 namespace OverTheHillPlus.UI;
 
 /// <summary>
 /// Immediate-mode drawing primitives for on-screen overlays: boxes, lines, markers and outlined labels (screen pixels,
-/// call only during Repaint). In core because several mods draw overlays with them.
+/// call only during Repaint). In core because several mods draw overlays with them. In a mod's HUD group (HudDraw.Begin)
+/// they land on the game-style HUD layer: rects, lines and labels below check for it, the rest are built from those.
 /// </summary>
 internal static class OverlayDraw
 {
@@ -23,6 +25,7 @@ internal static class OverlayDraw
     public static void Rect(Rect r, Color c)
     {
         if (r.width <= 0f || r.height <= 0f) return;
+        if (HudCanvas.FillRounded(r, c, 0)) return;
         var prev = GUI.color;
         GUI.color = c;
         GUI.DrawTexture(r, White);
@@ -72,6 +75,7 @@ internal static class OverlayDraw
     /// <summary>Any-angle line, drawn as a rotated quad.</summary>
     public static void Line(Vector2 a, Vector2 b, Color c, float w)
     {
+        if (HudCanvas.Line(a, b, c, w)) return;
         var d = b - a;
         float len = d.magnitude;
         if (len < 0.5f || float.IsNaN(len)) return;
@@ -144,6 +148,12 @@ internal static class OverlayDraw
     /// <summary>Text with a 1px dark shadow, centred horizontally on <paramref name="cx"/>; returns its height.</summary>
     public static float Label(float cx, float y, string s, int size, Color c)
     {
+        if (HudCanvas.Emitting)
+        {
+            float h = size * 1.4f;
+            var spec = new HudText(HudRules.NativeSize(size), c, TextAnchor.MiddleCenter, HudFont.Bold) { Shadow = true };
+            if (HudCanvas.Text(new Rect(cx - 600f, y, 1200f, h), s, spec)) return h;
+        }
         var st = Text(size);
         var sz = st.CalcSize(new GUIContent(s));
         var r = new Rect(cx - sz.x * 0.5f, y, sz.x, sz.y);
@@ -157,6 +167,11 @@ internal static class OverlayDraw
     /// <summary>Left-aligned shadowed text.</summary>
     public static void LabelLeft(Rect r, string s, int size, Color c)
     {
+        if (HudCanvas.Emitting)
+        {
+            var spec = new HudText(HudRules.NativeSize(size), c, TextAnchor.MiddleLeft, HudFont.Bold) { Shadow = true };
+            if (HudCanvas.Text(r, s, spec)) return;
+        }
         var st = Text(size);
         var prevAlign = st.alignment;
         st.alignment = TextAnchor.MiddleLeft;

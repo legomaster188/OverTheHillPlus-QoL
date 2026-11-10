@@ -84,6 +84,9 @@ internal sealed class HookStat
     public string LastError;
     /// <summary>Seconds after which the next "slow hook" line may be written (one per hook per 10 s).</summary>
     public double NextSlowLogAt { get; set; }
+    /// <summary>Slow runs since the last line: the line says how many it stands for, so a hook slow every second doesn't
+    /// read as slow every 10 s.</summary>
+    public int SlowRuns { get; set; }
 
     public HookStat(string modId, string name)
     {

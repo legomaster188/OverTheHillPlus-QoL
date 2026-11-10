@@ -1,7 +1,16 @@
+#if MELON
+using GameLobby = Il2Cpp.Lobby;
+#else
+using GameLobby = global::Lobby;
+#endif
 using System;
 using System.Collections.Generic;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using Il2CppInterop.Runtime;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -39,7 +48,7 @@ internal sealed class LobbyGarage : IFeature
 
     private static readonly Dictionary<int, int> Spot = new(); // extra player (RawEncoded) -> spawn point index
     private static IntPtr _lobbyPtr;
-    private static global::Lobby _lobby;
+    private static GameLobby _lobby;
     private static StateLobbyMenu _menu;
     private static readonly HashSet<string> Logged = new();
 
@@ -62,7 +71,7 @@ internal sealed class LobbyGarage : IFeature
 
     // ---- spawn spots ----
 
-    internal static void OnLobbyAwake(global::Lobby lobby)
+    internal static void OnLobbyAwake(GameLobby lobby)
     {
         Spot.Clear();
         _lobby = lobby;
@@ -76,7 +85,7 @@ internal sealed class LobbyGarage : IFeature
     /// Spawn point for a player the game has no slot for (or one that must keep its spot). True = use idx/point.
     /// Players in one of the 4 slots keep the game's own answer.
     /// </summary>
-    internal static bool Resolve(global::Lobby lobby, PlayerRef player, int gameIndex, SpawnPoint gamePoint, out int idx, out SpawnPoint point)
+    internal static bool Resolve(GameLobby lobby, PlayerRef player, int gameIndex, SpawnPoint gamePoint, out int idx, out SpawnPoint point)
     {
         idx = -1;
         point = null;
@@ -323,7 +332,7 @@ internal sealed class LobbyGarage : IFeature
             Menu.SliderRow(RowDepthEntry, "Row spacing", 4f, 14f, "0.0", " m", Enabled && Layout == LobbyGarageLayout.Staggered);
             Menu.KeyValue("Lobby", InLobby ? $"{_lobby.spawnPoints?.Count ?? 0} spots, {LastShown} labels shown (game had {(BaseLabels < 0 ? 4 : BaseLabels)})" : "not in a lobby");
             Menu.KeyValue("Extra players placed", $"{Spot.Count} now · {LabelsAdded} labels and {SpotsCloned} spots added · {CarsMoved} cars re-placed");
-            if (Swallowed > 0) Menu.KeyValue("Errors caught", $"{Swallowed} (see the BepInEx log)");
+            if (Swallowed > 0) Menu.KeyValue("Errors caught", $"{Swallowed} (see the {OverTheHillPlus.Loader.LoaderText.LoaderName} log)");
             if (LobbyGarageLayout.LastLog.Length > 0) Menu.Small(LobbyGarageLayout.LastLog);
             Menu.Chips(1, ("Re-apply layout now", ReapplyLayout, Enabled && InLobby));
         });

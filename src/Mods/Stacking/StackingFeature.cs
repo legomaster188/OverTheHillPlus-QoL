@@ -8,6 +8,6 @@ internal sealed class StackingFeature : IFeature
     public void Register()
     {
         Registry.OnTick(StackHint.Tick);
-        Registry.OnGui(StackHint.Gui);
+        Registry.OnGui(StackHint.Gui, wants: StackHint.GuiWanted, repaintOnly: true);
     }
 }

@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if MELON
+using Il2CppVehiclePhysics;
+#else
 using VehiclePhysics;
+#endif
 using Object = UnityEngine.Object;
 
 namespace OverTheHillPlus.Cars;
@@ -22,6 +26,13 @@ internal sealed class CarLayout
     public Bounds DonorBody;
     /// <summary>The model's tyre radius (metres).</summary>
     public float TyreRadius;
+    /// <summary>The rear tyre's radius: <see cref="TyreRadius"/> unless the model has its own rear tyre of another size.</summary>
+    public float RearTyreRadius;
+    /// <summary>How much higher than the front hubs the rear ones stand (<see cref="CarWheelFit.RearRise"/>): 0 unless the
+    /// model has its own rear tyre of another size.</summary>
+    public float RearRise;
+    /// <summary>The same for the garage model, by the tyres as drawn (<see cref="CarWheelFit.TyreHalfHeight"/>): 0 when <see cref="RearRise"/> is.</summary>
+    public float RearDrawRise;
     /// <summary>The donor's tyre radius (its wheel colliders', else its tyre meshes').</summary>
     public float DonorTyreRadius;
     /// <summary>The difference of the tyre radii (<see cref="CarWheelFit.Drop"/>): how much lower than the donor the live
@@ -47,6 +58,7 @@ internal sealed class CarLayout
 /// <para>The game's cosmetic slots stay (Parts/&lt;Car&gt;_CosmeticParts): each slot, and the few items placed inside
 /// one, moves to its anchor on the model (<see cref="CarCosmetics"/>, plus the car's per-anchor tweak); the rollcage,
 /// the car's hidden slots and any slot whose anchor the model lacks are hidden.</para>
+/// <para>Each wheel's snow stamp (<see cref="TraxStamp"/>) takes the model's tyre size, as the bump stops do.</para>
 /// <para>Tyre size (<see cref="CarWheelFit"/>): on the template the wheel colliders keep their place and get the model's
 /// tyre radius (CarTuning), and the body is placed so the model's wheel centres meet the donor's: VPP settles the live
 /// car lower by the difference of the radii, onto its own tyres, with the centre of mass, winch points and lights where
@@ -134,6 +146,14 @@ internal sealed class CarBody
         var tyrePart = blob.Pick(MeshPartKind.Tyre, MeshBlob.TyreName);
         var tyreBounds = CarAssets.RootBounds(new[] { tyrePart });
         lay.TyreRadius = Mathf.Max(tyreBounds.size.y, tyreBounds.size.z) * 0.5f;
+        // a big tyre on the rear axle only (a sand rail's paddles): the rear hubs stand that much higher, the rear colliders
+        // take that radius, and the front tyres alone say where the model meets the ground
+        lay.RearRise = CarWheelFit.RearRise(lay.TyreRadius, CarWheelFit.TyreRadius(CarTandem.RearTyre(blob)));
+        lay.RearTyreRadius = lay.TyreRadius + lay.RearRise;
+        // the garage model has no colliders, so its rear tyres stand by their drawn height: a rear tyre with a flat under it
+        // (the Jackal's) is lower than its radius says
+        lay.RearDrawRise = lay.RearRise == 0f ? 0f
+            : CarWheelFit.TyreHalfHeight(CarTandem.RearTyre(blob)) - CarWheelFit.TyreHalfHeight(tyrePart);
         // The template's physics runs on its wheel colliders' radius; the garage model has none, so its own tyre meshes
         // say where its tyres meet the floor (the template's radius when it has none either).
         string radiusFrom = template ? "its wheel colliders" : "its tyre meshes";
@@ -148,12 +168,13 @@ internal sealed class CarBody
         lay.WheelDrop = CarWheelFit.Drop(donorR, lay.TyreRadius);
         lay.VisualDrop = template ? 0f : lay.WheelDrop;
 
-        float dy = Avg(lay.DonorWheels, v => v.y) - lay.VisualDrop - Avg(model, v => v.y);
+        float modelHub = lay.RearRise != 0f ? (model[0].y + model[1].y) * 0.5f : Avg(model, v => v.y);
+        float dy = Avg(lay.DonorWheels, v => v.y) - lay.VisualDrop - modelHub;
         float donorMid = (lay.DonorFrontZ + lay.DonorRearZ) * 0.5f;
         float modelMid = ((model[0].z + model[1].z) * 0.5f + (model[2].z + model[3].z) * 0.5f) * 0.5f;
         lay.Offset = new Vector3(0f, dy, donorMid - modelMid);
         for (int i = 0; i < 4; i++)
-            lay.Wheels[i] = new Vector3(model[i].x, lay.DonorWheels[i].y - lay.VisualDrop, model[i].z + lay.Offset.z);
+            lay.Wheels[i] = new Vector3(model[i].x, lay.DonorWheels[i].y - lay.VisualDrop + (i >= 2 ? (template ? lay.RearRise : lay.RearDrawRise) : 0f), model[i].z + lay.Offset.z);
         lay.DonorBody = BoundsInRoot(rt, bodies);
         bool same = Mathf.Abs(lay.WheelDrop) < 0.0005f;
         string dir = lay.WheelDrop > 0 ? "lower" : "higher";
@@ -213,11 +234,18 @@ internal sealed class CarBody
         var tyreR = new List<MeshPart> { CarTandem.RearTyre(blob) };
         var rimAndTyreR = new List<MeshPart> { rimR[0], tyreR[0] };
         bool ownRear = blob.Part(MeshBlob.RearWheelName) != null || blob.Part(MeshBlob.RearTyreName) != null;
-        var tandem = CarTandem.AxleOffsets(blob);
+        // The live car's physical rear axle may sit ahead of the model's rear wheels (CarDefinition.PhysicalRearShift: a long
+        // tandem truck, whose real wheelbase the game's raycast wheels can't hold still); the garage model has no physics and
+        // keeps it where the model has it. Either way the followers draw every visible axle where the model has it.
+        float rearShift = template ? CarTandem.RearShift(CarTandem.AxleOffsets(blob), _car.Def.PhysicalRearShift) : 0f;
+        var tandem = CarTandem.PhysicalOffsets(blob, rearShift);
+        // before the wheels get the model's meshes: the donor's tyre, which the snow stamp is sized for
+        float donorTyreWidth = MeshTyreWidth(rt, corner);
+        var rearTyreBounds = CarAssets.RootBounds(new[] { tyreR[0] });
         for (int i = 0; i < 4; i++)
         {
-            MoveTo(rt, corner[i], lay.Wheels[i]);
             bool rear = i >= 2;
+            MoveTo(rt, corner[i], rear ? lay.Wheels[i] + new Vector3(0f, 0f, rearShift) : lay.Wheels[i]);
             var filters = corner[i].GetComponentsInChildren<MeshFilter>(true);
             bool hasTyre = false;
             foreach (var mf in filters)
@@ -227,7 +255,15 @@ internal sealed class CarBody
             {
                 if (mf == null) continue;
                 bool isTyre = IsTyre(mf.name), isRim = !isTyre && mf.name.IndexOf("wheel", StringComparison.OrdinalIgnoreCase) >= 0;
-                // Anything else on the wheel (the snow-trax stamp) is left as the donor has it.
+                if (mf.name == TraxStamp)
+                {
+                    // The stamp the snow's camera sees: the donor's tyre size would rut wider and deeper than a smaller tyre
+                    // and stay clear of the ground under a bigger one (no track at all). On a tandem it goes along with the
+                    // axles, so the ruts are under the wheels.
+                    FitTraxStamp(mf.transform, lay, rear ? lay.RearTyreRadius : lay.TyreRadius, donorTyreWidth, (rear ? rearTyreBounds : tyreBounds).size.x);
+                    if (rear && tandem.Length > 0) drawn.Add(mf);
+                    continue;
+                }
                 if (!isTyre && !isRim) continue;
                 var frame = WheelFrame(mf.transform, corner[i]);
                 var toLocal = mf.transform.worldToLocalMatrix * frame.localToWorldMatrix;
@@ -242,7 +278,8 @@ internal sealed class CarBody
                 int made = CarTandemWheels.Add(rt, wheelMeshes, drawn, tandem);
                 if (template && i == 2)
                     _car.Info($"tandem: {tandem.Length} extra axle(s), {made} follower object(s) on the left rear wheel, offsets " +
-                              string.Join(", ", Array.ConvertAll(tandem, a => a.ToString("0.00"))) + " m.");
+                              string.Join(", ", Array.ConvertAll(tandem, a => a.ToString("0.00"))) + " m" +
+                              (rearShift > 0f ? $"; the physical rear axle sits {rearShift:0.00} m ahead of them (wheelbase {lay.FrontZ - lay.RearZ - rearShift:0.00} m)." : "."));
             }
         }
 
@@ -278,9 +315,9 @@ internal sealed class CarBody
                 var wc = wheelColliders.Find("Wheel" + Corners[i]);
                 if (wc == null) continue;
                 var p = rt.InverseTransformPoint(wc.position);
-                MoveTo(rt, wc, new Vector3(lay.Wheels[i].x, p.y, lay.Wheels[i].z));
+                MoveTo(rt, wc, new Vector3(lay.Wheels[i].x, p.y + (i >= 2 ? lay.RearRise : 0f), lay.Wheels[i].z + (i >= 2 ? rearShift : 0f)));
             }
-            FitBumpStops(rt, wheelColliders, lay, blob, tandem);
+            FitBumpStops(rt, wheelColliders, lay, blob, tandem, rearShift);
             MoveLights(rt, lay, blob);
             MoveWinchPoints(rt, lay);
             PlaceDonorObjects(rt, lay, blob, moves);
@@ -290,6 +327,15 @@ internal sealed class CarBody
         if (_car.Hooks.AfterBody != null)
         {
             string why = _car.Hooks.AfterBody(root, template);
+            if (why != null) return why;
+        }
+        if (_car.Hooks.AfterModel != null)
+        {
+            string why = _car.Hooks.AfterModel(root, template, new CarModelPlace
+            {
+                Offset = lay.Offset, Blob = blob, Material = _material, TyreRadius = lay.TyreRadius,
+                DonorTyreRadius = lay.DonorTyreRadius, Template = template,
+            });
             if (why != null) return why;
         }
         layout = lay;
@@ -325,7 +371,7 @@ internal sealed class CarBody
                 if (!ItemMaterials.TryGetValue(id, out var copy) || copy == null)
                 {
                     copy = new Material(m) { name = m.name + "_kept" };
-                    copy.SetFloat("_IsSwitchable", 0f);
+                    CarShader.KeepTexture(copy, m.GetTexture(LiveryProperty));
                     copy.hideFlags = HideFlags.DontUnloadUnusedAsset;
                     Object.DontDestroyOnLoad(copy);
                     ItemMaterials[id] = copy;
@@ -370,6 +416,26 @@ internal sealed class CarBody
         return n == 0 ? 0f : sum / n;
     }
 
+    /// <summary>The donor's tyre width from its tyre meshes (car root space; 0 when none is found).</summary>
+    private static float MeshTyreWidth(Transform rt, Transform[] corners)
+    {
+        foreach (var c in corners)
+            foreach (var mf in c.GetComponentsInChildren<MeshFilter>(true))
+                if (mf != null && mf.sharedMesh != null && IsTyre(mf.name)) return BoundsInRoot(rt, new List<MeshFilter> { mf }).size.x;
+        return 0f;
+    }
+
+    /// <summary>The object under each wheel that the game's snow deformation (MicroSplat Trax) draws into its buffer: a plain
+    /// shape as big as the donor's tyre.</summary>
+    internal const string TraxStamp = "TraxCollider";
+
+    private static void FitTraxStamp(Transform stamp, CarLayout lay, float modelRadius, float donorWidth, float modelWidth)
+    {
+        var s = CarPhysicsFit.BumpStopColliderScale(lay.DonorTyreRadius, modelRadius, donorWidth, modelWidth);
+        var ls = stamp.localScale;
+        stamp.localScale = new Vector3(ls.x * s.X, ls.y * s.Y, ls.z * s.Z);
+    }
+
     /// <summary>The body mesh names' marker. The Polyana's are spelt "Polyana_bodu_LOD0" (the game's own typo).</summary>
     private static readonly string[] BodyMarkers = { "_body_LOD", "_bodu_LOD" };
 
@@ -386,7 +452,7 @@ internal sealed class CarBody
     }
 
     /// <summary>The donor body's LOD from its name (Parts/*/*_body_LOD2 → 2; 0 when it has no number).</summary>
-    private static int BodyLod(string name)
+    internal static int BodyLod(string name)
     {
         int i = BodyLodAt(name);
         if (i < 0) return 0;
@@ -452,6 +518,8 @@ internal sealed class CarBody
                     moves[a.Target] = new MeshVec3(d.x, d.y, d.z);
                     where.Add($"{a.Target} {F(got)} (anchor {a.Anchor} wants {F(want)}{sc}{((got - want).magnitude > 0.01f ? ", OFF" : "")})");
                 }
+                // the whip-light poles, each on its own corner of this body (CarCosmetics.WhipPoleL/R)
+                if (path == CarCosmetics.WhipSlot) PlaceWhipPoles(rt, slot, lay, blob, where);
                 // single items moved on their own (the car's item offsets), from where the prefab has them in the slot
                 if (def.ItemOffsets != null)
                     foreach (var kv in def.ItemOffsets)
@@ -486,6 +554,33 @@ internal sealed class CarBody
         return moves;
     }
 
+    /// <summary>Each pole of each whip-light item to the model's pole anchor on its side (car-root space, plus the car's
+    /// tweak), keeping its rotation and scale. Nothing happens on a model without the pole anchors.</summary>
+    private void PlaceWhipPoles(Transform rt, Transform slot, CarLayout lay, MeshBlob blob, List<string> where)
+    {
+        var l = blob.Anchor(CarCosmetics.WhipPoleL);
+        var r = blob.Anchor(CarCosmetics.WhipPoleR);
+        if (l == null && r == null) return;
+        var def = _car.Def;
+        for (int i = 0; i < slot.childCount; i++)
+        {
+            var item = slot.GetChild(i);
+            if (!item.name.StartsWith(CarCosmetics.WhipItemPrefix, StringComparison.Ordinal)) continue;
+            for (int k = 0; k < item.childCount; k++)
+            {
+                var pole = item.GetChild(k);
+                var at = rt.InverseTransformPoint(pole.position);
+                string an = CarCosmetics.WhipPoleAnchor(at.x, l != null, r != null, out bool mirror);
+                if (an == null) continue;
+                var p = CarAssets.V(blob.Anchor(an).Position) + CarAssets.V(def.TweakOf(an));
+                if (mirror) p.x = -p.x;
+                var want = p + lay.Offset;
+                pole.localPosition = item.InverseTransformPoint(rt.TransformPoint(want));
+                if (i == 0) where.Add($"{item.name}/{pole.name} {F(rt.InverseTransformPoint(pole.position))} ({an}{(mirror ? " mirrored" : "")})");
+            }
+        }
+    }
+
     /// <summary>
     /// The water probes (the donor's WaterDetector children) moved with what they sit on (<see cref="CarUpgradeFit"/>):
     /// the stock engine intake with the hood, the snorkel intakes with the snorkel levels, the roof probes with the body's
@@ -513,7 +608,7 @@ internal sealed class CarBody
 
     private static string F(Vector3 v) => $"({v.x:F2}, {v.y:F2}, {v.z:F2})";
 
-    private static bool IsTyre(string n) => n.IndexOf("tyre", StringComparison.OrdinalIgnoreCase) >= 0 ||
+    internal static bool IsTyre(string n) => n.IndexOf("tyre", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                             n.IndexOf("tire", StringComparison.OrdinalIgnoreCase) >= 0;
 
     /// <summary>The wheel's own frame: the nearest LODGroup above the mesh (it carries the right wheels' 180° yaw),
@@ -600,8 +695,18 @@ internal sealed class CarBody
         Put("RightPositionBrakelight", "tail_R");
         Put("LeftBrakingBrakelight", "tail_L");
         Put("RightBrakingBrakelight", "tail_R");
-        Put("LeftReverselight", "reverse", -0.25f);
-        Put("RightReverselight", "reverse", 0.25f);
+        // Reverse lamps: their own anchors when the model has them (Liveries/tools/qa/lamp_anchors.py puts them on the
+        // lenses the lights texture lights), else the old single anchor with the two lights 25 cm either side of it.
+        if (blob.Anchor("reverse_L") != null || blob.Anchor("reverse_R") != null)
+        {
+            Put("LeftReverselight", blob.Anchor("reverse_L") != null ? "reverse_L" : "reverse_R");
+            Put("RightReverselight", blob.Anchor("reverse_R") != null ? "reverse_R" : "reverse_L");
+        }
+        else
+        {
+            Put("LeftReverselight", "reverse", -0.25f);
+            Put("RightReverselight", "reverse", 0.25f);
+        }
         var bounce = lights.Find("FakeBounceLight");
         if (bounce != null)
         {
@@ -655,7 +760,7 @@ internal sealed class CarBody
             donorColMin = Mathf.Min(donorColMin, b.min.y);
         }
         float donorLift = donorColMin < float.MaxValue ? donorColMin - lay.DonorBody.min.y : CarPhysicsFit.MinColliderLift;
-        float lift = CarPhysicsFit.ColliderLift(donorLift, lay.DonorTyreRadius, lay.TyreRadius);
+        float lift = CarPhysicsFit.ColliderLift(_car.Def.Kind, donorLift, lay.DonorTyreRadius, lay.TyreRadius);
         float bodyMin = lay.Body.min.y - lay.Offset.y; // model space: the ground is y = 0 under the tyres
 
         var main = cols[0];
@@ -689,7 +794,7 @@ internal sealed class CarBody
         for (int i = 0; i < boxes.Length; i++)
         {
             var bx = boxes[i];
-            var go = new GameObject("OTHP_body_box_" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)) { layer = main.gameObject.layer };
+            var go = new GameObject(CarBodyBox.NodeName(i)) { layer = main.gameObject.layer };
             var t = go.transform;
             t.SetParent(holder, false);
             t.SetPositionAndRotation(rt.TransformPoint(CarAssets.V(bx.Center) + lay.Offset), rt.rotation);
@@ -724,9 +829,11 @@ internal sealed class CarBody
     /// Each wheel's bump stop collider (the donor's own tyre mesh, 0.38 m over the hub, moving with it: a solid fender
     /// behind the raycast suspension) resized to the model's tyre, so it stands as high over the ground as on a stock car
     /// (a smaller tyre left the donor's big one 0.15 to 0.2 m lower, catching rocks a stock car clears). The rear wheels of
-    /// a tandem get one per extra axle, moved along the car with it.
+    /// a tandem get one per extra axle, moved along the car with it. When the physical rear axle sits ahead of the visible
+    /// ones (<paramref name="rearShift"/>), its own bump stop is switched off: no tyre is drawn there, the copies under the
+    /// visible axles do its work.
     /// </summary>
-    private void FitBumpStops(Transform rt, Transform wheelColliders, CarLayout lay, MeshBlob blob, float[] tandem)
+    private void FitBumpStops(Transform rt, Transform wheelColliders, CarLayout lay, MeshBlob blob, float[] tandem, float rearShift)
     {
         if (wheelColliders == null) return;
         var front = CarAssets.RootBounds(new[] { blob.Pick(MeshPartKind.Tyre, MeshBlob.TyreName) });
@@ -741,7 +848,7 @@ internal sealed class CarBody
             var donor = MeshBoundsInRoot(rt, bs, mc.sharedMesh.bounds);
             float donorWidth = donor.size.x;
             float modelWidth = (i < 2 ? front : rear).size.x;
-            var s = CarPhysicsFit.BumpStopColliderScale(lay.DonorTyreRadius, lay.TyreRadius, donorWidth, modelWidth);
+            var s = CarPhysicsFit.BumpStopColliderScale(lay.DonorTyreRadius, i < 2 ? lay.TyreRadius : lay.RearTyreRadius, donorWidth, modelWidth);
             var ls = bs.localScale;
             bs.localScale = new Vector3(ls.x * s.X, ls.y * s.Y, ls.z * s.Z);
             report.Add($"{Corners[i]} x{s.X:0.00}/{s.Y:0.00}");
@@ -755,7 +862,8 @@ internal sealed class CarBody
                 ct.localRotation = bs.localRotation;
                 ct.localScale = bs.localScale;
             }
-            if (tandem.Length > 0) report.Add($"{Corners[i]} +{tandem.Length} tandem");
+            if (tandem.Length > 0 && rearShift > 0f) mc.enabled = false;
+            if (tandem.Length > 0) report.Add($"{Corners[i]} +{tandem.Length} tandem" + (rearShift > 0f ? " (own one off)" : ""));
         }
         if (report.Count > 0) _car.Info("bump stop colliders sized to the model's tyres (width/radius): " + string.Join(", ", report) + ".");
     }

@@ -1,6 +1,10 @@
 using System;
-using BepInEx.Configuration;
+using OverTheHillPlus.Config;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using OverTheHillPlus.UI;
 using UnityEngine;
@@ -259,12 +263,29 @@ internal sealed class PingMonitorFeature : IFeature
 
     private static void DrawOverlay()
     {
-        if (Event.current == null || Event.current.type != EventType.Repaint) return;
+        if (!UI.HudKit.HudDraw.Repaint) return;
         if (CoreBehaviour.CleanView || CoreBehaviour.GuiHidden) return;
-        Theme.Ensure();
-        if (ShowNotices.Value) DrawNotice();
-        if (ShowHud.Value && PingTracker.InSession && (!PingTracker.Hosting || HudWhenHosting.Value)) DrawHud();
+        bool hud = ShowHud.Value && PingTracker.InSession && (!PingTracker.Hosting || HudWhenHosting.Value);
+        if (!hud && (!ShowNotices.Value || string.IsNullOrEmpty(PingRule.LastEvent))) return;
+        if (!UI.HudKit.HudDraw.Begin("pingmonitor")) return;
+        try
+        {
+            Theme.Ensure();
+            var screen = HudLayout.Begin();
+            _w = screen.x;
+            _h = screen.y;
+            if (ShowNotices.Value) DrawNotice();
+            if (hud) DrawHud();
+        }
+        finally
+        {
+            HudLayout.End();
+            UI.HudKit.HudDraw.End();
+        }
     }
+
+    private static float _w, _h, _nextLines;
+    private static float _linesWidth;
 
     private static readonly System.Collections.Generic.List<(string text, Color color)> Lines = new();
 
@@ -273,8 +294,29 @@ internal sealed class PingMonitorFeature : IFeature
         if (_hudStyle == null)
         {
             _hudStyle = new GUIStyle(Theme.Label) { alignment = TextAnchor.MiddleLeft, richText = false, wordWrap = false };
-            _hudStyle.normal.textColor = Theme.Text;
+            _hudStyle.normal.textColor = HudLayout.Cream;
         }
+        // The lines a few times a second: the numbers move slower than that.
+        if (Lines.Count == 0 || Time.unscaledTime >= _nextLines)
+        {
+            _nextLines = Time.unscaledTime + 0.25f;
+            FillLines();
+        }
+        const float lineH = 18f, padX = 10f, padY = 6f;
+        float w = _linesWidth + padX * 2f + 4f, h = Lines.Count * lineH + padY * 2f;
+        int corner = Mathf.Clamp(HudCorner.Value, 0, 3);
+        const float margin = 12f;
+        float px = corner % 2 == 0 ? margin : _w - w - margin;
+        float py = corner < 2 ? margin : _h - h - margin;
+        var r = new Rect(px, py, w, h);
+        Theme.Fill(r, HudLayout.PanelBlack, HudLayout.PanelRadius);
+        Theme.Fill(new Rect(r.x + 3f, r.y + 5f, 2f, r.height - 10f), Lines[0].color, 1);
+        for (int i = 0; i < Lines.Count; i++)
+            UI.HudKit.HudDraw.Label(new Rect(r.x + padX + 2f, r.y + padY + i * lineH, w - padX * 2f, lineH), Lines[i].text, _hudStyle, Lines[i].color);
+    }
+
+    private static void FillLines()
+    {
         Lines.Clear();
         if (PingTracker.Hosting)
         {
@@ -294,25 +336,9 @@ internal sealed class PingMonitorFeature : IFeature
         Lines.Add((SessionLine(), Theme.Muted));
         if (!PingTracker.Hosting && PingRule.HostRuleKnown && PingRule.HostRuleOn)
             Lines.Add(("Host limit: " + HostRuleText(), Theme.Muted));
-
-        const float lineH = 18f, padX = 10f, padY = 6f;
         float wMax = 0f;
-        foreach (var (text, _) in Lines) wMax = Math.Max(wMax, _hudStyle.CalcSize(new GUIContent(text)).x);
-        float w = wMax + padX * 2f + 4f, h = Lines.Count * lineH + padY * 2f;
-        int corner = Mathf.Clamp(HudCorner.Value, 0, 3);
-        const float margin = 12f;
-        float px = corner % 2 == 0 ? margin : Screen.width - w - margin;
-        float py = corner < 2 ? margin : Screen.height - h - margin;
-        var r = new Rect(px, py, w, h);
-        Theme.Fill(r, new Color(0.07f, 0.09f, 0.11f, 0.78f), 6);
-        Theme.Fill(new Rect(r.x, r.y, 3f, r.height), Lines[0].color, 2);
-        var prev = _hudStyle.normal.textColor;
-        for (int i = 0; i < Lines.Count; i++)
-        {
-            _hudStyle.normal.textColor = Lines[i].color;
-            GUI.Label(new Rect(r.x + padX + 2f, r.y + padY + i * lineH, w - padX * 2f, lineH), Lines[i].text, _hudStyle);
-        }
-        _hudStyle.normal.textColor = prev;
+        foreach (var (text, _) in Lines) wMax = Math.Max(wMax, UI.HudKit.HudDraw.Measure(text, _hudStyle).x);
+        _linesWidth = wMax;
     }
 
     private static void DrawNotice()
@@ -324,17 +350,16 @@ internal sealed class PingMonitorFeature : IFeature
         if (_toastStyle == null)
         {
             _toastStyle = new GUIStyle(Theme.Label) { alignment = TextAnchor.MiddleCenter, richText = false, wordWrap = true };
-            _toastStyle.normal.textColor = Theme.Text;
+            _toastStyle.normal.textColor = HudLayout.Cream;
         }
         float alpha = Mathf.Clamp01(show - age);
         var prev = GUI.color;
         GUI.color = new Color(1f, 1f, 1f, alpha);
-        float w = Mathf.Min(560f, Screen.width - 40f);
-        float th = _toastStyle.CalcHeight(new GUIContent(msg), w - 28f);
-        var r = new Rect((Screen.width - w) / 2f, 84f, w, th + 16f);
-        Theme.Fill(r, new Color(0.07f, 0.09f, 0.11f, 0.9f), 8);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), PingRule.LastEventBad ? Theme.Bad : Theme.Warn, 2);
-        GUI.Label(new Rect(r.x + 14f, r.y + 8f, w - 28f, th), msg, _toastStyle);
+        float w = Mathf.Min(560f, _w - 40f);
+        float th = UI.HudKit.HudDraw.Height(msg, _toastStyle, w - 28f);
+        var r = new Rect((_w - w) / 2f, 84f, w, th + 16f);
+        Shared.WorldOverlay.PanelBox(r, PingRule.LastEventBad ? Theme.Bad : Theme.Warn, UI.HudKit.HudLook.PanelStrong);
+        UI.HudKit.HudDraw.Label(new Rect(r.x + 14f, r.y + 8f, w - 28f, th), msg, _toastStyle);
         GUI.color = prev;
     }
 

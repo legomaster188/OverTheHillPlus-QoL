@@ -33,7 +33,8 @@ internal static class HornPlayer
     private static readonly Dictionary<IntPtr, Car> Cars = new();
     /// <summary>CarAudioManager pointers whose stock horn we replace (read by the StartHorn patch).</summary>
     private static readonly HashSet<IntPtr> Replaced = new();
-    private static float _nextScan, _nextVolume;
+    private static float _nextVolume;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer ScanPace = WorldScan.Pace("horns", 1f);
     private static float _gameVolume = 1f;
     private static Camera _camera;
     private static IntPtr _preview;
@@ -50,7 +51,7 @@ internal static class HornPlayer
             StopAll();
             return;
         }
-        if (now >= _nextScan) { _nextScan = now + 1f; Scan(); }
+        if (WorldScan.Due(ScanPace, now)) Scan();
         if (now >= _nextVolume)
         {
             _nextVolume = now + 0.5f;

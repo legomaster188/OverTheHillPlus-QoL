@@ -1,0 +1,39 @@
+{
+  "id": "bed_rollbar",
+  "name": "Sports Roll Bar",
+  "cosmeticType": "Bed",
+  "slot": "Visual/Bed",
+  "price": 20,
+  "paintable": true,
+  "light": {
+    "flares": true
+  },
+  "fits": {
+    "Hilo": {
+      "pos": [
+        0.0,
+        0.576,
+        -0.72
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    },
+    "Burro": {
+      "pos": [
+        0.0,
+        0.767,
+        -1.2
+      ],
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1.0
+    }
+  }
+}

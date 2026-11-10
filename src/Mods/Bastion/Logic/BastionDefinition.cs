@@ -16,7 +16,7 @@ public static class BastionDefinition
     /// <summary>CarInfo.name and the livery car name ("car": "Bastion" in a skin's manifest; ASCII only).</summary>
     public const string CarName = "Bastion";
     public const string Guid = "1fec9eb7d3364486b9f27959287ad72a";
-    public const int Protocol = 3;
+    public const int Protocol = 4;
 
     public static CarDefinition Create() => new()
     {
@@ -31,6 +31,8 @@ public static class BastionDefinition
         FusionGuid = Guid,
         RegistryKey = "bastion",
         Protocol = Protocol,
+        // fitfix: the game items these bodies can't carry (floating over the cab, sunk in the bed floor or the body)
+        HiddenItems = new[] { "Visual/Front_Bumper/Ropes_Front" },
         // The TrailBurner: the released stock 4x4 SUV closest in size (1.98 m wide like the Bastion, 4.83 m long against
         // 4.97 m, a 2.68 m wheelbase against 2.85 m, 0.44 m tyres against 0.41 m) and, unlike the Cumbre (a pickup with a
         // bed) or the Roamer (0.26 m longer in the wheelbase and 0.14 m narrower), with the same roof slots

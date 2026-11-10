@@ -35,6 +35,8 @@ public enum TrailerReply : byte
     BallTaken = 13,
     /// <summary>The car has no tow hitch (the tow bar upgrade) mounted.</summary>
     NoTowHitch = 14,
+    /// <summary>A semi-trailer needs a semi truck's fifth wheel, and the car has none.</summary>
+    NoFifthWheel = 15,
 }
 
 /// <summary>A position in a body's local space (Unity axes), for the wire.</summary>
@@ -76,14 +78,30 @@ public sealed class TrailerState
     public V3 Anchor;
     /// <summary>Hitch ball in the car's space.</summary>
     public V3 CarAnchor;
-    /// <summary>Car hauler: item id of the car shown on the deck (0: empty).</summary>
+    /// <summary>Car hauler: item id of the car shown on the deck (0: empty). Boat trailer: item id of the boat it carries
+    /// (a boat mod's, which a player can drive; 0: the trailer's own runabout, for show).</summary>
     public uint CargoCarId;
+    /// <summary>Boat trailer: where its boat is (<see cref="BoatPlace"/>; always on the trailer for the other kinds).</summary>
+    public BoatPlace Boat;
+    /// <summary>Boat trailer, boat afloat: where its root floats (world x, z) and its heading, degrees.</summary>
+    public float BoatX, BoatZ, BoatYaw;
 
     public TrailerState Clone() => (TrailerState)MemberwiseClone();
 
     public bool SameAs(TrailerState o) =>
         o != null && NetId == o.NetId && Kind == o.Kind && Owner == o.Owner && Hitched == o.Hitched &&
-        CarNetId == o.CarNetId && Anchor.Equals(o.Anchor) && CarAnchor.Equals(o.CarAnchor) && CargoCarId == o.CargoCarId;
+        CarNetId == o.CarNetId && Anchor.Equals(o.Anchor) && CarAnchor.Equals(o.CarAnchor) && CargoCarId == o.CargoCarId &&
+        Boat == o.Boat && BoatX == o.BoatX && BoatZ == o.BoatZ && BoatYaw == o.BoatYaw;
+}
+
+/// <summary>Where a boat trailer's boat is (on the wire: append only; the same numbers as core's WorldSites.BoatAt).</summary>
+public enum BoatPlace : byte
+{
+    OnTrailer = 0,
+    /// <summary>Its driver is out in it (the trailer draws nothing).</summary>
+    Out = 1,
+    /// <summary>Floating by itself where it was left (the trailer's mod draws it there).</summary>
+    Afloat = 2,
 }
 
 /// <summary>The trailers channel's payloads. Fields are appended, never reordered (ModNet's versioning rule).
@@ -116,7 +134,7 @@ public static class TrailerMessages
         byte o = rd.Byte(), c = rd.Byte();
         op = (TrailerOp)o;
         code = (TrailerReply)c;
-        return rd.Ok && o >= (byte)TrailerOp.Spawn && o <= (byte)TrailerOp.Unload && c <= (byte)TrailerReply.NoTowHitch;
+        return rd.Ok && o >= (byte)TrailerOp.Spawn && o <= (byte)TrailerOp.Unload && c <= (byte)TrailerReply.NoFifthWheel;
     }
 
     public static byte[] EncodeState(TrailerState s)
@@ -126,8 +144,11 @@ public static class TrailerMessages
             .Bool(s.Hitched).Int(unchecked((int)s.CarNetId));
         Vec(w, s.Anchor);
         Vec(w, s.CarAnchor);
-        return w.Int(unchecked((int)s.CargoCarId)).ToArray();
+        return w.Int(unchecked((int)s.CargoCarId)).Byte((byte)s.Boat).Float(s.BoatX).Float(s.BoatZ).Float(s.BoatYaw).ToArray();
     }
+
+    /// <summary>A floating boat further than this from the world's origin is refused, m.</summary>
+    public const float MaxBoatXZ = 100000f;
 
     public static TrailerState DecodeState(byte[] payload)
     {
@@ -143,10 +164,19 @@ public static class TrailerMessages
         s.Anchor = Vec(rd);
         s.CarAnchor = Vec(rd);
         s.CargoCarId = unchecked((uint)rd.Int());
-        if (!rd.Ok || s.NetId == 0 || !TrailerSpecs.IsKind(kind)) return null;
+        byte boat = rd.Byte();
+        s.BoatX = rd.Float();
+        s.BoatZ = rd.Float();
+        s.BoatYaw = rd.Float();
+        if (!rd.Ok || s.NetId == 0 || !TrailerSpecs.IsKind(kind) || boat > (byte)BoatPlace.Afloat) return null;
         s.Kind = (TrailerKind)kind;
+        s.Boat = (BoatPlace)boat;
         if (s.Hitched && (s.CarNetId == 0 || !s.Anchor.Sane(MaxAnchor) || !s.CarAnchor.Sane(MaxAnchor))) return null;
-        if (s.CargoCarId != 0 && s.Kind != TrailerKind.Hauler) return null;
+        if (s.CargoCarId != 0 && s.Kind != TrailerKind.Hauler && s.Kind != TrailerKind.Boat) return null;
+        // only a boat trailer's boat goes anywhere, and only a boat a player can drive
+        if (s.Boat != BoatPlace.OnTrailer && (s.Kind != TrailerKind.Boat || s.CargoCarId == 0)) return null;
+        if (s.Boat == BoatPlace.Afloat && !(float.IsFinite(s.BoatX) && float.IsFinite(s.BoatZ) && float.IsFinite(s.BoatYaw) &&
+                                            Math.Abs(s.BoatX) <= MaxBoatXZ && Math.Abs(s.BoatZ) <= MaxBoatXZ)) return null;
         return s;
     }
 

@@ -43,6 +43,21 @@ public static class CarTandem
         return list.Count > MaxAxles ? list.GetRange(0, MaxAxles).ToArray() : list.ToArray();
     }
 
+    /// <summary>The visible axles' offsets from a physical rear axle moved <paramref name="rearShift"/> metres forward of the
+    /// model's rear wheel anchors (<see cref="CarDefinition.PhysicalRearShift"/>), so they stay where the model has them.
+    /// Without tandem anchors the shift is not used (nothing would draw the rear wheels where the model has them).</summary>
+    public static float[] PhysicalOffsets(MeshBlob blob, float rearShift)
+    {
+        var o = AxleOffsets(blob);
+        float s = RearShift(o, rearShift);
+        for (int i = 0; i < o.Length; i++) o[i] -= s;
+        return o;
+    }
+
+    /// <summary>The physical rear axle's shift that applies: <paramref name="rearShift"/> on a tandem (0 to 2 m), else 0.</summary>
+    public static float RearShift(float[] axleOffsets, float rearShift) =>
+        axleOffsets != null && axleOffsets.Length > 0 && rearShift > 0f && rearShift <= 2f ? rearShift : 0f;
+
     /// <summary>The follower's object name for axle <paramref name="axle"/> of the wheel mesh at <paramref name="path"/>.</summary>
     public static string FollowerName(int axle, string path) =>
         Prefix + axle.ToString(CultureInfo.InvariantCulture) + "|" + path;

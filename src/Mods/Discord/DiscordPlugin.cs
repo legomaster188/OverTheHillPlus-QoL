@@ -1,7 +1,9 @@
 using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using OverTheHillPlus.Loader;
 
 namespace OverTheHillPlus.Discord;
 
@@ -12,9 +14,13 @@ using OverTheHillPlus.Core.Manager;
 /// Discord+: shows the map, car, session and player count (and the server's name, only when allowed) on your
 /// Discord profile, over the Discord desktop app's local IPC pipe. Nothing goes over the internet from this mod.
 /// </summary>
+#if MELON
+public class DiscordPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 [BepInDependency(Core.CorePlugin.Guid)]
 public class DiscordPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.discord";
     public const string Name = "Discord+";
@@ -23,7 +29,7 @@ public class DiscordPlugin : BasePlugin
     /// <summary>Mod id: names the config file (oth.discord.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "discord";
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
 
     public override void Load()
     {

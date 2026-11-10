@@ -1,9 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BepInEx.Logging;
+using OverTheHillPlus.Loader;
+#if MELON
+using Il2CppFunCore.Managers;
+using Il2CppFusion;
+#else
 using FunCore.Managers;
 using Fusion;
+#endif
 using HarmonyLib;
 using UnityEngine;
 
@@ -40,8 +45,8 @@ internal static class ModdedCars
     /// "&lt;AssetName&gt;/&lt;file&gt;"), declares its network prefab and registers its skins with Api.Cars. Null on
     /// success, otherwise why the car stays off (the mod is then marked failed with that reason).
     /// </summary>
-    internal static string Start(CarDefinition definition, Assembly assets, BepInEx.Configuration.ConfigFile config,
-        ManualLogSource log = null, CarHooks hooks = null)
+    internal static string Start(CarDefinition definition, Assembly assets, OverTheHillPlus.Config.ConfigFile config,
+        ModLog log = null, CarHooks hooks = null)
     {
         string why;
         try { why = StartCore(definition, assets, config, log, hooks); }
@@ -63,7 +68,7 @@ internal static class ModdedCars
 
     private static bool ApiRulesOk(string id) => Api.ApiRules.IsValidModId(id);
 
-    private static string StartCore(CarDefinition given, Assembly assets, BepInEx.Configuration.ConfigFile config, ManualLogSource log, CarHooks hooks)
+    private static string StartCore(CarDefinition given, Assembly assets, OverTheHillPlus.Config.ConfigFile config, ModLog log, CarHooks hooks)
     {
         if (given == null) return "no car definition";
         // Our own copy: the caller's object can't change a running car.
@@ -140,10 +145,48 @@ internal static class ModdedCars
     {
         if (!AnyReady()) return;
         Api.Cars.RefreshIfChanged();
+        GaragePaintMenu.Tick();
         CarLooks.Tick();
         CarLookNet.Tick();
         CarTandemWheels.Tick();
         CarPhysicsProbe.Tick();
+        CarStructureCheck.Tick();
+        CareerPrices();
+    }
+
+    private static float _nextPrices;
+    private static bool _pricesSet;
+
+    /// <summary>
+    /// A modded car is free in free play (the garage gives it: <see cref="CarSave.Grant"/>), so its catalog price is 0. In a
+    /// career cars are bought: the catalog price becomes the career dealer's (Api.Career.Dealer), so the game's own merchant
+    /// sells the car for the same pebbles. Back to 0 when the career closes. Every two seconds (the catalog entry can be
+    /// made again on a scene change).
+    /// </summary>
+    private static void CareerPrices()
+    {
+        float now = Time.unscaledTime;
+        if (now < _nextPrices && now >= _nextPrices - 5f) return;
+        _nextPrices = now + 2f;
+        bool career = Api.Career.Active;
+        if (!career && !_pricesSet) return;
+        foreach (var c in Cars)
+        {
+            try
+            {
+                var info = c.Catalog.Info;
+                if (info == null) continue;
+                int want = 0;
+                if (career)
+                {
+                    long p = Api.Career.Dealer.Find(c.Def.CarName)?.Price ?? 0;
+                    want = (int)Math.Clamp(p, 0, int.MaxValue);
+                }
+                if (info.Price != want) info.Price = want;
+            }
+            catch (Exception e) { DebugLog.Error("core", e, "ModdedCars.CareerPrices"); }
+        }
+        _pricesSet = career;
     }
 
     // ---------------------------------------------------------------- lookups
@@ -176,6 +219,17 @@ internal static class ModdedCars
     internal static RuntimeCar ByItem(uint itemId)
     {
         foreach (var c in Cars) if (c.Def.ItemId == itemId) return c;
+        return null;
+    }
+
+    /// <summary>The modded car a garage model on show belongs to (the game shows a copy of the one built for it, named after
+    /// it), or null for a stock car's.</summary>
+    internal static RuntimeCar ByGarageModel(GameObject model)
+    {
+        if (model == null) return null;
+        string name = model.name;
+        foreach (var c in Cars)
+            if (name.StartsWith(c.Def.PrefabName + "_Dummy", StringComparison.Ordinal)) return c;
         return null;
     }
 
@@ -251,11 +305,14 @@ internal static class ModdedCars
             (typeof(ModLiveryEquipper), nameof(ModLiveryEquipper.Unequip), null, nameof(LiveryUnequipPostfix)),
             (typeof(ModLiveryEquipper), nameof(ModLiveryEquipper.Equip), null, nameof(LiveryEquipPostfix)),
             // mod.io liveries for a modded car's name are its skins: listed again when the game's list changes
-            (typeof(ModLiveryService), nameof(ModLiveryService.TryRegisterMod), null, nameof(ModLiveriesChangedPostfix)),
-            (typeof(ModLiveryService), nameof(ModLiveryService.RegisterLocalLiveries), null, nameof(ModLiveriesChangedPostfix)),
+            // (a game update in October 2026 replaced these with RefreshMod and RefreshLocalLiveries; whichever this game
+            // has is hooked)
+            (typeof(ModLiveryService), FirstMethod(typeof(ModLiveryService), "TryRegisterMod", "RefreshMod"), null, nameof(ModLiveriesChangedPostfix)),
+            (typeof(ModLiveryService), FirstMethod(typeof(ModLiveryService), "RegisterLocalLiveries", "RefreshLocalLiveries"), null, nameof(ModLiveriesChangedPostfix)),
             // the garage's Liveries tab: the livery you look at shows on the garage's model
             (typeof(StateMerchantMenu), nameof(StateMerchantMenu.OnLiveryButtonSelected), null, nameof(LiveryPreviewPostfix)),
-            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializeLiveriesScreen), nameof(PreviewClearPrefix), null),
+            // ... and its paints and trims go in under the car's liveries (GaragePaintMenu)
+            (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializeLiveriesScreen), nameof(PreviewClearPrefix), nameof(LiveriesScreenPostfix)),
             (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializeLiveriesModScreen), nameof(PreviewClearPrefix), null),
             (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializeCosmeticUpgradesScreen), nameof(PreviewClearPrefix), null),
             (typeof(StateMerchantMenu), nameof(StateMerchantMenu.InitializePerformanceUpgradesScreen), nameof(PreviewClearPrefix), null),
@@ -286,11 +343,24 @@ internal static class ModdedCars
         return null;
     }
 
+    /// <summary>The first of <paramref name="names"/> that <paramref name="type"/> has (else the first, so the hook reports it missing).</summary>
+    internal static string FirstMethod(Type type, params string[] names)
+    {
+        // A plain reflection lookup: AccessTools.Method logs a warning for every name it doesn't find, and on this
+        // game the first names are the ones an update removed.
+        var methods = type.GetMethods(AccessTools.all);
+        foreach (var n in names)
+            foreach (var m in methods)
+                if (m.Name == n) return n;
+        return names[0];
+    }
+
     private static void Patch(Type type, string method, string prefix, string postfix, string finalizer)
     {
         var original = AccessTools.Method(type, method) ?? throw new MissingMethodException(type.Name, method);
         // The join data's order between mods is fixed (see the comment on the RuntimePlayer.Serialize hook).
-        int priority = type == typeof(RuntimePlayer) ? Priority.First : Priority.Normal;
+        // Another mod's tuning layer sits on top of a modded car's tuning while it holds the car, so its values come off first.
+        int priority = type == typeof(RuntimePlayer) ? Priority.First : prefix == nameof(GameReadsBasePrefix) ? Priority.Low : Priority.Normal;
         HarmonyMethod H(string name) => name == null ? null : new HarmonyMethod(AccessTools.Method(typeof(ModdedCars), name)) { priority = priority };
         _harmony.Patch(original, prefix: H(prefix), postfix: H(postfix), finalizer: H(finalizer));
     }
@@ -477,8 +547,17 @@ internal static class ModdedCars
     private static void PreviewClearPrefix(StateMerchantMenu __instance)
     {
         GaragePreview.Clear();
+        try { GaragePaintMenu.Clear(); } catch (Exception ex) { DebugLog.Error("core", ex, "ModdedCars.PreviewClearPrefix"); }
         try { if (Cars.Count > 0 && __instance != null) CarLooks.MerchantDummy(__instance); }
         catch (Exception ex) { DebugLog.Error("core", ex, "ModdedCars.PreviewClearPrefix"); }
+    }
+
+    /// <summary>The garage built its Liveries screen: a modded car's paints and trims go in under its liveries.</summary>
+    private static void LiveriesScreenPostfix(StateMerchantMenu __instance)
+    {
+        if (Cars.Count == 0) return;
+        try { GaragePaintMenu.LiveriesScreen(__instance); }
+        catch (Exception e) { DebugLog.Error("core", e, "ModdedCars.LiveriesScreenPostfix"); }
     }
 
     /// <summary>The game's mod livery list changed: the modded cars' mod.io skins are listed again.</summary>

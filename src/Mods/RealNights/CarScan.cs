@@ -42,6 +42,7 @@ internal static class CarScan
 {
     private const float RefreshEvery = 2f;
     private const float LampScanEvery = 6f;
+    private static readonly OverTheHillPlus.Core.Shared.ScanPacer FindPace = WorldScan.Pace("car lights", RefreshEvery);
     private const int LampScansPerPass = 2;
 
     internal static readonly List<SeenCar> Cars = new();
@@ -62,6 +63,8 @@ internal static class CarScan
     internal static void Tick(bool force = false)
     {
         float now = Time.unscaledTime;
+        try { if (WorldScan.Due(FindPace, now)) FindCars(); }
+        catch (Exception e) { NightSky.Failed(e, "CarScan.FindCars"); }
         if (!force && now < _nextRefresh) return;
         _nextRefresh = now + RefreshEvery;
         try { Refresh(now); }
@@ -70,25 +73,19 @@ internal static class CarScan
 
     private static void Refresh(float now)
     {
-        var found = Object.FindObjectsOfType(Il2CppType.Of<LightsController>());
-        var seen = new HashSet<IntPtr>();
         Transform localRoot = null;
         try { localRoot = GameState.LocalCar != null ? GameState.LocalCar.transform : null; }
         catch (Exception e) { NightSky.Failed(e, "CarScan.Local"); }
 
         int scans = 0;
-        foreach (var o in found)
+        for (int i = Cars.Count - 1; i >= 0; i--)
         {
-            var lc = o?.TryCast<LightsController>();
-            if (lc == null || !Alive(lc)) continue;
-            seen.Add(lc.Pointer);
-            if (!ByKey.TryGetValue(lc.Pointer, out var car))
+            var car = Cars[i];
+            if (!Alive(car.Lights) || !Alive(car.Root))
             {
-                var root = RootOf(lc.transform);
-                if (root == null) continue;
-                car = new SeenCar { Id = _nextId++, Key = lc.Pointer, Lights = lc, Root = root, NextLampScan = 0f };
-                ByKey[lc.Pointer] = car;
-                Cars.Add(car);
+                ByKey.Remove(car.Key);
+                Cars.RemoveAt(i);
+                continue;
             }
             car.Local = localRoot != null && (localRoot.Pointer == car.Root.Pointer || localRoot.IsChildOf(car.Root) || car.Root.IsChildOf(localRoot));
             if (now >= car.NextLampScan && scans < LampScansPerPass)
@@ -98,11 +95,28 @@ internal static class CarScan
                 ScanLamps(car);
             }
         }
+    }
+
+    /// <summary>The search: only after something came or went (see <see cref="WorldScan"/>).</summary>
+    private static void FindCars()
+    {
+        var seen = new HashSet<IntPtr>();
+        foreach (var o in Object.FindObjectsOfType(Il2CppType.Of<LightsController>()))
+        {
+            var lc = o?.TryCast<LightsController>();
+            if (lc == null || !Alive(lc)) continue;
+            seen.Add(lc.Pointer);
+            if (ByKey.ContainsKey(lc.Pointer)) continue;
+            var root = RootOf(lc.transform);
+            if (root == null) continue;
+            var car = new SeenCar { Id = _nextId++, Key = lc.Pointer, Lights = lc, Root = root, NextLampScan = 0f };
+            ByKey[lc.Pointer] = car;
+            Cars.Add(car);
+        }
         for (int i = Cars.Count - 1; i >= 0; i--)
         {
-            var car = Cars[i];
-            if (seen.Contains(car.Key) && Alive(car.Root)) continue;
-            ByKey.Remove(car.Key);
+            if (seen.Contains(Cars[i].Key)) continue;
+            ByKey.Remove(Cars[i].Key);
             Cars.RemoveAt(i);
         }
     }

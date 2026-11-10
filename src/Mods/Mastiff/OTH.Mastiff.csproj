@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>OTH.Mastiff</AssemblyName>
+    <!-- Also built for MelonLoader (src/MelonFullPack.slnf, -p:Loader=Melon); its MelonMod is this class. -->
+    <OthMelon>true</OthMelon>
+    <OthPluginClass>OverTheHillPlus.Mastiff.MastiffPlugin</OthPluginClass>
+    <RootNamespace>OverTheHillPlus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\OTH.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model (mastiff.mesh, with body_lod1..3 and the dual rear wheel) and its textures, made by
+         Liveries/tools/mastiff/build_mastiff.py with the shared exporter (Liveries/mastiff/), read by core's car framework. -->
+    <EmbeddedResource Include="Assets\*.mesh;Assets\*.png" Exclude="Assets\card.png" LogicalName="mastiff/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

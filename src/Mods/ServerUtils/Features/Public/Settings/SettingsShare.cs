@@ -4,8 +4,8 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
-using BepInEx;
-using BepInEx.Configuration;
+using OverTheHillPlus.Loader;
+using OverTheHillPlus.Config;
 using OverTheHillPlus.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -50,7 +50,7 @@ internal sealed class SettingsShare : IFeature
         public int Recognised => Changes.Count + Same + Skipped;
     }
 
-    private static string FilePath => Path.Combine(Paths.ConfigPath, "OverTheHillPlus.shared-settings.txt");
+    private static string FilePath => Path.Combine(OthLoader.ConfigDir, "OverTheHillPlus.shared-settings.txt");
 
     public void Register()
     {
@@ -364,7 +364,7 @@ internal sealed class SettingsShare : IFeature
                 "## Load this in the mod menu (QoL tab > Share settings > Load file), or copy the [sections] below into\n" +
                 "## the code box. Lines starting with # are ignored.\n" + text);
             _nextFileCheck = 0f;
-            Menu.SetStatus($"Saved {n} settings to BepInEx/config/{Path.GetFileName(FilePath)}");
+            Menu.SetStatus($"Saved {n} settings to {OverTheHillPlus.Loader.LoaderText.ConfigDir}/{Path.GetFileName(FilePath)}");
         }
         catch (Exception e) { DebugLog.Error("serverutils", e, "SettingsShare.SaveFile"); Menu.SetStatus("Failed: could not save the file: " + e.Message); }
     }

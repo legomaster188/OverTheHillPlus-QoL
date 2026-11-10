@@ -41,6 +41,15 @@ public static class VeraDefinition
         DefaultDonor = "Car_TrailBurner",
         DefaultGarageBase = "Car_TrailBurner",
         AssetName = "vera",
+        // Three items that sit wrong at their slot on this rounder body get anchors of their own: the bull horns on
+        // the hood (not over it), the mounted grill clear of the rear bumper, the ropes hung over the bumper instead of
+        // through its corners. Optional: an older vera.mesh without them keeps them at their slots.
+        ItemAnchors = new[]
+        {
+            new CosmeticItemAnchor("cosm_i_BullHorns", "Visual/Hood/BullHorns", optional: true),
+            new CosmeticItemAnchor("cosm_i_MountedGrill", "Visual/Rear/MountedGrill", optional: true),
+            new CosmeticItemAnchor("cosm_i_Ropes_Rear", "Visual/Rear_Bumper/Ropes_Rear", optional: true),
+        },
         // The gearbox mod: the real car's gearbox and differentials (a 7-seat AWD crossover: a close 5-speed, open axles and a clutch-coupled centre).
         GearSet = "close5",
         Diffs = new byte[] { 1, 1, 2 },

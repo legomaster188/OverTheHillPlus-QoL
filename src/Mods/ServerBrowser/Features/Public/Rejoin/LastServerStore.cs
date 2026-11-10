@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using BepInEx;
+using OverTheHillPlus.Loader;
 using OverTheHillPlus.ServerBrowser;
 
 namespace OverTheHillPlus.Features.Public.Rejoin;
@@ -30,7 +30,7 @@ internal static class LastServerStore
     private static Entry _entry;
     private static bool _loaded;
 
-    private static string FilePath => Path.Combine(Paths.ConfigPath, "OverTheHillPlus.lastserver.json");
+    private static string FilePath => Path.Combine(OthLoader.ConfigDir, "OverTheHillPlus.lastserver.json");
 
     public static Entry Current { get { EnsureLoaded(); return _entry; } }
 

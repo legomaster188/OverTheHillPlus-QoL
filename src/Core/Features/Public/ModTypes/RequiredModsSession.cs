@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using HarmonyLib;
 using OverTheHillPlus.UI;
 using UnityEngine;
@@ -35,9 +39,17 @@ internal static class RequiredModsSession
     private static float _nextRead;
     private static string _notice;
     private static float _noticeAt = -100f;
+    // The notice went out as the game's own notification (top of the HUD, like "X joined"): our box stays off.
+    private static bool _noticeToasted;
+    private const float ToastWaitSeconds = 20f;
     private static int _roleFrame = -1;
     private static SessionRole _role;
     private static string _hostNotice;
+    // A join under way (see WatchJoin): the room read, what the host's prefab check will say about this game.
+    private static string _joinRoom;
+    private static List<RequiredModIssue> _joinIssues;
+    private static float _nextJoinRead;
+    private static string _noticeTitle = "Server mods";
 
     /// <summary>The value this game added at its last hosted StartGame (null: none was added).</summary>
     public static string LastStartValue { get; private set; }
@@ -238,6 +250,42 @@ internal static class RequiredModsSession
         }
     }
 
+    /// <summary>
+    /// The MODS screen's "This server" page: the mods the host of the session you are in lists as needed by everyone,
+    /// each with whether it runs here (as rows of the game's settings: the name, its version, and "Running" / "Missing"
+    /// / "Off" / "Version" on the right).
+    /// </summary>
+    internal static void DrawSessionList()
+    {
+        var list = _advertised;
+        if (Role != SessionRole.Guest || list == null)
+        {
+            SimpleMenu.Note("You're not in someone else's session right now.");
+            return;
+        }
+        SimpleMenu.Note("The mods this server's host runs that everyone in it needs, and whether they run for you here.");
+        if (list.Mods.Count == 0) SimpleMenu.Note("The host lists no server mods. Everything here is up to you.");
+        var issues = Check(list);
+        SimpleMenu.Heading("Host's mods");
+        foreach (var m in list.Mods)
+        {
+            RequiredModIssue issue = null;
+            foreach (var i in issues)
+                if (string.Equals(i.Id, m.Id, StringComparison.OrdinalIgnoreCase)) { issue = i; break; }
+            string value = issue == null ? "Running" : issue.Kind switch
+            {
+                RequiredIssueKind.Missing => "Missing",
+                RequiredIssueKind.Off => "Off",
+                RequiredIssueKind.VersionMinor => "Running",
+                _ => "Off here",
+            };
+            string hint = issue == null ? "Runs here and on the host." : RequiredMods.IssueText(issue) + ".";
+            SimpleMenu.ListRow(NameOf(m.Id), "v" + m.Version, null, value, issue == null || issue.Kind == RequiredIssueKind.VersionMinor, hint, false, out _);
+        }
+        string more = RequiredMods.MoreNotice(list);
+        if (more != null) SimpleMenu.Note(more);
+    }
+
     /// <summary>Every installed mod (switched off ones too) as id → version.</summary>
     internal static Dictionary<string, string> InstalledVersions()
     {
@@ -277,10 +325,11 @@ internal static class RequiredModsSession
         if (role == SessionRole.Host && _hostNotice != null)
         {
             // Once the hosted session runs (its StartGame was behind a loading screen): what its listing left out.
-            _notice = _hostNotice;
-            _noticeAt = Time.unscaledTime;
+            SetNotice(_hostNotice);
             _hostNotice = null;
         }
+        ToastNotice();
+        WatchJoin(role);
         if (role != SessionRole.Guest) return;
         RefreshAdvert(force: false);
         if (_noticeDone || !_advertisedFound) return;
@@ -291,13 +340,96 @@ internal static class RequiredModsSession
                 Core.CorePlugin.Logger?.LogWarning($"[ModTypes] {NameOf(i.Id)}: the host runs v{i.Required}, this game v{i.Installed}" +
                                                    (i.Blocks ? " (another major version: its networked part stays off)" : ""));
         string text = RequiredMods.SessionNotice(issues, NameOf);
+        string cars = RequiredMods.PrefabVersionNotice(issues, NameOf);
+        if (cars != null) text = text == null ? cars : text + " " + cars;
         string more = RequiredMods.MoreNotice(_advertised);
         if (more != null) text = text == null ? more : text + " " + more;
         if (text == null) return;
         Core.CorePlugin.Logger?.LogInfo("[ModTypes] " + text);
-        _notice = text;
-        _noticeAt = Time.unscaledTime;
+        SetNotice(text);
     }
+
+    private static void SetNotice(string text, string title = "Server mods", bool boxNow = false)
+    {
+        _notice = text;
+        _noticeTitle = title;
+        _noticeAt = Time.unscaledTime;
+        _noticeToasted = false;
+        _noticeBoxOnly = boxNow;
+    }
+
+    /// <summary>
+    /// A join under way: while this game connects to a room, the host's advert is read from it (the room's properties are
+    /// there before the host answers) with what the host's prefab check will say about this game. If the join then ends
+    /// without getting in and that check refuses this game, the player is told why in plain words, in our box (the game
+    /// itself only says the join failed, and the cars-only pack has no server browser to ask before joining).
+    /// </summary>
+    private static void WatchJoin(SessionRole role)
+    {
+        if (role is SessionRole.Guest or SessionRole.Host or SessionRole.Solo)
+        {
+            _joinRoom = null; // in, hosting or solo: nothing to explain
+            _joinIssues = null;
+            return;
+        }
+        float now = Time.unscaledTime;
+        if (role == SessionRole.Connecting && now < _nextJoinRead && _joinRoom != null) return;
+        _nextJoinRead = now + 0.25f;
+        string room = null;
+        SessionInfo info = null;
+        try
+        {
+            info = _sessionRunner?.SessionInfo;
+            if (info != null && info.IsValid) room = info.Name;
+        }
+        catch (Exception ex) { DebugLog.Error("core", ex, "RequiredModsSession.WatchJoin"); }
+        if (role == SessionRole.Connecting && !string.IsNullOrEmpty(room))
+        {
+            if (room == _joinRoom) return;
+            try
+            {
+                string v = GameState.SessionString(info, RequiredMods.Key, out bool found);
+                _joinRoom = room;
+                _joinIssues = found ? CheckJoin(RequiredMods.Decode(v)) : null;
+                if (_joinIssues != null && _joinIssues.Count > 0)
+                    DebugLog.Info("core", $"joining a session whose host lists {v}: {_joinIssues.Count} issue(s) with this game's mods");
+            }
+            catch (Exception ex) { DebugLog.Error("core", ex, "RequiredModsSession.WatchJoin read"); }
+            return;
+        }
+        if (_joinRoom == null) return;
+        // No longer in the room it was joining, and never got in.
+        var issues = _joinIssues;
+        _joinRoom = null;
+        _joinIssues = null;
+        string text = RequiredMods.RefusedJoinNotice(issues, NameOf);
+        if (text == null) return;
+        Core.CorePlugin.Logger?.LogInfo("[ModTypes] " + text);
+        SetNotice(text, "Couldn't join", boxNow: true);
+    }
+
+    /// <summary>
+    /// The notice as the game's own notification once its HUD is up (a guest's notice comes while the world still
+    /// loads). Without the HUD for <see cref="ToastWaitSeconds"/>, or when the notification can't be shown, our box shows
+    /// it instead (from then on, for <see cref="NoticeSeconds"/>).
+    /// </summary>
+    private static void ToastNotice()
+    {
+        if (_notice == null || _noticeToasted || _noticeBoxOnly) return;
+        float age = Time.unscaledTime - _noticeAt;
+        if (UI.GameMenu.GameToast.Show((_noticeTitle ?? "Server mods") + ": " + _notice, UI.GameMenu.GameToast.Warning))
+        {
+            _noticeToasted = true;
+            return;
+        }
+        if (age > ToastWaitSeconds || UI.GameMenu.GameToast.Broken)
+        {
+            _noticeAt = Time.unscaledTime; // our box from now on, for its full time
+            _noticeBoxOnly = true;
+        }
+    }
+
+    private static bool _noticeBoxOnly;
 
     /// <summary>
     /// Reads the joined session's list once a second until it is found, then keeps it for the session: the
@@ -321,24 +453,33 @@ internal static class RequiredModsSession
     }
 
     /// <summary>The one-time notice, top centre, for <see cref="NoticeSeconds"/> (fades over the last second).</summary>
+    /// <summary>False while <see cref="DrawNotice"/> has nothing to show (pure managed read).</summary>
+    internal static bool NoticeWanted() => _noticeBoxOnly && !string.IsNullOrEmpty(_notice);
+
     internal static void DrawNotice()
     {
+        if (!_noticeBoxOnly) return; // the game's notification has it (or will, once its HUD is up)
         float age = Time.unscaledTime - _noticeAt;
         if (age < 0f || age > NoticeSeconds || string.IsNullOrEmpty(_notice)) return;
-        if (CoreBehaviour.GuiHidden) return; // never in a screenshot
-        if (Event.current == null || Event.current.type != EventType.Repaint) return;
-        Theme.Ensure();
-        float scale = Mathf.Max(1f, Screen.height / 1080f);
-        GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
-        float sw = Screen.width / scale;
-        var r = new Rect(Mathf.Round((sw - 560f) / 2f), 24f, 560f, 64f);
+        if (!UI.HudKit.HudDraw.Repaint) return;
+        // The screen layer: this box stands in for the game's notification where there is no game HUD.
+        if (!UI.HudKit.HudDraw.Begin("core.notice", UI.HudKit.HudLayer.Screen)) return;
         var prev = GUI.color;
-        GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(NoticeSeconds - age));
-        Theme.Fill(r, new Color(Theme.Bg.r, Theme.Bg.g, Theme.Bg.b, 0.92f), 10);
-        Theme.Fill(new Rect(r.x, r.y, 4f, r.height), Theme.Warn, 2);
-        GUI.Label(new Rect(r.x + 16f, r.y + 6f, r.width - 24f, 20f), "Server mods", Theme.Label);
-        GUI.Label(new Rect(r.x + 16f, r.y + 26f, r.width - 24f, r.height - 30f), _notice, Theme.Small);
-        GUI.color = prev;
+        try
+        {
+            Theme.Ensure();
+            var screen = HudLayout.Begin();
+            GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(NoticeSeconds - age));
+            var inner = Shared.WorldOverlay.PanelBox(new Rect(Mathf.Round((screen.x - 560f) / 2f), 24f, 560f, 64f), Theme.Warn);
+            UI.HudKit.HudDraw.Label(new Rect(inner.x + 4f, inner.y, inner.width - 6f, 20f), _noticeTitle ?? "Server mods", Theme.Label);
+            UI.HudKit.HudDraw.Label(new Rect(inner.x + 4f, inner.y + 20f, inner.width - 6f, inner.height - 20f), _notice, Theme.Small);
+        }
+        finally
+        {
+            GUI.color = prev;
+            HudLayout.End();
+            UI.HudKit.HudDraw.End();
+        }
     }
 
     // ---------------------------------------------------------------- other sessions (server browser)
@@ -391,7 +532,7 @@ internal sealed class RequiredModsFeature : IFeature
     public void Register()
     {
         Registry.OnTick(RequiredModsSession.Tick);
-        Registry.OnGui(RequiredModsSession.DrawNotice);
+        Registry.OnGui(RequiredModsSession.DrawNotice, wants: RequiredModsSession.NoticeWanted, repaintOnly: true);
     }
 }
 

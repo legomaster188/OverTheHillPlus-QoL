@@ -23,6 +23,7 @@ internal sealed class CarText
     public CarText(RuntimeCar car)
     {
         _car = car;
+        _next = car.Beat * 2f;
         _nameKey = car.Def.TextKey("NAME");
         _descriptionKey = car.Def.TextKey("DESCRIPTION");
     }
@@ -63,7 +64,7 @@ internal sealed class CarText
     public void Tick()
     {
         if (Time.unscaledTime < _next) return;
-        _next = Time.unscaledTime + 2f;
+        _next = _car.NextBeat(2f);
         Ensure(force: false);
     }
 

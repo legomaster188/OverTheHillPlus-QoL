@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using OverTheHillPlus.Core.Shared;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -11,7 +15,7 @@ namespace OverTheHillPlus.Trailers;
 using OverTheHillPlus.Core.Manager;
 
 /// <summary>
-/// The four trailer prefabs. Each is declared to core's network prefab registry (Core/Shared/NetPrefabRegistry, which
+/// The five trailer prefabs. Each is declared to core's network prefab registry (Core/Shared/NetPrefabRegistry, which
 /// registers every mod's runtime prefabs in one fixed order on every peer and gates joins on them). When the registry
 /// asks, a template is built: an inactive copy of the game's WinchablePlank (root: Rigidbody, NetworkRigidbody3D,
 /// NetworkObject, InterestByDistance, no game scripts) with this mod's guid, model, colliders and mass. Only meshes,
@@ -40,6 +44,11 @@ internal static class TrailerPrefabs
 
     /// <summary>Name of the coupler head's node under a trailer's root.</summary>
     public const string CouplerNode = "Coupler";
+    /// <summary>Name of a semi-trailer's landing gear node under its root.</summary>
+    public const string GearNode = "Gear";
+    /// <summary>Names of the boat trailer's own boat and of its hull's collider under its root (both on only while the
+    /// boat is on the bunks).</summary>
+    public const string LoadNode = "Load", LoadColliderNode = "LoadCollider";
 
     /// <summary>The trailers' shared material (null until the first template is built).</summary>
     public static Material Material => _material;
@@ -67,10 +76,10 @@ internal static class TrailerPrefabs
         return e.Template.GetComponent<NetworkObject>();
     }
 
-    /// <summary>Declares the four entries (plugin Load). Null on success, otherwise why not.</summary>
+    /// <summary>Declares the five entries (plugin Load). Null on success, otherwise why not.</summary>
     public static string Declare()
     {
-        ModManager.SetServerModReady(TrailersPlugin.ModId, false); // not until all four entries are in
+        ModManager.SetServerModReady(TrailersPlugin.ModId, false); // not until all five entries are in
         foreach (var spec in TrailerSpecs.All)
         {
             var e = new Entry { Spec = spec };
@@ -104,7 +113,7 @@ internal static class TrailerPrefabs
         {
             Waiting = null;
             ModManager.SetServerModReady(TrailersPlugin.ModId, true);
-            TrailersPlugin.Logger.LogInfo("[Trailers] ready: all four trailers can be spawned.");
+            TrailersPlugin.Logger.LogInfo("[Trailers] ready: all five trailers can be spawned.");
         }
     }
 
@@ -220,29 +229,62 @@ internal static class TrailerPrefabs
             _material = m;
         }
 
+        // a trailer with a texture of its own (the semi-trailer) gets its own copy of the material
+        var mat = _material;
+        if (e.Spec.Texture != null)
+        {
+            if (model.Material == null)
+            {
+                var m = new Material(_material) { name = "OTH_Trailer_" + e.Spec.Kind };
+                var albedo = TrailerAssets.OwnTexture(e.Spec.Texture, linear: false);
+                if (m.HasProperty("_Main_Texture")) m.SetTexture("_Main_Texture", albedo);
+                else m.mainTexture = albedo;
+                if (e.Spec.Occlusion != null && m.HasProperty("_AO_Texture")) m.SetTexture("_AO_Texture", TrailerAssets.OwnTexture(e.Spec.Occlusion, linear: true));
+                m.hideFlags = HideFlags.DontUnloadUnusedAsset;
+                Object.DontDestroyOnLoad(m);
+                model.Material = m;
+            }
+            mat = model.Material;
+        }
+
         // ---- our model: body, wheels (one node per wheel anchor, right side yawed 180), convex colliders
         TrailerAssets.EnsureMeshes(model);
         var body = Child(rt, "Body", Vector3.zero, Quaternion.identity);
         body.gameObject.AddComponent<MeshFilter>().sharedMesh = model.Body;
         var mr = body.gameObject.AddComponent<MeshRenderer>();
-        mr.sharedMaterial = _material;
+        mr.sharedMaterial = mat;
         foreach (var a in model.Wheels)
         {
             var w = Child(rt, a.Name, TrailerAssets.V(a.Position), new Quaternion(a.Rotation.X, a.Rotation.Y, a.Rotation.Z, a.Rotation.W));
             var spin = Child(w, "Spin", Vector3.zero, Quaternion.identity);
             spin.gameObject.AddComponent<MeshFilter>().sharedMesh = model.Wheel;
-            spin.gameObject.AddComponent<MeshRenderer>().sharedMaterial = _material;
+            spin.gameObject.AddComponent<MeshRenderer>().sharedMaterial = mat;
         }
         if (model.Coupler != null)
         {
             // the adjustable coupler's head: every peer slides it to the height the hitch set (TrailerLive.ShowCoupler)
             var head = Child(rt, CouplerNode, Vector3.zero, Quaternion.identity);
             head.gameObject.AddComponent<MeshFilter>().sharedMesh = model.Coupler;
-            head.gameObject.AddComponent<MeshRenderer>().sharedMaterial = _material;
+            head.gameObject.AddComponent<MeshRenderer>().sharedMaterial = mat;
+        }
+        if (model.Gear != null)
+        {
+            // a semi-trailer's landing gear: every peer lowers it while the trailer stands unhitched (TrailerLive.ShowGear)
+            var gear = Child(rt, GearNode, Vector3.zero, Quaternion.identity);
+            gear.gameObject.AddComponent<MeshFilter>().sharedMesh = model.Gear;
+            gear.gameObject.AddComponent<MeshRenderer>().sharedMaterial = mat;
+        }
+        if (model.Load != null)
+        {
+            // the boat trailer's own runabout: every peer shows it only while it is on the bunks (TrailerLive.ShowBoat)
+            var load = Child(rt, LoadNode, Vector3.zero, Quaternion.identity);
+            load.gameObject.AddComponent<MeshFilter>().sharedMesh = model.Load;
+            load.gameObject.AddComponent<MeshRenderer>().sharedMaterial = mat;
         }
         for (int i = 0; i < model.Colliders.Count; i++)
         {
-            var c = Child(rt, "Collider" + i, Vector3.zero, Quaternion.identity);
+            bool loadHull = i < model.ColliderNames.Count && model.ColliderNames[i] == TrailerAssets.LoadColliderPart;
+            var c = Child(rt, loadHull ? LoadColliderNode : "Collider" + i, Vector3.zero, Quaternion.identity);
             var mc = c.gameObject.AddComponent<MeshCollider>();
             mc.sharedMesh = model.Colliders[i];
             mc.convex = true;
@@ -251,7 +293,7 @@ internal static class TrailerPrefabs
         cargo.gameObject.layer = BodyLayer;
 
         var attach = rt.Find("AttachPoint");
-        if (attach != null) attach.localPosition = model.Anchor("attach", model.Anchor("hitch", Vector3.zero) * 0.6f);
+        if (attach != null) attach.localPosition = model.Anchor("attach", model.HitchPoint * 0.6f);
 
         // ---- the body: light, with a low centre of mass; Fusion's NetworkRigidbody interpolates (no Unity interpolation)
         var rb = tpl.GetComponent<Rigidbody>();

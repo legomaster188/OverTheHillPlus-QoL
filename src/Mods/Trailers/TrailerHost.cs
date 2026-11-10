@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+#if MELON
+using Il2CppFusion;
+#else
 using Fusion;
+#endif
 using UnityEngine;
 
 namespace OverTheHillPlus.Trailers;
@@ -20,7 +24,7 @@ internal static class TrailerHost
     /// <summary>Spawning, hitching and resetting need the car slower than this, m/s.</summary>
     public const float StillSpeed = 2.0f;
 
-    private static float _nextCheck;
+    private static float _nextCheck, _nextBoat;
     private static readonly List<TrailerLive> Scratch = new();
 
     public static bool Serving =>
@@ -107,12 +111,16 @@ internal static class TrailerHost
         }
         uint carId = car.Id.Raw;
         if (BallRule.HitchedTo(States(), carId) != 0) return TrailerReply.BallTaken;
-        if (!TowBar.Locate(car, out Vector3 carAnchor)) return TrailerReply.NoTowHitch;
+        var spec = TrailerSpecs.Of(kind);
+        if (!CarHitch(car, spec, out Vector3 carAnchor)) return NoHitchFor(spec);
         var tpl = TrailerPrefabs.Template(kind);
         var model = TrailerAssets.Model(kind);
         if (tpl == null || model == null) return TrailerReply.NotReady;
         Vector3 hitch = HitchFor(model, car, carAnchor, null);
         Pose(car.transform, carAnchor, hitch, null, out var pos, out var rot);
+        // at a depot (a map's trailer yard, core's WorldSites): the trailer waits in a free bay, unhitched, ready to hitch
+        bool parked = DepotBay(car, kind, carRb, out var bayPos, out var bayRot);
+        if (parked) { pos = bayPos; rot = bayRot; }
         var runner = GameState.Runner;
         CrashTrail.Mark("trailers: spawn " + kind);
         DebugLog.Info(TrailersPlugin.ModId, $"spawn {kind} for player {owner.PlayerId} behind car {carId} at {pos}");
@@ -126,16 +134,53 @@ internal static class TrailerHost
         }
         var s = new TrailerState
         {
-            NetId = no.Id.Raw, Kind = kind, Owner = owner.RawEncoded, Hitched = true, CarNetId = carId,
+            NetId = no.Id.Raw, Kind = kind, Owner = owner.RawEncoded, Hitched = !parked, CarNetId = parked ? 0u : carId,
             Anchor = TrailerAssets.ToV3(hitch), CarAnchor = TrailerAssets.ToV3(carAnchor),
+            // a boat trailer carries the boat a boat mod drives (the Grayling) when one runs, else its own runabout
+            CargoCarId = kind == TrailerKind.Boat ? TrailerBoatCar() : 0u,
         };
         // body, joint and velocity only once the copy is awake (core wakes it on instantiate; if it is still asleep,
         // the world attaches it on a later frame and AfterAttach runs then)
-        SpawnInfo[s.NetId] = (carId, carRb != null ? carRb.linearVelocity : Vector3.zero);
+        SpawnInfo[s.NetId] = (carId, parked || carRb == null ? Vector3.zero : carRb.linearVelocity);
         TrailerWorld.Apply(s, no);
         TrailerNet.BroadcastState(s);
-        TrailersPlugin.Logger.LogInfo($"[Trailers] spawned a {TrailerSpecs.Of(kind).Name} (object {s.NetId}) for player {owner.PlayerId}, hitched.");
+        TrailersPlugin.Logger.LogInfo($"[Trailers] spawned a {TrailerSpecs.Of(kind).Name} (object {s.NetId}) for player {owner.PlayerId}, " +
+                                      (parked ? "parked in a depot bay." : "hitched."));
         return TrailerReply.Done;
+    }
+
+    /// <summary>A free bay of a depot near the car (core's <see cref="Core.Shared.WorldSites"/>, published by map mods):
+    /// the trailer's pose standing in it, hitch towards the bay's heading, wheels on the ground. False when the car is
+    /// at no depot or every bay near it has a trailer in it.</summary>
+    private static bool DepotBay(NetworkObject car, TrailerKind kind, Rigidbody carRb, out Vector3 pos, out Quaternion rot)
+    {
+        pos = default;
+        rot = Quaternion.identity;
+        try
+        {
+            var at = car.transform.position;
+            if (!Core.Shared.WorldSites.AtDepot(at.x, at.z)) return false;
+            bool Taken(Core.Shared.WorldSites.Bay b)
+            {
+                foreach (var t in TrailerWorld.All)
+                {
+                    if (!t.Alive) continue;
+                    var p = t.T.position;
+                    if ((p.x - b.X) * (p.x - b.X) + (p.z - b.Z) * (p.z - b.Z) < 4.5f * 4.5f) return true;
+                }
+                return false;
+            }
+            if (!Core.Shared.WorldSites.PickBay(at.x, at.z, kind.ToString().ToLowerInvariant(), Taken, out var bay)) return false;
+            rot = Quaternion.Euler(0f, bay.Yaw, 0f);
+            var p0 = new Vector3(bay.X, bay.Y, bay.Z);
+            IntPtr carBody = carRb != null ? carRb.Pointer : IntPtr.Zero;
+            float y = bay.Y;
+            if (TrailerPhysics.Ground(p0 + Vector3.up * 6f, Vector3.down, 14f, IntPtr.Zero, carBody, null, out var hit)) y = hit.point.y;
+            pos = new Vector3(bay.X, y + 0.08f, bay.Z);
+            DebugLog.Info(TrailersPlugin.ModId, $"depot: {kind} goes to {bay.Name} at {pos}");
+            return true;
+        }
+        catch (Exception e) { DebugLog.Error("trailers", e, "TrailerHost.DepotBay"); return false; }
     }
 
     private static readonly Dictionary<uint, (uint car, Vector3 velocity)> SpawnInfo = new();
@@ -177,21 +222,31 @@ internal static class TrailerHost
         if (car == null) return TrailerReply.NoCar;
         if (Speed(car.GetComponent<Rigidbody>()) > StillSpeed) return TrailerReply.TooFast;
         if (BallRule.HitchedTo(States(), car.Id.Raw) != 0) return TrailerReply.BallTaken;
-        if (!TowBar.Locate(car, out Vector3 carAnchor)) return TrailerReply.NoTowHitch;
-        Vector3 ball = car.transform.TransformPoint(carAnchor);
+        // the car's tow ball and, on a semi truck, its fifth wheel: each trailer hitches to the one it is made for
+        bool hasBall = TowBar.Locate(car, out Vector3 ballAnchor);
+        bool hasFifth = OverTheHillPlus.Cars.CarAnchors.Find(car.gameObject, TrailerSpecs.FifthWheelAnchor, out Vector3 fifthAnchor);
         TrailerLive best = null;
         float bestD = HitchReach;
+        bool anyLoose = false, wrongHitch = false;
         foreach (var x in TrailerWorld.All)
         {
             if (x.State.Owner != owner.RawEncoded || x.State.Hitched || !x.Alive) continue;
-            float d = (x.T.TransformPoint(x.CouplerPoint) - ball).magnitude;
+            anyLoose = true;
+            bool fifth = x.Spec.FifthWheel;
+            if (fifth ? !hasFifth : !hasBall) { wrongHitch = true; continue; }
+            Vector3 point = car.transform.TransformPoint(fifth ? fifthAnchor : ballAnchor);
+            float d = (x.T.TransformPoint(x.CouplerPoint) - point).magnitude;
             if (d <= bestD) { best = x; bestD = d; }
         }
         if (best == null)
         {
-            foreach (var x in TrailerWorld.All) if (x.State.Owner == owner.RawEncoded && !x.State.Hitched) return TrailerReply.TooFar;
-            return TrailerReply.NoTrailer;
+            if (!anyLoose) return TrailerReply.NoTrailer;
+            if (wrongHitch && !hasBall && !hasFifth) return TrailerReply.NoTowHitch;
+            foreach (var x in TrailerWorld.All)
+                if (x.State.Owner == owner.RawEncoded && !x.State.Hitched && x.Alive && (x.Spec.FifthWheel ? hasFifth : hasBall)) return TrailerReply.TooFar;
+            return NoHitchFor(wrongHitch && hasBall ? TrailerSpecs.Of(TrailerKind.Semi) : TrailerSpecs.Of(TrailerKind.Utility));
         }
+        Vector3 carAnchor = best.Spec.FifthWheel ? fifthAnchor : ballAnchor;
         // line it up behind the car on the ball (a short hop when the coupler was a little off)
         CrashTrail.Mark("trailers: hitch");
         Vector3 hitch = HitchFor(best.Model, car, carAnchor, best);
@@ -205,7 +260,24 @@ internal static class TrailerHost
         s.Anchor = TrailerAssets.ToV3(hitch);
         s.CarAnchor = TrailerAssets.ToV3(carAnchor);
         Publish(best, s);
+        Adopt(best, s.CarNetId);
         return TrailerReply.Done;
+    }
+
+    /// <summary>A trailer hitched to a car belongs to that car from now on (its owner changing car later takes it away).</summary>
+    private static void Adopt(TrailerLive t, uint carNetId)
+    {
+        t.CarAtSpawn = carNetId;
+        t.CarChangedSince = -1f;
+        t.HitchWantedUntil = -1f;
+    }
+
+    /// <summary>The boat a boat trailer carries in this session: the boat mod's (core's WorldSites.TrailerBoatCar) when its
+    /// garage model can be named, else 0 (the trailer's own runabout).</summary>
+    private static uint TrailerBoatCar()
+    {
+        uint id = Core.Shared.WorldSites.TrailerBoatCar;
+        return id != 0 && CargoModels.CarName(id) != null ? id : 0u;
     }
 
     private static TrailerReply Reset(PlayerRef owner, NetworkObject car)
@@ -219,7 +291,7 @@ internal static class TrailerHost
         t ??= Mine(owner, car, any: true);
         if (t == null) return TrailerReply.NoTrailer;
         if (BallRule.HitchedTo(States(), carId, except: t.NetId) != 0) return TrailerReply.BallTaken;
-        if (!TowBar.Locate(car, out Vector3 carAnchor)) return TrailerReply.NoTowHitch;
+        if (!CarHitch(car, t.Spec, out Vector3 carAnchor)) return NoHitchFor(t.Spec);
         CrashTrail.Mark("trailers: reset");
         Vector3 hitch = HitchFor(t.Model, car, carAnchor, t);
         Pose(car.transform, carAnchor, hitch, t, out var pos, out var rot);
@@ -231,6 +303,7 @@ internal static class TrailerHost
         s.Anchor = TrailerAssets.ToV3(hitch);
         s.CarAnchor = TrailerAssets.ToV3(carAnchor);
         Publish(t, s);
+        Adopt(t, s.CarNetId);
         return TrailerReply.Done;
     }
 
@@ -291,12 +364,24 @@ internal static class TrailerHost
             if (!over) t.TiltSince = -1f;
             float tilted = t.TiltSince < 0f ? 0f : Time.time - t.TiltSince;
             // the tow bar came off: nothing to hold the trailer (checked with the twice-a-second rules below)
-            bool noBar = car != null && Time.unscaledTime >= _nextCheck && !TowBar.Locate(car, out _);
+            bool noBar = car != null && Time.unscaledTime >= _nextCheck && !CarHitch(car, t.Spec, out _);
             if (HitchLimits.ShouldUnhitch(t.JointBroken, carTilt, trailerTilt, tilted) || car == null || noBar)
             {
                 TrailersPlugin.Logger.LogInfo($"[Trailers] trailer {t.NetId} unhitched ({(t.JointBroken ? "the hitch broke" : car == null ? "its car is gone" : noBar ? "the tow hitch was taken off" : "rollover")}).");
                 t.TiltSince = -1f;
                 Unhitch(t);
+            }
+        }
+        if (Time.unscaledTime >= _nextBoat)
+        {
+            _nextBoat = Time.unscaledTime + 0.25f;
+            Scratch.Clear();
+            Scratch.AddRange(TrailerWorld.All);
+            foreach (var t in Scratch)
+            {
+                if (t.Kind != TrailerKind.Boat || !t.Alive) continue;
+                try { BoatRulesTick(t); }
+                catch (Exception e) { DebugLog.Error("trailers", e, "TrailerHost.BoatRulesTick"); TrailersPlugin.LogOnce("boat-rules", "[Trailers] boat trailer rules: " + e.Message); }
             }
         }
         if (Time.unscaledTime < _nextCheck) return;
@@ -313,6 +398,10 @@ internal static class TrailerHost
             if (carNow == 0 && t.NoCarSince < 0f) t.NoCarSince = Time.unscaledTime;
             if (carNow != 0) t.NoCarSince = -1f;
             if (t.CarAtSpawn == 0) t.CarAtSpawn = carNow;
+            // how long the owner has been in another car (a boat trailer waits for the boat mod to say the boat came off)
+            bool changed = (carNow != 0 && carNow != t.CarAtSpawn) || carNow == 0;
+            if (!changed) t.CarChangedSince = -1f;
+            else if (t.CarChangedSince < 0f) t.CarChangedSince = Time.unscaledTime;
             float y = 0f;
             try { y = t.T.position.y; } catch (Exception ex) { DebugLog.Error("trailers", ex, "TrailerHost.Tick"); }
             var why = DespawnRules.Decide(new DespawnInput
@@ -320,9 +409,152 @@ internal static class TrailerHost
                 ObjectAlive = t.Alive, ModActive = modActive, SceneChanging = false, OwnerPresent = Present(owner),
                 OwnerCarNow = carNow, OwnerCarAtSpawn = t.CarAtSpawn,
                 NoCarFor = t.NoCarSince < 0f ? 0f : Time.unscaledTime - t.NoCarSince, Height = y,
+                KeepThroughCarChange = BoatRules.KeepThroughCarChange(t.State, t.CarChangedSince < 0f ? 0f : Time.unscaledTime - t.CarChangedSince),
             });
             if (why != DespawnReason.Keep) Despawn(t, why);
         }
+    }
+
+    // ---------------------------------------------------------------- the boat trailer at a ramp (host, 4 times a second)
+
+    /// <summary>Floats the boat off a trailer backed deep enough into the water, winches a moored boat back onto one
+    /// backed in beside it (<see cref="BoatRules"/>), and hitches a trailer a boat mod asked for to its owner's car once
+    /// that car stands at its coupler.</summary>
+    private static void BoatRulesTick(TrailerLive t)
+    {
+        float now = Time.unscaledTime;
+        float speed = Speed(t.Rb);
+        if (speed < BoatRules.StillSpeed) { if (t.StillSince < 0f) t.StillSince = now; }
+        else t.StillSince = -1f;
+        float still = t.StillSince < 0f ? 0f : now - t.StillSince;
+        var s = t.State;
+        if (t.HitchWantedUntil > 0f) WantedHitch(t, now);
+        if (!t.HasSeat || s.CargoCarId == 0 || !s.Hitched) return;
+        float draft = Core.Shared.WorldSites.TrailerBoatDraft;
+        var keel = t.T.TransformPoint(t.KeelLocal);
+        float water = TrailerWater.At(keel + Vector3.up * 0.5f);
+        float depth = water - keel.y;
+        var seat = t.SeatWorld;
+        float yaw = t.T.eulerAngles.y;
+        bool atRamp = s.Boat == BoatPlace.OnTrailer && float.IsFinite(depth) &&
+                      OverTheHillPlus.Api.WorldPlaces.Nearest(OverTheHillPlus.Api.WorldKinds.BoatRamp, keel.x, keel.z, BoatRules.RampReach) != null;
+        if (BoatRules.FloatsOff(s, atRamp, depth, draft, speed, still))
+        {
+            var (x, z) = BoatRules.DriftSpot(seat.x, seat.z, yaw);
+            var n = s.Clone();
+            n.Boat = BoatPlace.Afloat;
+            n.BoatX = x;
+            n.BoatZ = z;
+            n.BoatYaw = yaw;
+            Publish(t, n);
+            TrailersPlugin.Logger.LogInfo($"[Trailers] trailer {t.NetId}: the boat floated off ({depth:0.00} m of water over its keel), moored at ({x:0.0}, {z:0.0}).");
+            return;
+        }
+        if (s.Boat == BoatPlace.Afloat)
+        {
+            float dx = s.BoatX - seat.x, dz = s.BoatZ - seat.z;
+            float dist = Mathf.Sqrt(dx * dx + dz * dz);
+            if (BoatRules.WinchesOn(s, dist, depth, draft, speed, still))
+            {
+                var n = s.Clone();
+                n.Boat = BoatPlace.OnTrailer;
+                n.BoatX = n.BoatZ = n.BoatYaw = 0f;
+                Publish(t, n);
+                Adopt(t, s.CarNetId);
+                TrailersPlugin.Logger.LogInfo($"[Trailers] trailer {t.NetId}: the moored boat was winched on ({dist:0.0} m off its bunks).");
+            }
+        }
+    }
+
+    /// <summary>A boat mod wants this trailer hitched to its owner's car (it put the car in front of it): done as soon as the
+    /// car stands still with its tow ball near the coupler, the way a reset lines it up; given up after a few seconds.</summary>
+    private static void WantedHitch(TrailerLive t, float now)
+    {
+        if (now > t.HitchWantedUntil || t.State.Hitched) { t.HitchWantedUntil = -1f; return; }
+        var car = CarOf(PlayerRef.FromEncoded(t.State.Owner));
+        if (car == null || Speed(car.GetComponent<Rigidbody>()) > 1.5f) return;
+        if (BallRule.HitchedTo(States(), car.Id.Raw) != 0) { t.HitchWantedUntil = -1f; return; }
+        if (!CarHitch(car, t.Spec, out Vector3 carAnchor))
+        {
+            t.HitchWantedUntil = -1f;
+            TrailersPlugin.Logger.LogInfo($"[Trailers] boat trailer {t.NetId}: its owner's car has no tow hitch: it stays parked.");
+            return;
+        }
+        var ball = car.transform.TransformPoint(carAnchor);
+        if ((t.T.TransformPoint(t.CouplerPoint) - ball).magnitude > 6f) return;     // not there yet (the car is being moved)
+        CrashTrail.Mark("trailers: boat hitch");
+        Vector3 hitch = HitchFor(t.Model, car, carAnchor, t);
+        Pose(car.transform, carAnchor, hitch, t, out var pos, out var rot);
+        t.DropJoint();
+        Teleport(t, pos, rot);
+        var s = t.State.Clone();
+        s.Hitched = true;
+        s.CarNetId = car.Id.Raw;
+        s.Anchor = TrailerAssets.ToV3(hitch);
+        s.CarAnchor = TrailerAssets.ToV3(carAnchor);
+        Publish(t, s);
+        Adopt(t, s.CarNetId);
+        TrailersPlugin.Logger.LogInfo($"[Trailers] boat trailer {t.NetId} hitched to its owner's car {s.CarNetId}.");
+    }
+
+    /// <summary>The player's boat trailer for a boat mod (core's WorldSites.BoatTrailerOf): the one they tow, else their
+    /// nearest; null when they have none.</summary>
+    public static Core.Shared.WorldSites.BoatTrailer? BoatTrailerOf(int owner)
+    {
+        TrailerLive pick = null;
+        Vector3 at = Vector3.zero;
+        var car = CarOf(PlayerRef.FromEncoded(owner));
+        if (car != null) at = car.transform.position;
+        float best = float.MaxValue;
+        foreach (var t in TrailerWorld.All)
+        {
+            if (t.Kind != TrailerKind.Boat || t.State.Owner != owner || !t.Alive) continue;
+            float d = t.State.Hitched ? -1f : (t.T.position - at).sqrMagnitude;
+            if (d < best) { best = d; pick = t; }
+        }
+        if (pick == null) return null;
+        var s = pick.State;
+        var seat = pick.SeatWorld;
+        var keel = pick.T.TransformPoint(pick.KeelLocal);
+        var hitch = pick.T.TransformPoint(pick.CouplerPoint);
+        return new Core.Shared.WorldSites.BoatTrailer(s.NetId, s.Owner, s.Hitched, s.CargoCarId != 0 && pick.HasSeat,
+            (Core.Shared.WorldSites.BoatAt)(byte)s.Boat, seat.x, seat.z, keel.y, s.BoatX, s.BoatZ, s.BoatYaw,
+            hitch.x, hitch.y, hitch.z, pick.T.eulerAngles.y);
+    }
+
+    /// <summary>Host: a boat mod says where a boat trailer's boat is now (core's WorldSites.SetTrailerBoat). Null or why not.</summary>
+    public static string SetTrailerBoat(uint netId, Core.Shared.WorldSites.BoatAt at, float x, float z, float yaw)
+    {
+        if (!GameState.IsAuthority) return "only the host moves boats";
+        var t = TrailerWorld.Get(netId);
+        if (t == null || t.Kind != TrailerKind.Boat) return "no such boat trailer";
+        var place = (BoatPlace)(byte)at;
+        if (place > BoatPlace.Afloat) return "no such place";
+        if (place != BoatPlace.OnTrailer && t.State.CargoCarId == 0) return "its boat is only for show";
+        if (place == BoatPlace.Afloat && !(float.IsFinite(x) && float.IsFinite(z) && float.IsFinite(yaw))) return "no place to moor it";
+        var s = t.State.Clone();
+        s.Boat = place;
+        s.BoatX = place == BoatPlace.Afloat ? x : 0f;
+        s.BoatZ = place == BoatPlace.Afloat ? z : 0f;
+        s.BoatYaw = place == BoatPlace.Afloat ? yaw : 0f;
+        if (s.SameAs(t.State)) return null;
+        Publish(t, s);
+        // back on its bunks: the trailer goes with whatever car its owner drives now (the next check notes it)
+        if (place == BoatPlace.OnTrailer && !s.Hitched) { t.CarAtSpawn = 0; t.CarChangedSince = -1f; }
+        TrailersPlugin.Logger.LogInfo($"[Trailers] boat trailer {netId}: its boat is {place}" + (place == BoatPlace.Afloat ? $" at ({x:0.0}, {z:0.0})." : "."));
+        return null;
+    }
+
+    /// <summary>Host: a boat mod asks for the trailer to be hitched to its owner's car as soon as that car is at its coupler
+    /// (core's WorldSites.HitchBoatTrailer). Null or why not.</summary>
+    public static string HitchBoatTrailer(uint netId, int owner)
+    {
+        if (!GameState.IsAuthority) return "only the host hitches";
+        var t = TrailerWorld.Get(netId);
+        if (t == null || t.Kind != TrailerKind.Boat || t.State.Owner != owner) return "no such boat trailer";
+        if (t.State.Hitched) return "it is hitched already";
+        t.HitchWantedUntil = Time.unscaledTime + 6f;
+        return null;
     }
 
     /// <summary>The scene is about to change (portal, region): every trailer goes now, before Fusion tears it down.</summary>
@@ -393,7 +625,7 @@ internal static class TrailerHost
     /// model without a head keeps its fixed hitch.</summary>
     private static Vector3 HitchFor(TrailerModel model, NetworkObject car, Vector3 carAnchor, TrailerLive moving)
     {
-        Vector3 hitch = model.Anchor("hitch", Vector3.zero);
+        Vector3 hitch = model.HitchPoint;
         if (model.Blob.Part(TrailerAssets.CouplerPart) == null || car == null) return hitch;
         try
         {
@@ -446,6 +678,18 @@ internal static class TrailerHost
         }
         catch (Exception e) { DebugLog.Error("trailers", e, "TrailerHost.Teleport"); TrailersPlugin.LogOnce("teleport", "[Trailers] could not move a trailer: " + e.Message); }
     }
+
+    /// <summary>Where on the car this trailer hitches, car space: a semi-trailer on the fifth wheel of a semi truck (a modded
+    /// car whose model has one), the others on the tow ball of a mounted tow bar. False when the car has none.</summary>
+    public static bool CarHitch(NetworkObject car, TrailerSpec spec, out Vector3 anchor)
+    {
+        anchor = default;
+        if (car == null) return false;
+        if (spec != null && spec.FifthWheel) return OverTheHillPlus.Cars.CarAnchors.Find(car.gameObject, TrailerSpecs.FifthWheelAnchor, out anchor);
+        return TowBar.Locate(car, out anchor);
+    }
+
+    private static TrailerReply NoHitchFor(TrailerSpec spec) => spec != null && spec.FifthWheel ? TrailerReply.NoFifthWheel : TrailerReply.NoTowHitch;
 
     private static float Speed(Rigidbody rb)
     {

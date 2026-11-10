@@ -1,7 +1,9 @@
-using System;
+#if !MELON
 using BepInEx;
-using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+#endif
+using System;
+using OverTheHillPlus.Loader;
 using OverTheHillPlus.Cars;
 
 namespace OverTheHillPlus.Vera;
@@ -17,19 +19,23 @@ using OverTheHillPlus.Core.Manager;
 /// it to the game's own spawn code. A host running it refuses players who couldn't load that entry; saves never name
 /// it, so they load without the mod.
 /// </summary>
+#if MELON
+public class VeraPlugin : OverTheHillPlus.Loader.OthMod
+#else
 [BepInPlugin(Guid, Name, Version)]
 // Core 1.1.0 has the car framework (an older core can't load this mod).
 [BepInDependency(Core.CorePlugin.Guid, ">=1.1.0")]
 public class VeraPlugin : BasePlugin
+#endif
 {
     public const string Guid = "com.oth.vera";
     public const string Name = "Vera Crossover";
-    public const string Version = "1.1.2";
+    public const string Version = "1.1.4";
 
     /// <summary>Mod id: names the config file (oth.vera.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = VeraDefinition.Id;
 
-    internal static ManualLogSource Logger;
+    internal static ModLog Logger;
 
     public override void Load()
     {
@@ -73,6 +79,6 @@ internal static class VeraCar
 
     public static void DrawPage() => ModdedCars.DrawPage(Def);
 
-    public static string Start(System.Reflection.Assembly assets, BepInEx.Configuration.ConfigFile config, ManualLogSource log) =>
+    public static string Start(System.Reflection.Assembly assets, OverTheHillPlus.Config.ConfigFile config, ModLog log) =>
         ModdedCars.Start(Def, assets, config, log);
 }
