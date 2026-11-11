@@ -20,6 +20,7 @@ internal static class DiscordConfig
     public static ConfigEntry<bool> ShowModCount;
     public static ConfigEntry<string> LargeImageKey;
     public static ConfigEntry<string> LargeText;
+    public static ConfigEntry<bool> ShowButton;
 
     public static ConfigFile File;
 
@@ -37,6 +38,7 @@ internal static class DiscordConfig
         ShowHosting = cfg.Bind("Presence", "ShowHosting", true, "Say \"Hosting a server\" when you are the host.");
         ShowModCount = cfg.Bind("Presence", "ShowModCount", true, "Show how many mods you run when someone hovers the image.");
         LargeImageKey = cfg.Bind("Presence", "LargeImageKey", "", "Art asset key uploaded to the Discord application, or an https image URL (empty = the mods' logo, \"none\" = text only).");
+        ShowButton = cfg.Bind("Presence", "ShowButton", true, "A \"Get the mods\" button under your presence, so friends can find these mods (Discord shows it to others, not to you).");
         LargeText = cfg.Bind("Presence", "LargeText", "over the hill", "Text shown when hovering the large image.");
     }
 
@@ -52,5 +54,6 @@ internal static class DiscordConfig
         ShowModCount = ShowModCount.Value,
         LargeImageKey = LargeImageKey.Value ?? "",
         LargeText = LargeText.Value ?? "",
+        ShowButton = ShowButton.Value,
     };
 }

@@ -30,6 +30,12 @@ internal sealed class PresenceState
     public string RoomCode;
     /// <summary>How many of our mods are switched on (0 = unknown).</summary>
     public int ModCount;
+    /// <summary>What you are doing besides driving ("In the lobby", "Taking photos", ...; see
+    /// <see cref="DiscordPresence.ActivityFor"/>), null while driving.</summary>
+    public string Activity;
+    /// <summary>The same for everyone in the session (a hash of the session, never its name), so Discord groups the
+    /// players of one server as a party; null = none.</summary>
+    public string PartyId;
 }
 
 /// <summary>The player's presence settings.</summary>
@@ -51,6 +57,8 @@ internal sealed class PresenceOptions
     /// <see cref="DiscordPresence.DefaultImage"/> logo, "none" = text only).</summary>
     public string LargeImageKey = "";
     public string LargeText = "over the hill";
+    /// <summary>A "Get the mods" button under the presence (Discord shows it to others, not to yourself).</summary>
+    public bool ShowButton = true;
 }
 
 internal enum DiscordReply { Other, Ready, Error }
@@ -72,7 +80,11 @@ internal static class DiscordPresence
     public const string ImageBase = "https://raw.githubusercontent.com/legomaster188/OverTheHillPlus-QoL/main/assets/discord/";
     /// <summary>The modded cars with a picture in the public repo (assets/discord/car_&lt;name&gt;.png, Liveries/discord in the
     /// private one); a car joins the list when its picture is published with the car.</summary>
-    public static readonly string[] CarImages = { "vera", "tercel", "aro", "hilo", "bastion" };
+    public static readonly string[] CarImages =
+    { "vera", "tercel", "aro", "hilo", "bastion", "hilo22", "drifter", "pixie", "bento", "mule", "drover", "marmot", "ibex", "limber", "badger", "nomad", "gemse", "longhorn", "meerkat", "jackal", "marten", "ermine", "grayling", "stoat", "mastiff" };
+    /// <summary>The button's link: the releases page, where every pack's installer is.</summary>
+    public const string ModsUrl = "https://github.com/legomaster188/OverTheHillPlus-QoL/releases";
+    public const string ButtonLabel = "Get the mods";
     /// <summary>Discord's limit for an image URL.</summary>
     public const int MaxImageUrl = 256;
 
@@ -125,7 +137,9 @@ internal static class DiscordPresence
         if (!s.InWorld) return ("In the menus", null);
         string map = o.ShowMap ? Field(s.Map) : null;
         string car = o.ShowCar ? Field(s.Car) : null;
-        string details = map != null && car != null ? map + " · " + car
+        string activity = Field(s.Activity);
+        string details = activity != null ? (map != null ? map + " · " + activity : activity)
+            : map != null && car != null ? map + " · " + car
             : map ?? (car != null ? (s.CarGeneric ? "Driving " : "Driving the ") + car : "Driving");
         string state;
         if (!s.InSession) state = "Solo";
@@ -134,7 +148,8 @@ internal static class DiscordPresence
             string name = o.ShowServerName ? Field(PlainName(s.ServerName)) : null;
             bool host = o.ShowHosting && s.Hosting;
             state = name != null ? (host ? "Hosting " : "In ") + name : host ? "Hosting a server" : "In a server";
-            if (o.ShowPlayerCount && s.Players > 0 && s.MaxPlayers > 0) state += $" ({s.Players}/{s.MaxPlayers})";
+            // With a party Discord writes the count itself ("(3 of 8)") next to this line.
+            if (o.ShowPlayerCount && s.Players > 0 && s.MaxPlayers > 0 && Party(s, o) == null) state += $" ({s.Players}/{s.MaxPlayers})";
             string code = o.ShowRoomCode ? RoomCodeText(s.RoomCode) : null;
             if (code != null) state += " · Code " + code;
         }
@@ -145,7 +160,9 @@ internal static class DiscordPresence
     public static string ActivityKey(PresenceState s, PresenceOptions o)
     {
         var (details, state) = Lines(s, o);
-        return details + "\n" + state + "\n" + (o.ShowElapsed ? s.StartUnix : 0) + "\n" + ImageKey(o) + "\n" + HoverText(s, o);
+        var party = Party(s, o);
+        return details + "\n" + state + "\n" + (o.ShowElapsed ? s.StartUnix : 0) + "\n" + ImageKey(o) + "\n" + HoverText(s, o) + "\n" +
+               CarImageKey(s, o) + "\n" + (party == null ? "" : party.Value.id + "/" + party.Value.size + "/" + party.Value.max) + "\n" + o.ShowButton;
     }
 
     /// <summary>The image's hover text: the player's text, plus the number of mods when allowed.</summary>
@@ -199,8 +216,63 @@ internal static class DiscordPresence
             if (small != null && car != null) w.WriteString("small_text", "Over The Hill Mods");
             w.WriteEndObject();
         }
+        var party = Party(s, o);
+        if (party != null)
+        {
+            w.WriteStartObject("party");
+            w.WriteString("id", party.Value.id);
+            w.WriteStartArray("size");
+            w.WriteNumberValue(party.Value.size);
+            w.WriteNumberValue(party.Value.max);
+            w.WriteEndArray();
+            w.WriteEndObject();
+        }
+        if (o.ShowButton)
+        {
+            w.WriteStartArray("buttons");
+            w.WriteStartObject();
+            w.WriteString("label", ButtonLabel);
+            w.WriteString("url", ModsUrl);
+            w.WriteEndObject();
+            w.WriteEndArray();
+        }
         w.WriteBoolean("instance", false);
         w.WriteEndObject();
+    }
+
+    /// <summary>The session as a Discord party (id and "n of max"), when the count is shown and known; else null.</summary>
+    public static (string id, int size, int max)? Party(PresenceState s, PresenceOptions o)
+    {
+        if (s == null || o == null || !o.ShowPlayerCount || !s.InWorld || !s.InSession) return null;
+        if (s.Players <= 0 || s.MaxPlayers <= 0 || s.Players > s.MaxPlayers) return null;
+        string id = (s.PartyId ?? "").Trim();
+        if (id.Length < 2 || id.Length > 128) return null;
+        return (id, s.Players, s.MaxPlayers);
+    }
+
+    /// <summary>
+    /// What you are doing besides driving, from the class name of the game's top state ("StateLobbyMenu", ...): a short
+    /// phrase for the presence, or null (driving, paused, anything else).
+    /// </summary>
+    public static string ActivityFor(string topState)
+    {
+        if (string.IsNullOrEmpty(topState)) return null;
+        if (topState == "StateLobbyMenu") return "In the lobby";
+        if (topState.StartsWith("StatePhotoMode", StringComparison.Ordinal)) return "Taking photos";
+        if (topState == "StateMapScreen") return "Checking the map";
+        if (topState.IndexOf("Garage", StringComparison.Ordinal) >= 0 || topState.IndexOf("Customi", StringComparison.Ordinal) >= 0)
+            return "In the garage";
+        if (topState.IndexOf("Camp", StringComparison.Ordinal) >= 0) return "Camping";
+        return null;
+    }
+
+    /// <summary>A party id for a session: a short hash of its name (the name itself never leaves the game).</summary>
+    public static string PartyIdFor(string sessionName)
+    {
+        if (string.IsNullOrEmpty(sessionName)) return null;
+        ulong h = 1469598103934665603UL;
+        foreach (char c in sessionName) { h ^= c; h *= 1099511628211UL; }
+        return "oth-" + h.ToString("x16");
     }
 
     /// <summary>The picture URL of the modded car being driven, when the player shows the car and keeps the default

@@ -248,7 +248,7 @@ internal static class NetPrefabRegistry
     {
         try
         {
-            var top = FunCoreManagers.HybridSingleton<FunCoreManagers.GameStateManager>.Instance?.PeekState();
+            var top = GameState.TopState();
             return top != null && top.TryCast<StateMainMenu>() != null;
         }
         catch (Exception ex) { DebugLog.Error("core", ex, "NetPrefabRegistry.MenuUp"); return true; }

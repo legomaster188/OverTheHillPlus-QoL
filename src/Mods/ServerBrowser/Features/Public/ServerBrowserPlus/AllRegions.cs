@@ -791,7 +791,7 @@ internal static class AllRegions
     {
         try
         {
-            var top = HybridSingleton<GameStateManager>.Instance?.PeekState();
+            var top = GameState.TopState();
             return top != null && top.TryCast<StateServerBrowser>() != null;
         }
         catch (Exception ex) { DebugLog.Error("serverbrowser", ex, "AllRegions.TopIsBrowser"); return false; }

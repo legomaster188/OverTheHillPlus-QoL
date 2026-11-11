@@ -237,17 +237,19 @@ internal static class HornNet
     {
         if (!Active) return;
         var from = m.From;
-        bool fromHost = false;
-        if (m.FromHost && !m.Relayed)
-        {
-            // From the host itself: on a guest the transport's sender may not be the host's player ref.
-            fromHost = true;
-            try { var sp = OverlandSessionPlayers.Instance; if (sp != null && sp.HostPlayerRef.IsRealPlayer) from = sp.HostPlayerRef; } catch (Exception ex) { DebugLog.Error("horns", ex, "HornNet.OnMessage"); }
-        }
+        // From the host itself: the mod network hands it over with the host's player (Net.HostRef; on a guest Fusion's
+        // own sender is the guest's player).
+        bool fromHost = m.FromHost && !m.Relayed;
         try
         {
             var r = GameState.Runner;
-            if (r != null && r.LocalPlayer.RawEncoded == from.RawEncoded) return; // our own echo
+            if (r != null && r.LocalPlayer.RawEncoded == from.RawEncoded)
+            {
+                // Ours: an echo, unless it is the host's and nobody could say who the host is. A horn can't be filed under
+                // nobody, so ask again (the next announcement asks everyone to answer): by then the host is known.
+                if (fromHost) _announced = false;
+                return;
+            }
         }
         catch (Exception ex) { DebugLog.Error("horns", ex, "HornNet.OnMessage"); }
         int raw = from.RawEncoded;

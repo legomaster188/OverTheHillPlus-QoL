@@ -197,17 +197,20 @@ internal static class ChatNet
         text = Clean(text, MaxChars);
         if (text.Length == 0) return;
 
+        // From the host itself the mod network hands it over with the host's player (Net.HostRef; on a guest Fusion's own
+        // sender is the guest's player). Should even that be unknown, the line is still the host's, never our own echo:
+        // it is shown without a player (the name falls back to "Host").
         PlayerRef from = m.From;
         var sp = SafeSessionPlayers();
-        if (m.FromHost && !m.Relayed)
-        {
-            // From the host itself: the transport's sender may not be the host's player ref on a guest.
-            try { if (sp != null && sp.HostPlayerRef.IsRealPlayer) from = sp.HostPlayerRef; } catch (Exception ex) { DebugLog.Error("chat", ex, "ChatNet.OnMessage"); }
-        }
+        bool fromHost = m.FromHost && !m.Relayed;
         try
         {
             var r = GameState.Runner;
-            if (r != null && from.IsRealPlayer && r.LocalPlayer.RawEncoded == from.RawEncoded) return; // our own echo
+            if (r != null && from.IsRealPlayer && r.LocalPlayer.RawEncoded == from.RawEncoded)
+            {
+                if (!fromHost) return; // our own echo
+                from = PlayerRef.None;
+            }
         }
         catch (Exception ex) { DebugLog.Error("chat", ex, "ChatNet.OnMessage"); }
 
@@ -218,7 +221,7 @@ internal static class ChatNet
             DebugLog.Verbose(ChatPlugin.ModId, () => $"received {text.Length} chars from player {from.PlayerId}: hidden by the word filter");
             return;
         }
-        string name = NameOf(sp, from);
+        string name = fromHost && !from.IsRealPlayer ? "Host" : NameOf(sp, from);
         if (IsMuted(name))
         {
             MutedCount++;

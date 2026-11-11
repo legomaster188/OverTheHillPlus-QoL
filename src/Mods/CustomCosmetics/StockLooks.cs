@@ -9,6 +9,9 @@ namespace OverTheHillPlus.CustomCosmetics;
 /// The game's parts drawn with our shape (<see cref="PartManifest.Replaces"/>): the game's objects stay where they are and
 /// keep being switched by the car's bitset, but their meshes draw nothing; our object is shown exactly while any of them is
 /// (checked every frame, like <see cref="WheelRims"/>: it catches mounting, the garage preview and a car joining).
+/// <para>In two steps since the parts are built when first shown: <see cref="Watch"/> when the car spawns (our object is
+/// an empty stand-in then, switched with the game's part), <see cref="Empty"/> once our shape is on it. Until then the
+/// game's own mesh draws, so the part is never missing while ours is being made, or if it can't be.</para>
 /// </summary>
 internal static class StockLooks
 {
@@ -39,7 +42,7 @@ internal static class StockLooks
         if (cosmetics != null) Finished[cosmetics.Pointer] = cosmetics;
     }
 
-    private static Mesh Empty()
+    private static Mesh EmptyMesh()
     {
         if (_empty != null) return _empty;
         _empty = new Mesh { name = "cc_no_mesh" };
@@ -48,31 +51,43 @@ internal static class StockLooks
         return _empty;
     }
 
-    /// <summary>Registers our object for the game objects that show the part, and empties their meshes. -> meshes emptied.</summary>
-    public static int Add(Transform cosmetics, List<GameObject> shownBy, GameObject ours)
+    /// <summary>Registers our object for the game objects that show the part: from now on it is shown while they are.</summary>
+    public static void Watch(List<GameObject> shownBy, GameObject ours)
     {
         var look = new Look { Ours = ours };
-        int n = 0;
-        var empty = Empty();
         foreach (var go in shownBy)
-        {
-            if (go == null) continue;
-            look.ShownBy.Add(go);
-            foreach (var mf in go.GetComponentsInChildren<MeshFilter>(true))
-            {
-                if (mf == null || mf.gameObject == ours) continue;
-                mf.sharedMesh = empty;
-                n++;
-            }
-            foreach (var sk in go.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-            {
-                if (sk == null) continue;
-                sk.sharedMesh = empty;
-                n++;
-            }
-        }
+            if (go != null) look.ShownBy.Add(go);
         Looks.Add(look);
         Apply(look);
+    }
+
+    /// <summary>Our object draws its shape now: the meshes of the game objects it stands for draw nothing from here on.
+    /// -> meshes emptied.</summary>
+    public static int Empty(GameObject ours)
+    {
+        int n = 0;
+        if (ours == null) return n;
+        var empty = EmptyMesh();
+        foreach (var look in Looks)
+        {
+            if (look.Ours == null || look.Ours.Pointer != ours.Pointer) continue;
+            foreach (var go in look.ShownBy)
+            {
+                if (go == null) continue;
+                foreach (var mf in go.GetComponentsInChildren<MeshFilter>(true))
+                {
+                    if (mf == null || mf.gameObject == ours) continue;
+                    mf.sharedMesh = empty;
+                    n++;
+                }
+                foreach (var sk in go.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                {
+                    if (sk == null) continue;
+                    sk.sharedMesh = empty;
+                    n++;
+                }
+            }
+        }
         return n;
     }
 

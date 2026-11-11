@@ -204,11 +204,13 @@ internal static class BusyStateGuard
 [HarmonyPatch(typeof(OverlandSessionPlayers), nameof(OverlandSessionPlayers.GetPlayerName))]
 internal static class PlayerNameGuard
 {
-    private static Exception Finalizer(Exception __exception, PlayerRef playerRef, ref string __result)
+    private static Exception Finalizer(Exception __exception, OverlandSessionPlayers __instance, PlayerRef playerRef, ref string __result)
     {
         if (__exception == null && !string.IsNullOrEmpty(__result)) return null;
         if (!BigLobbiesConfig.LobbyGuards.Value) return __exception;
-        if (__exception != null) LobbyRules.Guard("GetPlayerName", __exception);
+        // Asked before Fusion has spawned the session's player table (a guest's first moments) or after it let it go,
+        // the game's name table can't be read at all. Nothing went wrong in the lobby: the stand-in name, and no word.
+        if (__exception != null && GameState.IsSpawned(__instance)) LobbyRules.Guard("GetPlayerName", __exception);
         __result = $"Player {playerRef.PlayerId}";
         return null;
     }

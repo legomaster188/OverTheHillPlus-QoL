@@ -149,7 +149,7 @@ internal static class Lifecycle
     {
         try
         {
-            var top = HybridSingleton<GameStateManager>.Instance?.PeekState();
+            var top = GameState.TopState();
             if (top == null) return "";
             return ClassNameOf(top);
         }

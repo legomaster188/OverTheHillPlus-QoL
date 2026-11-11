@@ -11,49 +11,18 @@ namespace OverTheHillPlus.CustomCosmetics;
 internal sealed class CustomPart
 {
     public PartManifest Manifest;
-    /// <summary>The mesh file's resource name ("&lt;folder&gt;/&lt;file&gt;", gzip when it ends in .gz); read from the DLL
-    /// and parsed on first use.</summary>
+    /// <summary>The mesh file's resource name ("&lt;folder&gt;/&lt;file&gt;", gzip when it ends in .gz). Parts that share
+    /// one (the colours of a strip) name the same file.</summary>
     public string MeshName;
-    /// <summary>The mesh file's bytes as embedded, read from the DLL when asked (nothing of it stays in memory).</summary>
-    public byte[] MeshBytes => PartLibrary.ReadFile(MeshName);
+    /// <summary>What the mesh file holds: the names and sizes of its shapes (the shared one, each car's own, their lower
+    /// detail), from the check at start. The shapes themselves are read when a car first shows the part, and only the
+    /// two that car draws (<see cref="PartBuilds"/>): a file carries every car's, up to 51 MB unpacked.</summary>
+    public PartMeshIndex Mesh;
+    public bool MeshPacked => MeshName.EndsWith(".gz", StringComparison.Ordinal);
     public uint ItemId;
 
-    /// <summary>Parsed blobs by mesh file: parts that share one (the colours of a strip) parse it once.</summary>
-    private static readonly Dictionary<string, MeshBlob> Parsed = new(StringComparer.Ordinal);
-
-    /// <summary>The part's mesh blob, parsed the first time a car needs it (a part no car in the session uses never
-    /// takes the memory).</summary>
-    public MeshBlob Blob
-    {
-        get
-        {
-            if (Parsed.TryGetValue(MeshName, out var b)) return b;
-            b = MeshBlob.Read(PartLibrary.Unpack(MeshName, MeshBytes));
-            Parsed[MeshName] = b;
-            return b;
-        }
-    }
-
-    public MeshPart Shape => PartShape.Pick(Blob);
-
-    // The textures' PNG bytes are read from the DLL when the part's textures are made (the callers keep what they make
-    // from them), not at start: the 50 parts held some 185 MB of files for the whole session. A read is shared while
-    // anything still holds it.
-    public byte[] Albedo => Png("albedo.png");
-    public byte[] Mask => Png("mask.png");
-    public byte[] Lights => Png("lights.png");
-    public byte[] Ao => Png("ao.png");
-    public byte[] Icon => Png("icon.png");
-
-    private readonly Dictionary<string, WeakReference<byte[]>> _read = new(StringComparer.Ordinal);
-
-    private byte[] Png(string file)
-    {
-        if (_read.TryGetValue(file, out var w) && w.TryGetTarget(out var have)) return have;
-        var bytes = PartLibrary.ReadFile(Manifest.Id + "/" + file);
-        if (bytes != null) _read[file] = new WeakReference<byte[]>(bytes);
-        return bytes;
-    }
+    /// <summary>The garage icon's PNG bytes, read from the DLL when asked (null when the part has none).</summary>
+    public byte[] Icon => PartLibrary.ReadFile(Manifest.Id + "/icon.png");
 
     public string Id => Manifest.Id;
     public string NameKey => "OTHP_CC_" + Manifest.Id.ToUpperInvariant() + "_NAME";
@@ -66,10 +35,10 @@ internal sealed class CustomPart
 /// <c>&lt;part id&gt;.mesh</c>, <c>albedo.png</c>, <c>mask.png</c> and the optional <c>lights.png</c>, <c>ao.png</c>,
 /// <c>icon.png</c>. A part with any problem is left out and the problem is logged and listed on the MODS page; the rest
 /// load. Dropping a new folder in is all a new part needs.
-/// <para>The check of every part (its manifest, and its mesh unpacked and parsed) runs on a worker thread from the
-/// plugin's Load (it took 14 s on the main thread at start); everything that asks for the parts takes the result,
-/// waiting for the rest if it isn't done. The set of parts is the same either way. Textures and meshes are read from the
-/// DLL only when a car uses the part.</para>
+/// <para>The check of every part (its manifest, and its mesh walked from end to end: <see cref="PartMeshFile.Scan"/>)
+/// runs on a worker thread from the plugin's Load (it took 14 s on the main thread at start); everything that asks for
+/// the parts takes the result, waiting for the rest if it isn't done. The set of parts is the same either way. Textures
+/// and meshes are read from the DLL only when a car shows the part.</para>
 /// </summary>
 internal static class PartLibrary
 {
@@ -132,10 +101,12 @@ internal static class PartLibrary
         _taken = taken;
         _log = log;
         var list = new List<string>(folders);
+        // mesh files walked so far (only the worker's own pass touches it): parts that share a file check it once
+        var walked = new Dictionary<string, PartMeshIndex>(StringComparer.Ordinal);
         _job = new BackgroundJob<List<PartScan.Row<CustomPart>>>(() =>
             PartScan.ReadAll<CustomPart>(list, CosmeticIds.ValidPartId, MaxParts, id =>
             {
-                var part = ReadPart(id, out string why);
+                var part = ReadPart(id, walked, out string why);
                 return (part, why);
             }));
         log.LogInfo($"Custom Cosmetics: checking {list.Count} part folder(s) in the background.");
@@ -212,21 +183,19 @@ internal static class PartLibrary
         }
     }
 
-    private static bool Has(string folderAndFile) => _names.ContainsKey(Prefix + folderAndFile);
+    /// <summary>The DLL has this file of the parts. Any thread.</summary>
+    internal static bool Has(string folderAndFile) => folderAndFile != null && _names.ContainsKey(Prefix + folderAndFile);
 
-    /// <summary>A mesh file's bytes as the blob reader takes them: a .gz one unzipped.</summary>
-    internal static byte[] Unpack(string name, byte[] bytes)
+    /// <summary>A file of the parts as a stream over the DLL's own bytes (nothing is copied, and it can seek), null when
+    /// there is none. Any thread; the caller closes it.</summary>
+    internal static Stream OpenFile(string folderAndFile)
     {
-        if (!name.EndsWith(".gz", StringComparison.Ordinal)) return bytes;
-        using var src = new MemoryStream(bytes);
-        using var gz = new System.IO.Compression.GZipStream(src, System.IO.Compression.CompressionMode.Decompress);
-        using var ms = new MemoryStream();
-        gz.CopyTo(ms);
-        return ms.ToArray();
+        if (folderAndFile == null || !_names.TryGetValue(Prefix + folderAndFile, out var real)) return null;
+        return _asm?.GetManifestResourceStream(real);
     }
 
     /// <summary>Checks one part folder. Runs on the worker thread: pure code only (no game, Unity or log calls).</summary>
-    private static CustomPart ReadPart(string id, out string why)
+    private static CustomPart ReadPart(string id, Dictionary<string, PartMeshIndex> walked, out string why)
     {
         why = null;
         var json = ReadFile(id + "/part.json");
@@ -236,19 +205,26 @@ internal static class PartLibrary
         // the mesh: its own, or the one of the part it shares it with (meshFrom: the colours of one strip), gzipped or not
         string owner = manifest.MeshFrom.Length > 0 ? manifest.MeshFrom : id;
         string meshName = owner + "/" + owner + ".mesh.gz";
-        var meshBytes = ReadFile(meshName);
-        if (meshBytes == null) { meshName = owner + "/" + owner + ".mesh"; meshBytes = ReadFile(meshName); }
-        if (meshBytes == null) { why = $"{owner}.mesh is missing"; return null; }
-        MeshBlob blob;
-        try { blob = MeshBlob.Read(Unpack(meshName, meshBytes)); }
-        catch (MeshBlobException e) { why = "its mesh could not be read: " + e.Message; return null; }
-        catch (System.IO.InvalidDataException e) { why = "its mesh could not be unpacked: " + e.Message; return null; }
-        if (blob.IsPlaceholder) { why = "its mesh is a stand-in file"; return null; }
-        var shape = PartShape.Pick(blob);
-        if (shape == null) { why = "its mesh has no part named \"part\" with triangles"; return null; }
-        // checked; read and parsed again when a car needs it
+        if (!Has(meshName)) meshName = owner + "/" + owner + ".mesh";
+        if (!Has(meshName)) { why = $"{owner}.mesh is missing"; return null; }
+        if (!walked.TryGetValue(meshName, out var index))
+        {
+            // The whole file passes through a small buffer and every float and index of it is checked, but none of it is
+            // kept: parsing all of it into arrays took 3.4 s of a core at every start and left 350 MB to collect.
+            try
+            {
+                using var file = OpenFile(meshName);
+                if (file == null) { why = $"{owner}.mesh is missing"; return null; }
+                index = PartMeshFile.Scan(file, meshName.EndsWith(".gz", StringComparison.Ordinal));
+            }
+            catch (MeshBlobException e) { why = "its mesh could not be read: " + e.Message; return null; }
+            catch (InvalidDataException e) { why = "its mesh could not be unpacked: " + e.Message; return null; }
+            walked[meshName] = index;
+        }
+        if (index.IsPlaceholder) { why = "its mesh is a stand-in file"; return null; }
+        if (PartShape.Pick(index.Shapes) < 0) { why = "its mesh has no part named \"part\" with triangles"; return null; }
         if (!Has(id + "/albedo.png")) { why = "albedo.png is missing"; return null; }
         if (!Has(id + "/mask.png")) { why = "mask.png is missing"; return null; }
-        return new CustomPart { Manifest = manifest, MeshName = meshName };
+        return new CustomPart { Manifest = manifest, MeshName = meshName, Mesh = index };
     }
 }

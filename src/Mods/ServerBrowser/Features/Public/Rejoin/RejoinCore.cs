@@ -330,7 +330,7 @@ internal static class RejoinCore
         }
 
         var gsm = Gsm();
-        var top = gsm?.PeekState();
+        var top = GameState.TopState(gsm);
         var browser = top?.TryCast<StateServerBrowser>();
         bool modalOnBrowser = browser == null && IsNotice(top) && ContainsBrowser();
 
@@ -534,7 +534,7 @@ internal static class RejoinCore
 
     private static FunCore.StateMachine.State TopState()
     {
-        try { return Gsm()?.PeekState(); } catch (Exception ex) { DebugLog.Error("serverbrowser", ex, "RejoinCore.TopState"); return null; }
+        try { return GameState.TopState(Gsm()); } catch (Exception ex) { DebugLog.Error("serverbrowser", ex, "RejoinCore.TopState"); return null; }
     }
 
     private static bool Is<T>(FunCore.StateMachine.State s) where T : Il2CppSystem.Object

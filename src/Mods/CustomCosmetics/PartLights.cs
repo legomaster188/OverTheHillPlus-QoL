@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Il2CppInterop.Runtime.InteropTypes.Arrays;
-using OverTheHillPlus.Cars;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
@@ -12,7 +10,8 @@ namespace OverTheHillPlus.CustomCosmetics;
 /// What a part's <c>light</c> adds to the glow of its lenses (lights.png already glows them through the car's
 /// PropertyBlockSetter, like the game's own cosmetic lamps): lens flares on its lamps, a few real point lights from a
 /// small shared pool, and twinkling bulbs. The lenses are found once per part shape from its mesh and lights.png
-/// (<see cref="LampSpots"/>). Everything follows the car's own lamps: the light values the car's PropertyBlockSetter gives
+/// (<see cref="LampSpots"/>), off the game thread while the part is built (<see cref="PartBuilds"/>), which hands them
+/// over with the bulb sets' meshes (<see cref="Provide"/>) before the part object is noted here. Everything follows the car's own lamps: the light values the car's PropertyBlockSetter gives
 /// the part's material (head lamps for G lenses, tail for R, reversing for B), so a part lights up exactly when its glow
 /// does, on every player's car and in the garage. Driven from the feature's tick; any failure switches one part's extras
 /// off and is logged, the part itself stays.
@@ -35,7 +34,8 @@ internal static class PartLights
         public MeshFilter Mf;
         /// <summary>The full-detail mesh it draws (the shape without its bulbs once a twinkling part is set up).</summary>
         public Mesh Main;
-        public MeshPart Shape;
+        /// <summary>The shape it draws ("part@Hilo"): with the part, the key of its lenses and bulb sets.</summary>
+        public string ShapeName;
         public Transform Root;
         /// <summary>Noted, its extras not made yet (until it is first shown).</summary>
         public bool Pending;
@@ -73,153 +73,36 @@ internal static class PartLights
         PropertyBlockSetter.FadeOutPropertyID,
     };
 
-    /// <summary>Decoded textures of the last few parts (lights and albedo), so a part's shapes for several cars decode
-    /// its PNGs once.</summary>
-    private static readonly List<(string key, byte[] px, int w, int h)> Decoded = new();
-    private const int DecodedKeep = 4;
-
     public static int Count => All.Count;
 
     // ---------------------------------------------------------------- the lenses of a shape
 
-    /// <summary>The lenses of one of a part's shapes (cached by part and shape).</summary>
-    private static List<LampSpot> SpotsOf(CustomPart p, MeshPart shape)
+    private static string Key(CustomPart p, string shapeName) => p.ItemId.ToString("X8") + "|" + shapeName;
+
+    /// <summary>Have this part's lenses on this shape been handed over already?</summary>
+    public static bool Has(CustomPart p, string shapeName) => Spots.ContainsKey(Key(p, shapeName));
+
+    /// <summary>
+    /// The lenses of one of a part's shapes, in the drawn mesh's space, and (for a twinkling part) the meshes of its three
+    /// bulb sets and of the shape without them ([0..2] sets, null where a set is empty; [3] the rest); <paramref name="sets"/>
+    /// is null when it has no head-lamp bulbs. Found off the game thread; kept for every car that draws this shape.
+    /// </summary>
+    public static void Provide(CustomPart p, string shapeName, List<LampSpot> spots, Mesh[] sets)
     {
-        string key = p.ItemId.ToString("X8") + "|" + shape.Name;
-        if (Spots.TryGetValue(key, out var have)) return have;
-        var list = new List<LampSpot>();
-        Spots[key] = list;
-        if (p.Lights == null) return list;
-        var lights = Decode(p.Id + "_lights_read", p.Lights, linear: true, out int lw, out int lh);
-        if (lights == null) return list;
-        int aw = 0, ah = 0;
-        var albedo = p.Albedo != null ? Decode(p.Id + "_albedo_read", p.Albedo, linear: false, out aw, out ah) : null;
-        LampSpots.Sampler L = (float u, float v, out float r, out float g, out float b) => Sample(lights, lw, lh, u, v, out r, out g, out b);
-        LampSpots.Sampler A = albedo == null ? null : (float u, float v, out float r, out float g, out float b) => Sample(albedo, aw, ah, u, v, out r, out g, out b);
-        list.AddRange(LampSpots.Find(shape.Positions, shape.Uv0, shape.Indices, L, A));
-        // into the drawn mesh's space (the part's own transform, identity for the exported parts)
-        var m = CarAssets.PartMatrix(shape);
-        foreach (var s in list)
-        {
-            var at = m.MultiplyPoint3x4(new Vector3(s.X, s.Y, s.Z));
-            var n = m.MultiplyVector(new Vector3(s.NX, s.NY, s.NZ));
-            s.X = at.x; s.Y = at.y; s.Z = at.z;
-            if (n.sqrMagnitude > 1e-8f) { n.Normalize(); s.NX = n.x; s.NY = n.y; s.NZ = n.z; }
-        }
-        DebugLog.Info(Mod, $"{p.Id} ({shape.Name}): {list.Count} lens(es) found");
-        return list;
+        string key = Key(p, shapeName);
+        Spots[key] = spots ?? new List<LampSpot>();
+        SetMeshes[key] = sets;
     }
 
-    /// <summary>An embedded PNG's RGBA32 bytes, bottom row first; null when it can't be read.</summary>
-    private static byte[] Decode(string name, byte[] png, bool linear, out int w, out int h)
-    {
-        foreach (var d in Decoded)
-            if (d.key == name) { w = d.w; h = d.h; return d.px; }
-        var px = DecodeNow(name, png, linear, out w, out h);
-        if (px != null)
-        {
-            Decoded.Add((name, px, w, h));
-            if (Decoded.Count > DecodedKeep) Decoded.RemoveAt(0);
-        }
-        return px;
-    }
-
-    private static byte[] DecodeNow(string name, byte[] png, bool linear, out int w, out int h)
-    {
-        w = h = 0;
-        var t = new Texture2D(2, 2, TextureFormat.RGBA32, false, linear) { name = name };
-        try
-        {
-            if (!ImageConversion.LoadImage(t, new Il2CppStructArray<byte>(png), false)) return null;
-            w = t.width;
-            h = t.height;
-            var px = t.GetPixels32();
-            return System.Runtime.InteropServices.MemoryMarshal.AsBytes(px.AsSpan()).ToArray();
-        }
-        finally { Object.Destroy(t); }
-    }
-
-    private static void Sample(byte[] px, int w, int h, float u, float v, out float r, out float g, out float b)
-    {
-        int x = Mathf.Clamp((int)(u * w), 0, w - 1), y = Mathf.Clamp((int)(v * h), 0, h - 1);
-        int i = (y * w + x) * 4;
-        r = px[i] / 255f;
-        g = px[i + 1] / 255f;
-        b = px[i + 2] / 255f;
-    }
-
-    // ---------------------------------------------------------------- set-up (when a part object is made)
-
-    /// <summary>The three twinkle sets' meshes and the shape without them ([0..2] sets, [3] the rest); null when the
-    /// shape has no head-lamp lenses.</summary>
-    private static Mesh[] SetsFor(CustomPart p, MeshPart shape)
-    {
-        string key = p.ItemId.ToString("X8") + "|" + shape.Name;
-        if (SetMeshes.TryGetValue(key, out var have)) return have;
-        SetMeshes[key] = null;
-        var spots = SpotsOf(p, shape);
-        var bySet = new List<int>[] { new(), new(), new() };
-        var bulb = new HashSet<int>();
-        foreach (var s in spots)
-        {
-            if (s.Channel != LampChannel.Head) continue;
-            bySet[s.Set].AddRange(s.Triangles);
-            foreach (int t in s.Triangles) bulb.Add(t);
-        }
-        if (bulb.Count == 0) return null;
-        var rest = new List<int>();
-        int nt = shape.Indices.Length / 3;
-        for (int t = 0; t < nt; t++) if (!bulb.Contains(t)) rest.Add(t);
-        var meshes = new Mesh[4];
-        for (int k = 0; k < 3; k++) meshes[k] = Build($"cc_{p.Id}_{shape.Name}_twinkle{k}", shape, bySet[k]);
-        meshes[3] = Build($"cc_{p.Id}_{shape.Name}_body", shape, rest);
-        if (meshes[3] == null) return null;
-        SetMeshes[key] = meshes;
-        return meshes;
-    }
-
-    /// <summary>A mesh of some of a shape's triangles (its vertices compacted).</summary>
-    private static Mesh Build(string name, MeshPart shape, List<int> tris)
-    {
-        if (tris.Count == 0) return null;
-        var map = new Dictionary<int, int>();
-        var idx = new int[tris.Count * 3];
-        int k = 0;
-        foreach (int t in tris)
-            for (int c = 0; c < 3; c++)
-            {
-                int v = shape.Indices[t * 3 + c];
-                if (!map.TryGetValue(v, out int nv)) map[v] = nv = map.Count;
-                idx[k++] = nv;
-            }
-        var sub = new MeshPart
-        {
-            Name = shape.Name, Kind = shape.Kind, Position = shape.Position, Rotation = shape.Rotation, Scale = shape.Scale,
-            Positions = new float[map.Count * 3], Normals = new float[map.Count * 3], Uv0 = new float[map.Count * 2], Indices = idx,
-        };
-        foreach (var kv in map)
-        {
-            Array.Copy(shape.Positions, kv.Key * 3, sub.Positions, kv.Value * 3, 3);
-            Array.Copy(shape.Normals, kv.Key * 3, sub.Normals, kv.Value * 3, 3);
-            Array.Copy(shape.Uv0, kv.Key * 2, sub.Uv0, kv.Value * 2, 2);
-        }
-        var mesh = CarAssets.BuildMesh(name, new List<MeshPart> { sub }, Matrix4x4.identity);
-        if (mesh != null)
-        {
-            mesh.hideFlags = HideFlags.DontUnloadUnusedAsset;
-            Object.DontDestroyOnLoad(mesh);
-        }
-        return mesh;
-    }
-
-    /// <summary>Notes a new part object for its extras (point lights, flares, twinkle sets): they are made the first time
-    /// the part is shown (a car instance builds every part it could carry, most never mounted), one part per frame.
-    /// <paramref name="full"/> is the full-detail mesh the object draws. No-op for a part without <c>light</c>.</summary>
-    public static void Add(GameObject go, MeshFilter mf, CustomPart p, MeshPart shape, Mesh full, Material material, PropertyBlockSetter setter, Transform carRoot)
+    /// <summary>Notes a part object for its extras (point lights, flares, twinkle sets): they are made the next time it
+    /// is seen shown, one part per frame. <paramref name="full"/> is the full-detail mesh the object draws,
+    /// <paramref name="shapeName"/> the shape it is (null for a part that has no extras, such as a wheel). No-op for a
+    /// part without <c>light</c>.</summary>
+    public static void Add(GameObject go, MeshFilter mf, CustomPart p, string shapeName, Mesh full, Material material, PropertyBlockSetter setter, Transform carRoot)
     {
         var cfg = p?.Manifest.Light;
-        if (cfg == null || !cfg.Any || go == null || shape == null) return;
-        All.Add(new Lit { Go = go, Mf = mf, Main = full, Shape = shape, Root = carRoot, Material = material, Setter = setter, Part = p, Pending = true });
+        if (cfg == null || !cfg.Any || go == null || shapeName == null) return;
+        All.Add(new Lit { Go = go, Mf = mf, Main = full, ShapeName = shapeName, Root = carRoot, Material = material, Setter = setter, Part = p, Pending = true });
     }
 
     /// <summary>Makes a noted part's extras (on the main thread, the first time it is shown).</summary>
@@ -229,12 +112,12 @@ internal static class PartLights
         var p = lit.Part;
         var cfg = p.Manifest.Light;
         var go = lit.Go;
-        var shape = lit.Shape;
+        string key = Key(p, lit.ShapeName);
         var material = lit.Material;
         var carRoot = lit.Root;
         try
         {
-            var spots = SpotsOf(p, shape);
+            if (!Spots.TryGetValue(key, out var spots)) spots = new List<LampSpot>();
             if (spots.Count == 0) { DebugLog.Info(Mod, $"{p.Id}: no glowing lens found; no extra lights"); lit.Broken = true; return; }
             int layer = go.layer;
             // point lights, off until the pool hands them out
@@ -275,7 +158,7 @@ internal static class PartLights
             // twinkling bulbs: three objects of their own, their light values set here every frame
             if (cfg.Twinkle)
             {
-                var sets = SetsFor(p, shape);
+                SetMeshes.TryGetValue(key, out var sets);
                 if (sets != null && sets[3] != null && lit.Main != null)
                 {
                     // the object draws the shape without its bulbs from now on (the LOD swap too)

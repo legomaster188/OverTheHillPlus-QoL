@@ -222,26 +222,55 @@ internal static class PingTracker
         }
         catch (Exception ex) { DebugLog.Error("serverutils", ex, "PingTracker.RefreshSession"); MaxPlayers = 0; }
 
+        // What a guest can't read yet in its first moments is asked again at the next sample, not a roster interval later.
+        bool again = false;
         if (Hosting) HostName = "you";
         else
         {
             try
             {
                 // Networked property: only readable once the session object has spawned.
-                var host = sp != null ? sp.HostPlayerRef : PlayerRef.None;
+                bool spawned = GameState.IsSpawned(sp);
+                var host = spawned ? sp.HostPlayerRef : PlayerRef.None;
                 HostName = host.IsRealPlayer ? PlayerListRoster.NameOf(sp, host) : "";
+                again = !spawned;
             }
             catch (Exception ex) { DebugLog.Error("serverutils", ex, "PingTracker.RefreshSession"); HostName = ""; }
         }
 
+        // The tick rate is part of Fusion's run-time config, which a guest only has once the host's first state update
+        // is in (Fusion throws before that): no uptime until then.
+        if (!Hosting && !HasServerState(r))
+        {
+            ServerUptime = -1f;
+            again = true;
+        }
+        else
+        {
+            try
+            {
+                int rate = r.TickRate;
+                int tick = Hosting ? r.Tick.Raw : r.LatestServerTick.Raw;
+                float up = rate > 0 ? tick / (float)rate : -1f;
+                ServerUptime = up > 0f && up < 30f * 86400f ? up : -1f;
+            }
+            catch (Exception ex) { DebugLog.Error("serverutils", ex, "PingTracker.RefreshSession"); ServerUptime = -1f; }
+        }
+        if (again) _nextRoster = 0f;
+    }
+
+    /// <summary>
+    /// False on a guest until the host's first state update has arrived. Fusion's run-time config (the session's tick
+    /// rate is in it) can't be read before that: Fusion throws, and its message names this check as the guard.
+    /// </summary>
+    internal static bool HasServerState(NetworkRunner r)
+    {
         try
         {
-            int rate = r.TickRate;
-            int tick = Hosting ? r.Tick.Raw : r.LatestServerTick.Raw;
-            float up = rate > 0 ? tick / (float)rate : -1f;
-            ServerUptime = up > 0f && up < 30f * 86400f ? up : -1f;
+            var sim = r != null ? r.Simulation : null;
+            return sim != null && sim.HasObject(NetworkId.RuntimeConfig);
         }
-        catch (Exception ex) { DebugLog.Error("serverutils", ex, "PingTracker.RefreshSession"); ServerUptime = -1f; }
+        catch (Exception ex) { DebugLog.Error("serverutils", ex, "PingTracker.HasServerState"); return false; }
     }
 
     private static void RefreshRoster(NetworkRunner r, float now)

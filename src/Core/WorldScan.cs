@@ -125,7 +125,7 @@ internal static class WorldScan
     {
         try
         {
-            var top = HybridSingleton<GameStateManager>.Instance?.PeekState();
+            var top = GameState.TopState();
             IntPtr state = top != null ? top.Pointer : IntPtr.Zero;
             if (state == _state) return;
             _state = state;

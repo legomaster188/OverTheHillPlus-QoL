@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using OverTheHillPlus.Cars;
 using UnityEngine;
@@ -26,19 +27,18 @@ namespace OverTheHillPlus.CustomCosmetics;
 /// the game's mounted-parts bitset is its index, and no stock index moves), and each controller instance (the networked
 /// car, the garage's model) gets one child object per part with the game's own <c>VehicleUpgradeObject</c>, registered in
 /// its <c>totalPartsDictionary</c>: from there the game's own code shows and hides it by the bitset, in the garage and on
-/// every car in a session. Everything is idempotent, so it can be called from any hook; any failure is logged and the
-/// part is just not there, never an exception into the game.
+/// every car in a session. That object is an empty stand-in when the car spawns; its mesh, material and textures are
+/// made the first time the game shows it (<see cref="PartBuilds"/>), so a car costs the same whether it could carry five
+/// parts or fifty. Everything is idempotent, so it can be called from any hook; any failure is logged and the part is
+/// just not there, never an exception into the game.
 /// </summary>
 internal static class PartObjects
 {
     private const string Mod = CustomCosmeticsPlugin.ModId;
-    private const string LiveryProperty = "_Livery_Texture";
+    internal const string LiveryProperty = "_Livery_Texture";
 
     private static readonly Dictionary<uint, VehicleCosmetic> Sos = new();
-    private static readonly Dictionary<string, Mesh> Meshes = new();
     private static readonly Dictionary<uint, Sprite> Icons = new();
-    private static readonly Dictionary<string, Material> Materials = new();
-    private static readonly Dictionary<uint, Dictionary<string, Texture2D>> Textures = new();
     /// <summary>UpgradesLists (pointer) the parts were appended to, with the list's length afterwards.</summary>
     private static readonly Dictionary<IntPtr, int> Done = new();
     private static readonly HashSet<string> Logged = new();
@@ -50,7 +50,7 @@ internal static class PartObjects
     public static int SoCount => Sos.Count;
     public static int CarsDone => Done.Count;
 
-    private static void Fail(Exception e, string where)
+    internal static void Fail(Exception e, string where)
     {
         DebugLog.Error(Mod, e, where);
         if (++_errors == 1) CustomCosmeticsPlugin.Logger?.LogWarning($"Custom Cosmetics: {where} failed: {e.Message}");
@@ -61,7 +61,7 @@ internal static class PartObjects
         }
     }
 
-    private static void LogOnce(string key, string text)
+    internal static void LogOnce(string key, string text)
     {
         if (Logged.Add(key)) CustomCosmeticsPlugin.Logger?.LogInfo("Custom Cosmetics: " + text);
     }
@@ -157,7 +157,7 @@ internal static class PartObjects
         return t;
     }
 
-    private static Texture2D LoadPng(string name, byte[] png, bool linear, bool nonReadable = true)
+    internal static Texture2D LoadPng(string name, byte[] png, bool linear, bool nonReadable = true)
     {
         var t = new Texture2D(2, 2, TextureFormat.RGBA32, true, linear) { name = name };
         if (!ImageConversion.LoadImage(t, new Il2CppStructArray<byte>(png), nonReadable))
@@ -265,121 +265,11 @@ internal static class PartObjects
 
     // ---------------------------------------------------------------- the car objects
 
-    /// <summary>The car's root: the node above the cosmetic parts that has the game's "Parts" child.</summary>
-    private static Transform RootOf(Transform from)
-    {
-        for (var t = from; t != null; t = t.parent)
-            if (t.Find("Parts") != null) return t;
-        return from.root;
-    }
-
-    private static Transform GroupOf(Transform cosmetics)
-    {
-        foreach (var t in cosmetics.GetComponentsInChildren<Transform>(true))
-            if (t.name == "Visual" && t.parent != null && t.parent.name.EndsWith("_CosmeticParts", StringComparison.Ordinal)) return t;
-        return cosmetics;
-    }
-
-    private static Material CarMaterial(Transform root)
-    {
-        foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
-        {
-            if (r == null) continue;
-            foreach (var m in r.sharedMaterials)
-                if (m != null && m.HasProperty(LiveryProperty)) return m;
-        }
-        return null;
-    }
-
-    private static bool UsesCarShader(Material m, PropertyBlockSetter setter)
+    internal static bool UsesCarShader(Material m, PropertyBlockSetter setter)
     {
         if (m == null || !m.HasProperty(LiveryProperty)) return false;
         string want = setter != null ? setter.shaderName : null;
         return string.IsNullOrEmpty(want) || m.shader.name == want;
-    }
-
-    /// <summary>
-    /// The material to copy: one a stock cosmetic of this very car uses (the one in the part's own slot first), so the shader
-    /// settings, render state and lighting match the car's other parts and the car's PropertyBlockSetter (which drives the
-    /// lights, dirt and wet by that shader) takes it. Falls back to the car's body material. <paramref name="from"/> says
-    /// which it was.
-    /// </summary>
-    private static Material SourceMaterial(Transform cosmetics, Transform root, string slot, PropertyBlockSetter setter, out string from)
-    {
-        from = null;
-        string[] path = (slot ?? "").Split('/');
-        string leaf = path.Length > 0 ? path[path.Length - 1] : "";
-        string parent = path.Length > 1 ? path[path.Length - 2] : null;
-        Material any = null;
-        foreach (var t in cosmetics.GetComponentsInChildren<Transform>(true))
-        {
-            bool inSlot = t.name == leaf && (parent == null || (t.parent != null && t.parent.name == parent));
-            if (!inSlot && any != null) continue;
-            foreach (var r in t.GetComponentsInChildren<MeshRenderer>(true))
-            {
-                if (r == null) continue;
-                foreach (var m in r.sharedMaterials)
-                {
-                    if (!UsesCarShader(m, setter)) continue;
-                    if (inSlot) { from = "the stock " + slot + " cosmetic's material"; return m; }
-                    if (any == null) any = m;
-                }
-            }
-        }
-        if (any != null) { from = "a stock cosmetic's material"; return any; }
-        var body = CarMaterial(root);
-        if (body != null) from = "the car's body material";
-        return body;
-    }
-
-    /// <summary>The Unity mesh of one of the part's shapes (the shared one, a car's own, their LOD1), made once.</summary>
-    private static Mesh MeshOf(CustomPart p, MeshPart shape)
-    {
-        if (shape == null) return null;
-        string key = p.ItemId.ToString("X8") + "|" + shape.Name;
-        if (Meshes.TryGetValue(key, out var have) && have != null) return have;
-        var mesh = CarAssets.BuildMesh("cc_" + p.Id + (shape.Name == PartShape.Full ? "" : "_" + shape.Name.Replace(PartShape.Full, "").Trim('_')),
-            new List<MeshPart> { shape }, Matrix4x4.identity);
-        if (mesh != null)
-        {
-            mesh.hideFlags = HideFlags.DontUnloadUnusedAsset;
-            Object.DontDestroyOnLoad(mesh);
-            Meshes[key] = mesh;
-        }
-        return mesh;
-    }
-
-    /// <summary>The shapes this car draws: its own (part@car) or the shared one, with the matching LOD1 (null if none).</summary>
-    private static (MeshPart full, MeshPart low, string variant) ShapesFor(CustomPart p, CarInfo info, RuntimeCar modded)
-    {
-        var full = PartShape.Pick(p.Blob, out string variant, info.name, modded?.Id) ?? p.Shape;
-        return (full, PartShape.PickLod1(p.Blob, variant), variant);
-    }
-
-    private static Texture2D Tex(CustomPart p, string file, byte[] png, bool linear, Texture2D fallback)
-    {
-        if (!Textures.TryGetValue(p.ItemId, out var map)) Textures[p.ItemId] = map = new Dictionary<string, Texture2D>();
-        if (map.TryGetValue(file, out var have) && have != null) return have;
-        Texture2D t = png != null ? LoadPng(p.Id + "_" + file, png, linear) : null;
-        if (t == null) t = fallback;
-        map[file] = t;
-        return t;
-    }
-
-    private static Material MaterialOf(CustomPart p, Material carMaterial)
-    {
-        string key = p.Id + "|" + carMaterial.GetInstanceID();
-        if (Materials.TryGetValue(key, out var have) && have != null) return have;
-        var m = new Material(carMaterial) { name = "cc_" + p.Id };
-        // The game's livery goes onto materials that are switchable; the part keeps its own albedo.
-        CarShader.KeepTexture(m, Tex(p, "albedo", p.Albedo, false, Texture2D.whiteTexture));
-        m.SetTexture("_AO_Texture", Tex(p, "ao", p.Ao, true, Texture2D.whiteTexture));
-        m.SetTexture("_Lights_Texture", Tex(p, "lights", p.Lights, true, Texture2D.blackTexture));
-        m.SetTexture("_Mask_Texture", Tex(p, "mask", p.Mask, true, Texture2D.blackTexture));
-        m.hideFlags = HideFlags.DontUnloadUnusedAsset;
-        Object.DontDestroyOnLoad(m);
-        Materials[key] = m;
-        return m;
     }
 
     /// <summary>Is this car one the parts are offered on (a Mod Manager car, or a stock car when the config says so)?</summary>
@@ -387,9 +277,12 @@ internal static class PartObjects
 
     /// <summary>
     /// Makes sure this controller instance has an upgrade object for each custom part of its car and that the game's
-    /// <c>totalPartsDictionary</c> lists it. <paramref name="garage"/>: the garage's model (lowered as the car settles, see
-    /// the layout offset). <paramref name="setter"/>: the instance's PropertyBlockSetter, which drives the car's lights,
-    /// dirt and wet on every renderer it knows. Safe to call as often as you like.
+    /// <c>totalPartsDictionary</c> lists it. The objects are empty stand-ins at the parts' places, hidden like every part
+    /// the car doesn't wear: a few milliseconds for a whole car. What a part looks like is made when the game first
+    /// switches its stand-in on (<see cref="PartBuilds"/>). <paramref name="garage"/>: the garage's model (lowered as the
+    /// car settles, see the layout offset). <paramref name="setter"/>: the instance's PropertyBlockSetter, which drives
+    /// the car's lights, dirt and wet on every renderer it knows. Safe to call as often as you like: a call that finds
+    /// the game's dictionary as the last one left it does nothing.
     /// </summary>
     public static void Attach(Transform cosmetics, CarInfo info, PartsDictionary dict, PropertyBlockSetter setter, bool garage)
     {
@@ -397,7 +290,8 @@ internal static class PartObjects
         // every car (stock ones too, whatever the config): a fitted look for the game's own parts that need one
         if (cosmetics != null) AttachLooks(cosmetics, info, dict, setter, garage);
         if (!Eligible(info)) return;
-        string where = $"{info.name} ({(garage ? "garage model" : "car")})";
+        string car = info.name;
+        string where = $"{car} ({(garage ? "garage model" : "car")})";
         if (cosmetics == null) { LogOnce("nocosm" + where, $"{where}: the controller has no upgradesParent yet; its parts wait for the next refresh."); return; }
         if (dict == null) { LogOnce("nodict" + where, $"{where}: the controller has no totalPartsDictionary yet; its parts wait for the next refresh."); return; }
         try
@@ -405,8 +299,15 @@ internal static class PartObjects
             EnsureCar(info);
             var list = info.UpgradesLists?.Parts;
             if (list == null) return;
-            Transform root = null, group = null;
-            for (int i = 0; i < list.Count; i++)
+            int listCount = list.Count;
+            var set = PartBuilds.SetOf(cosmetics);
+            if (set != null && set.Settled(dict.Pointer, dict.Count, listCount)) return;
+            long t0 = Stopwatch.GetTimestamp();
+            if (set != null && set.Setter == null && setter != null) set.Setter = setter;
+            var modded = ModdedCars.ByCarName(car);
+            PartBuilds.WheelSet wheels = null;
+            int made = 0, objects = 0, back = 0, first = -1, last = -1;
+            for (int i = 0; i < listCount; i++)
             {
                 var so = list[i];
                 if (so == null) continue;
@@ -418,60 +319,41 @@ internal static class PartObjects
                     var objs = dict[registered];
                     if (objs != null && objs.Count > 0) continue;
                 }
-                root ??= RootOf(cosmetics);
-                group ??= GroupOf(cosmetics);
-                var source = SourceMaterial(cosmetics, root, part.Manifest.Slot, setter, out string from);
-                if (source == null) { LogOnce("nomaterial" + where + part.Id, $"{where}: {part.Id} skipped: no car material found to copy (nothing under {cosmetics.name} uses a material with {LiveryProperty})."); continue; }
-                string why;
-                var gos = part.Manifest.Mount == PartMount.Wheels
-                    ? BuildWheels(part, so, info, root, source, setter, ref from, out why)
-                    : Build(part, so, info, root, group, source, setter, garage, out why);
-                if (gos == null || gos.Count == 0) { if (why != null) LogOnce("skip" + where + part.Id, $"{where}: {part.Id} skipped: {why}."); continue; }
+                set ??= PartBuilds.NewSet(cosmetics, car, setter, garage);
+                // the game made its dictionary anew and missed ours (the wheels' sit outside the cosmetics): the same
+                // objects go back in, never a second set
+                var stand = set.Find(part, look: false);
+                if (stand != null) back++;
+                else
+                {
+                    var fit = FitLookup.Find(part.Manifest.Fits, car, modded?.Id);
+                    if (fit == null) continue; // not a skip: the part just isn't for this car
+                    string why = null;
+                    if (PartShape.Pick(part.Mesh.Shapes, out _, car, modded?.Id) < 0) why = "its mesh has no triangles";
+                    else if (part.Manifest.Mount == PartMount.Wheels) stand = PartBuilds.AddWheels(set, part, so, fit, i, ref wheels, out why);
+                    else stand = PartBuilds.AddBody(set, part, so, fit, i);
+                    if (stand == null) { if (why != null) LogOnce("skip" + where + part.Id, $"{where}: {part.Id} skipped: {why}."); continue; }
+                    made++;
+                    objects += stand.Gos.Length;
+                    if (first < 0) first = i;
+                    last = i;
+                }
                 if (!dict.ContainsKey(registered)) dict[registered] = new Il2CppSystem.Collections.Generic.List<GameObject>();
-                foreach (var go in gos) dict[registered].Add(go);
-                var first = gos[0];
-                LogOnce("built" + where + part.Id,
-                    $"{where}: {part.Id} {(gos.Count > 1 ? gos.Count + " objects" : "object")} made (bit {i}, slot {part.Manifest.Slot}, {part.Manifest.Mount.ToString().ToLowerInvariant()}" +
-                    $"{(part.Manifest.Group.Length > 0 ? ", group " + part.Manifest.Group : "")}) under {first.transform.parent.name} of {root.name}: car-root pos {F(root.InverseTransformPoint(first.transform.position))}, " +
-                    $"local pos {F(first.transform.localPosition)}, scale {F(first.transform.localScale)}, layer {first.layer}, material from {from}; hidden until the game mounts it.");
+                foreach (var go in stand.Gos) dict[registered].Add(go);
             }
+            if (set == null) return;
+            set.Settle(dict.Pointer, dict.Count, listCount);
+            if (made + back == 0) return;
+            PartBuilds.Refreshed(cosmetics);
+            double ms = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
+            // one line for the car (it was three per part): what each part is and where it sits is said in the debug log
+            // when it is built
+            string line = $"{where}: {made} part stand-in(s) made in {ms:0.0} ms" + (made > 0 ? $" (bits {first}..{last}{(objects > made ? $", {objects} objects with the wheels'" : "")})" : "") +
+                          (back > 0 ? $", {back} put back in the game's list" : "") + "; a part is built when the game first shows it.";
+            if (made > 0) CustomCosmeticsPlugin.Logger?.LogInfo("Custom Cosmetics: " + line);
+            else DebugLog.Verbose(Mod, line);
         }
         catch (Exception e) { Fail(e, "PartObjects.Attach"); }
-    }
-
-    /// <summary>After the game's own refresh: says once per part and car whether its object ended up shown (the proof the
-    /// bitset, the dictionary and the object agree), with where it is and how it draws.</summary>
-    public static void Report(CarInfo info, PartsDictionary dict, bool garage)
-    {
-        if (Off || info == null || dict == null || !Eligible(info)) return;
-        try
-        {
-            var list = info.UpgradesLists?.Parts;
-            if (list == null) return;
-            string where = $"{info.name} ({(garage ? "garage model" : "car")})";
-            for (int i = 0; i < list.Count; i++)
-            {
-                var so = list[i];
-                if (so == null) continue;
-                var part = PartLibrary.ByItemId(so.ItemId);
-                if (part == null) continue;
-                var registered = so.TryCast<VehicleCosmetic>();
-                if (!dict.ContainsKey(registered)) continue;
-                var objs = dict[registered];
-                if (objs == null) continue;
-                for (int k = 0; k < objs.Count; k++)
-                {
-                    var go = objs[k];
-                    if (go == null || !go.activeSelf) continue;
-                    var r = go.GetComponent<MeshRenderer>();
-                    string draw = r == null ? "no renderer" :
-                        $"renderer {(r.enabled ? "on" : "OFF")}, shader {(r.sharedMaterial != null ? r.sharedMaterial.shader.name : "none")}, world bounds centre {F(r.bounds.center)} size {F(r.bounds.size)}";
-                    LogOnce("shown" + where + part.Id,
-                        $"{where}: {part.Id} is SHOWN (active {go.activeInHierarchy} in the hierarchy, layer {go.layer}, {draw}).");
-                }
-            }
-        }
-        catch (Exception e) { Fail(e, "PartObjects.Report"); }
     }
 
     // ---------------------------------------------------------------- the game's parts drawn with our shape
@@ -479,8 +361,9 @@ internal static class PartObjects
     /// <summary>
     /// For each part that takes the look of a game part (<see cref="PartManifest.Replaces"/>) and fits this car, when the
     /// car's list has that game part: one object of ours under the car's cosmetics (no upgrade object, no dictionary entry:
-    /// the game knows nothing of it), shown exactly while the game shows its own part, whose meshes then draw nothing
-    /// (<see cref="StockLooks"/>). Once per controller instance; cheap on every later call.
+    /// the game knows nothing of it), shown exactly while the game shows its own part (<see cref="StockLooks"/>). Like
+    /// every part it is an empty stand-in until it is first shown; the game's own meshes draw until ours is built, and
+    /// nothing from then on. Once per controller instance; cheap on every later call.
     /// </summary>
     private static void AttachLooks(Transform cosmetics, CarInfo info, PartsDictionary dict, PropertyBlockSetter setter, bool garage)
     {
@@ -489,15 +372,16 @@ internal static class PartObjects
             if (!PartLibrary.HasLooks || StockLooks.Done(cosmetics)) return;
             var list = info.UpgradesLists?.Parts;
             if (list == null) return;
-            var modded = ModdedCars.ByCarName(info.name);
-            string where = $"{info.name} ({(garage ? "garage model" : "car")})";
-            Transform root = null, group = null;
+            string car = info.name;
+            var modded = ModdedCars.ByCarName(car);
+            string where = $"{car} ({(garage ? "garage model" : "car")})";
+            PartBuilds.CarSet set = null;
             bool waiting = false;
             foreach (var part in PartLibrary.Parts)
             {
                 var m = part.Manifest;
                 if (m.Replaces.Length == 0) continue;
-                var fit = FitLookup.Find(m.Fits, info.name, modded?.Id);
+                var fit = FitLookup.Find(m.Fits, car, modded?.Id);
                 if (fit == null) continue;
                 VehiclePartSO stock = null;
                 for (int i = 0; i < list.Count && stock == null; i++)
@@ -522,38 +406,15 @@ internal static class PartObjects
                     if (node != null) shownBy.Add(node.gameObject);
                 }
                 if (shownBy.Count == 0) { waiting = true; LogOnce("lookwait" + where + part.Id, $"{where}: {part.Id} waits: the game's {m.Replaces} has no objects yet."); continue; }
-                root ??= RootOf(cosmetics);
-                group ??= GroupOf(cosmetics);
-                var source = SourceMaterial(cosmetics, root, m.Slot, setter, out string from);
-                if (source == null) { LogOnce("lookmat" + where + part.Id, $"{where}: {part.Id} skipped: no car material to copy."); continue; }
-                var (full, low, variant) = ShapesFor(part, info, modded);
-                var mesh = MeshOf(part, full);
-                if (mesh == null) continue;
-                var offset = modded != null ? modded.ModelOffset(garage) : Vector3.zero;
-                var go = new GameObject("CC_" + part.Id);
-                go.layer = group.gameObject.layer;
-                var t = go.transform;
-                t.SetParent(group, false);
-                t.position = root.TransformPoint(new Vector3(fit.Pos[0], fit.Pos[1], fit.Pos[2]) + offset);
-                t.rotation = root.rotation * Quaternion.Euler(fit.Rot[0], fit.Rot[1], fit.Rot[2]);
-                var gl = group.lossyScale;
-                var rl = root.lossyScale;
-                t.localScale = new Vector3(Div(rl.x * fit.AxisScale(0), gl.x), Div(rl.y * fit.AxisScale(1), gl.y), Div(rl.z * fit.AxisScale(2), gl.z));
-                var mf = go.AddComponent<MeshFilter>();
-                mf.sharedMesh = mesh;
-                var renderer = go.AddComponent<MeshRenderer>();
-                var material = MaterialOf(part, source);
-                renderer.sharedMaterial = material;
-                RegisterWithSetter(renderer, material, source, setter, part.Id, info.name);
-                var lowMesh = MeshOf(part, low);
-                if (lowMesh != null) PartLods.Add(go, mf, mesh, lowMesh);
-                PartLights.Add(go, mf, part, full, mesh, material, setter, root);
-                go.SetActive(false);
-                int hidden = StockLooks.Add(cosmetics, shownBy, go);
-                LogOnce("look" + where + part.Id,
-                    $"{where}: {part.Id} drawn in place of the game's {m.Replaces} ({shownBy.Count} object(s), {hidden} mesh(es) emptied" +
-                    $"{(variant.Length > 0 ? ", shape " + full.Name : "")}), car-root pos {F(root.InverseTransformPoint(t.position))}, material from {from}.");
+                set ??= PartBuilds.SetOf(cosmetics) ?? PartBuilds.NewSet(cosmetics, car, setter, garage);
+                if (set.Find(part, look: true) != null) continue;
+                if (PartShape.Pick(part.Mesh.Shapes, out _, car, modded?.Id) < 0) continue;
+                var stand = PartBuilds.AddBody(set, part, null, fit, -1);
+                StockLooks.Watch(shownBy, stand.Gos[0]);
+                int count = shownBy.Count;
+                DebugLog.Verbose(Mod, () => $"{where}: {part.Id} stands by for the game's {m.Replaces} ({count} object(s)); it is drawn in its place once the game shows it");
             }
+            if (set != null) set.Placing = false;
             if (!waiting) StockLooks.MarkDone(cosmetics);
         }
         catch (Exception e) { Fail(e, "PartObjects.AttachLooks"); }
@@ -569,130 +430,12 @@ internal static class PartObjects
         return null;
     }
 
-    private static List<GameObject> Build(CustomPart part, VehiclePartSO so, CarInfo info, Transform root, Transform group, Material source,
-        PropertyBlockSetter setter, bool garage, out string why)
-    {
-        why = null;
-        var modded = ModdedCars.ByCarName(info.name);
-        var fit = FitLookup.Find(part.Manifest.Fits, info.name, modded?.Id);
-        if (fit == null) return null; // not a skip: the part just isn't for this car
-        var (full, low, variant) = ShapesFor(part, info, modded);
-        var mesh = MeshOf(part, full);
-        if (mesh == null) { why = "its mesh has no triangles"; return null; }
-
-        // A modded car's model sits on its donor skeleton at the layout's offset (CarBody does the same for the game's
-        // slots); the garage model has its own.
-        var offset = modded != null ? modded.ModelOffset(garage) : Vector3.zero;
-
-        var go = new GameObject("CC_" + part.Id);
-        go.layer = group.gameObject.layer;
-        var t = go.transform;
-        t.SetParent(group, false);
-        t.position = root.TransformPoint(new Vector3(fit.Pos[0], fit.Pos[1], fit.Pos[2]) + offset);
-        t.rotation = root.rotation * Quaternion.Euler(fit.Rot[0], fit.Rot[1], fit.Rot[2]);
-        var gl = group.lossyScale;
-        var rl = root.lossyScale;
-        t.localScale = new Vector3(Div(rl.x * fit.AxisScale(0), gl.x), Div(rl.y * fit.AxisScale(1), gl.y), Div(rl.z * fit.AxisScale(2), gl.z));
-
-        Dress(go, part, so, mesh, MeshOf(part, low), source, setter, info.name, full, root);
-        if (variant.Length > 0) LogOnce("variant" + info.name + part.Id, $"{info.name}: {part.Id} draws its own shape for this car ({full.Name}).");
-        return new List<GameObject> { go };
-    }
-
-    /// <summary>Mesh, material, the car's lighting, LOD, the part's own night lights (<see cref="PartLights"/>) and the
-    /// game's upgrade marker on a new part object (left hidden: the game switches it on by the car's bitset).</summary>
-    private static void Dress(GameObject go, CustomPart part, VehiclePartSO so, Mesh mesh, Mesh low, Material source, PropertyBlockSetter setter, string car,
-        MeshPart shape = null, Transform root = null)
-    {
-        var mf = go.AddComponent<MeshFilter>();
-        mf.sharedMesh = mesh;
-        var renderer = go.AddComponent<MeshRenderer>();
-        var material = MaterialOf(part, source);
-        renderer.sharedMaterial = material;
-        RegisterWithSetter(renderer, material, source, setter, part.Id, car);
-        if (low != null) PartLods.Add(go, mf, mesh, low);
-        PartLights.Add(go, mf, part, shape, mesh, material, setter, root);
-        var upgrade = go.AddComponent<VehicleUpgradeObject>();
-        upgrade.vehiclePartReference = so;
-        go.SetActive(false);
-    }
-
-    private static readonly string[] Corners = { "FL", "FR", "RL", "RR" };
-
-    /// <summary>The wheel's own frame (as the car framework uses it): the nearest LODGroup above the mesh, which carries the
-    /// right wheels' 180° yaw, else the corner node. Its origin is the wheel centre, +x the axle inboard on the left wheel.</summary>
-    private static Transform WheelFrame(Transform mesh, Transform corner)
-    {
-        for (var t = mesh.parent; t != null && t != corner.parent; t = t.parent)
-            if (t.GetComponent<LODGroup>() != null) return t;
-        return corner;
-    }
-
-    /// <summary>
-    /// A wheels part: one object per wheel, in the wheel's own frame under the node that steers and spins it, at the fit
-    /// (pos = offset from the wheel centre in metres, -x outboard on either side; scale = the rim's size for this car's
-    /// tyre). The stock rims are hidden while it is on (<see cref="WheelRims"/>); the tyres stay.
-    /// </summary>
-    private static List<GameObject> BuildWheels(CustomPart part, VehiclePartSO so, CarInfo info, Transform root, Material fallback,
-        PropertyBlockSetter setter, ref string from, out string why)
-    {
-        why = null;
-        var modded = ModdedCars.ByCarName(info.name);
-        var fit = FitLookup.Find(part.Manifest.Fits, info.name, modded?.Id);
-        if (fit == null) return null;
-        var wheelMeshes = root.Find("Axles/WheelMeshes");
-        if (wheelMeshes == null) { why = "the car has no Axles/WheelMeshes"; return null; }
-        var (full, low, _) = ShapesFor(part, info, modded);
-        var mesh = MeshOf(part, full);
-        if (mesh == null) { why = "its mesh has no triangles"; return null; }
-        var lowMesh = MeshOf(part, low);
-        var made = new List<GameObject>();
-        var rims = new List<MeshFilter>();
-        foreach (var c in Corners)
-        {
-            var corner = wheelMeshes.Find(c);
-            if (corner == null) { why = "the car has no wheel " + c; break; }
-            MeshFilter firstRim = null;
-            bool tyre = false;
-            foreach (var mf in corner.GetComponentsInChildren<MeshFilter>(true))
-            {
-                if (mf == null) continue;
-                if (WheelNames.IsTyre(mf.name)) tyre = true;
-                else if (WheelNames.IsRim(mf.name)) { rims.Add(mf); firstRim ??= mf; }
-            }
-            if (firstRim == null) { why = $"wheel {c} has no rim mesh"; break; }
-            // A wheel drawn as one mesh (rim and tyre together) can't lose its rim alone.
-            if (!tyre) { why = $"wheel {c} draws its rim and tyre as one mesh"; break; }
-            var frame = WheelFrame(firstRim.transform, corner);
-            var source = fallback;
-            var rimRenderer = firstRim.GetComponent<MeshRenderer>();
-            if (rimRenderer != null && UsesCarShader(rimRenderer.sharedMaterial, setter)) { source = rimRenderer.sharedMaterial; from = "the stock rim's material"; }
-            var go = new GameObject("CC_" + part.Id + "_" + c);
-            go.layer = firstRim.gameObject.layer;
-            var t = go.transform;
-            t.SetParent(frame, false);
-            var fl = frame.lossyScale;
-            t.localPosition = new Vector3(Div(fit.Pos[0], fl.x), Div(fit.Pos[1], fl.y), Div(fit.Pos[2], fl.z));
-            t.localRotation = Quaternion.Euler(fit.Rot[0], fit.Rot[1], fit.Rot[2]);
-            t.localScale = new Vector3(Div(fit.AxisScale(0), fl.x), Div(fit.AxisScale(1), fl.y), Div(fit.AxisScale(2), fl.z));
-            Dress(go, part, so, mesh, lowMesh, source, setter, info.name);
-            made.Add(go);
-        }
-        if (why != null)
-        {
-            foreach (var go in made) Object.Destroy(go);
-            return null;
-        }
-        WheelRims.Add(wheelMeshes, rims, made);
-        return made;
-    }
-
     /// <summary>
     /// Hands the renderer to the car's PropertyBlockSetter, the game's own way to give a renderer the car's lights (the
     /// shader glows lights.png by the head, tail, brake and reverse light intensities in the block), dirt, mud, snow and
     /// wet. The block starts as a copy of the stock cosmetic's, so the part is born with the car's present state.
     /// </summary>
-    private static void RegisterWithSetter(MeshRenderer renderer, Material material, Material source, PropertyBlockSetter setter, string part, string car)
+    internal static void RegisterWithSetter(MeshRenderer renderer, Material material, Material source, PropertyBlockSetter setter, string part, string car)
     {
         if (setter == null) { LogOnce("nosetter" + car, $"{car}: no PropertyBlockSetter on the controller; its parts have no car lighting (no glow, dirt or wet)."); return; }
         try
@@ -718,9 +461,10 @@ internal static class PartObjects
                 }
                 ours.SetTexture(LiveryProperty, material.GetTexture(LiveryProperty));
                 setter.PushBlock(material, ours);
-                LogOnce("setter" + car + part, theirs != null
-                    ? $"{car}: {part} is in the car's PropertyBlockSetter (lights, dirt and wet follow the car)."
-                    : $"{car}: {part} is in the car's PropertyBlockSetter (its start state from the setter's present values: its source material isn't one of the setter's).");
+                bool copied = theirs != null;
+                DebugLog.Verbose(Mod, () => copied
+                    ? $"{car}: {part} is in the car's PropertyBlockSetter (lights, dirt and wet follow the car)"
+                    : $"{car}: {part} is in the car's PropertyBlockSetter (its start state from the setter's present values: its source material isn't one of the setter's)");
             }
             else LogOnce("setter" + car + part, $"{car}: {part} was added to the car's PropertyBlockSetter, but no block was made for its material; it follows the car from the next light or weather change.");
         }
@@ -746,8 +490,4 @@ internal static class PartObjects
         PropertyBlockSetter.WetAmountPropertyID, PropertyBlockSetter.RainAmountPropertyID, PropertyBlockSetter.DamageAmountPropertyID, PropertyBlockSetter.HeadlightsIntensityPropertyID,
         PropertyBlockSetter.RearlightsIntensityPropertyID, PropertyBlockSetter.BrakingRearlightsIntensityPropertyID, PropertyBlockSetter.ReverselightsIntensityPropertyID,
     };
-
-    private static float Div(float a, float b) => Mathf.Abs(b) < 1e-6f ? a : a / b;
-
-    private static string F(Vector3 v) => $"({v.x:F2}, {v.y:F2}, {v.z:F2})";
 }

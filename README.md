@@ -2,9 +2,18 @@
 
 Mods for **Over the Hill**: 25 new vehicles to buy in the garage, trailers, car parts and liveries, bigger lobbies, a
 better server browser, chat, extra cameras, more graphics settings and custom horns. Each set comes with a one-click
-installer: the Car Pack for MelonLoader, or everything for BepInEx.
+installer: the Plus pack or the Car Pack for MelonLoader, or everything for BepInEx.
 
 Install all of it or just the bits you want. Anything can be turned off in game.
+
+## Over The Hill Plus (MelonLoader, the whole lot)
+
+### [Download OverTheHillPlus-Installer.zip](https://github.com/legomaster188/OverTheHillPlus-QoL/releases/download/pluspack-2.0.0/OverTheHillPlus-Installer.zip)
+
+Everything in the Car Pack below plus the multiplayer and quality-of-life mods: bigger lobbies, the server browser and
+server tools, chat, server rules, cameras, cockpit view, photo mode extras, graphics, darker nights, Discord status, horns,
+radio and flares. 51 mods in one installer. Already on the Car Pack? Run this one on the same game and it takes over.
+Every version has its own release page: [all Plus releases](https://github.com/legomaster188/OverTheHillPlus-QoL/releases?q=pluspack&expanded=true).
 
 ## Car Pack (MelonLoader)
 

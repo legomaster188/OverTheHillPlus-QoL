@@ -5,9 +5,11 @@ using OverTheHillPlus.Features;
 namespace OverTheHillPlus.CustomCosmetics;
 
 /// <summary>
-/// Custom Cosmetics' per-frame work, once a second: as soon as the game's item catalog and the Mod Manager's cars are
+/// Custom Cosmetics' per-frame work. Once a second: as soon as the game's item catalog and the Mod Manager's cars are
 /// there, the parts are appended to the cars' lists and put in the catalog (again if the game rebuilds it), and the part
-/// names are kept in the string table. Everything else happens in the hooks, when the game asks.
+/// names are kept in the string table. Every frame: the parts the game has just shown are built, a few milliseconds at
+/// a time (<see cref="PartBuilds"/>), and the wheels, looks, lower detail and lights follow their parts. The stand-ins
+/// themselves are made in the hooks, when the game asks.
 /// </summary>
 internal sealed class CosmeticsFeature : IFeature
 {
@@ -40,6 +42,9 @@ internal sealed class CosmeticsFeature : IFeature
             PartLights.Tick();
         }
         catch (Exception e) { DebugLog.Error(CustomCosmeticsPlugin.ModId, e, "CosmeticsFeature.Tick wheels"); }
+        // after the looks: one the game's part has just switched on is seen in this same frame
+        try { PartBuilds.Tick(); }
+        catch (Exception e) { DebugLog.Error(CustomCosmeticsPlugin.ModId, e, "CosmeticsFeature.Tick builds"); }
         if (UnityEngine.Time.unscaledTime < _next) return;
         _next = UnityEngine.Time.unscaledTime + 1f;
         try

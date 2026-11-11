@@ -24,7 +24,7 @@ public class DiscordPlugin : BasePlugin
 {
     public const string Guid = "com.oth.discord";
     public const string Name = "Discord+";
-    public const string Version = "1.2.1";
+    public const string Version = "1.3.0";
 
     /// <summary>Mod id: names the config file (oth.discord.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "discord";

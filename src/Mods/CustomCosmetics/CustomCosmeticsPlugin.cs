@@ -30,7 +30,7 @@ public class CustomCosmeticsPlugin : BasePlugin
 {
     public const string Guid = "com.oth.customcosmetics";
     public const string Name = "Custom Cosmetics";
-    public const string Version = "1.1.0";
+    public const string Version = "1.1.1";
 
     /// <summary>Mod id: names the config file (oth.customcosmetics.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "customcosmetics";

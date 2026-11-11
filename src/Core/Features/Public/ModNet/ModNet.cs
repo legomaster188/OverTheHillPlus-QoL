@@ -206,6 +206,14 @@ internal static class ModNet
     private static readonly Dictionary<ushort, byte> HostChannelMap = new();
     private static HostLink _hostLink;
     private static string _hostModVersion;
+    /// <summary>Guest: the host's own player as its welcome gave it (PlayerRef.RawEncoded), 0 until known. See <see cref="HostRef"/>.</summary>
+    private static int _hostRaw;
+    // Guest: the host's own messages that came before its player was known (see Deliver), oldest first.
+    private static readonly List<Incoming> HeldFromHost = new();
+    private static float _heldSince;
+    private static bool _flushingHeld;
+    private const int MaxHeldFromHost = 256;
+    private const float HeldFromHostSeconds = 15f;
     private static int _helloTries;
     private static float _nextHello, _lastHelloAt = -100f;
     private static bool _saidHello;
@@ -290,6 +298,31 @@ internal static class ModNet
     public static int Dropped(DropReason r) => Drops[(int)r];
     public static bool HookInstalled => ModNetTransport.Installed;
     public static bool HostAdvertised => _sessionAdvertised;
+
+    /// <summary>
+    /// Guest: the host's player, PlayerRef.None while it isn't known. Fusion gives a guest its own player as the sender of
+    /// the host's reliable data, so a message can't say who the host is. The host says it in its welcome; a host from
+    /// before core 1.4.3 doesn't, and then it is read from the game's session players object once that has spawned
+    /// (seconds after joining: until then <see cref="Deliver"/> holds the host's messages back).
+    /// </summary>
+    public static PlayerRef HostRef
+    {
+        get
+        {
+            if (_hostRaw != 0) return PlayerRef.FromEncoded(_hostRaw);
+            try
+            {
+                var sp = OverlandSessionPlayers.Instance;
+                if (sp == null) return PlayerRef.None;
+                var no = sp.Object;
+                if (no == null || !no.IsValid) return PlayerRef.None; // not spawned yet: its networked properties throw
+                var host = sp.HostPlayerRef;
+                if (host.IsRealPlayer) return host;
+            }
+            catch (Exception ex) { DebugLog.Error("core", ex, "ModNet.HostRef"); }
+            return PlayerRef.None;
+        }
+    }
 
     /// <summary>Guest: the host speaks ModNet and currently advertises <paramref name="channel"/>.</summary>
     public static bool HostHas(ushort channel) => HostChannelVersion(channel) > 0;
@@ -484,8 +517,9 @@ internal static class ModNet
         {
             if (ModNetTransport.Faulted && ModNetTransport.Installed) ModNetTransport.SetInstalled(false);
             if (Inbox.Count > 0) Pump();
+            if (HeldFromHost.Count > 0) FlushHeldFromHost();
         }
-        catch (Exception e) { DebugLog.Error("core", e, "ModNet.Tick"); LogOnce("pump", "[ModNet] Delivering messages failed: " + e); Inbox.Clear(); }
+        catch (Exception e) { DebugLog.Error("core", e, "ModNet.Tick"); LogOnce("pump", "[ModNet] Delivering messages failed: " + e); Inbox.Clear(); HeldFromHost.Clear(); }
 
         if (Time.unscaledTime < _nextSlowTick) return;
         _nextSlowTick = Time.unscaledTime + 0.5f;
@@ -653,6 +687,8 @@ internal static class ModNet
         HostChannelMap.Clear();
         _hostLink = HostLink.None;
         _hostModVersion = null;
+        _hostRaw = 0;
+        HeldFromHost.Clear();
         _helloTries = 0;
         _nextHello = 0f;
         _saidHello = false;
@@ -730,7 +766,46 @@ internal static class ModNet
         if (relayed && (def.Opts.HostOnlySender || !def.Opts.AllowRelay)) { DropAt(DropReason.Relay, ch, m.Bytes?.Length ?? 0); return; }
         if ((flags & ModNetTransport.FlagRelayRequest) != 0) { DropAt(DropReason.Relay, ch, m.Bytes?.Length ?? 0); return; } // only hosts relay
         var from = relayed ? PlayerRef.FromEncoded(m.K3) : m.From;
+        if (!relayed)
+        {
+            // Straight from the host. Fusion names the guest's own player as the sender, so the host's goes in here. While
+            // it isn't known the message waits (in order, a few seconds at most): a handler that files things by player
+            // would file it under ours or drop it as its own echo. That lost the host's paint for most cars, its chat
+            // lines and its horn in the first seconds after joining.
+            var host = HostRef;
+            if (!_flushingHeld && (HeldFromHost.Count > 0 || !host.IsRealPlayer) && HoldFromHost(m)) return;
+            if (host.IsRealPlayer) from = host;
+        }
         Invoke(def, new Message { Channel = ch, Type = type, Version = version, From = from, FromHost = !relayed, Relayed = relayed, Payload = m.Bytes });
+    }
+
+    private static bool HoldFromHost(Incoming m)
+    {
+        if (HeldFromHost.Count >= MaxHeldFromHost) return false; // full: delivered as it is, as before
+        if (HeldFromHost.Count == 0) _heldSince = Time.unscaledTime;
+        HeldFromHost.Add(m);
+        return true;
+    }
+
+    /// <summary>Guest: delivers the held host messages once the host's player is known, or after
+    /// <see cref="HeldFromHostSeconds"/> without it (then with the sender Fusion gave, as before).</summary>
+    private static void FlushHeldFromHost()
+    {
+        if (!HostRef.IsRealPlayer && Time.unscaledTime - _heldSince < HeldFromHostSeconds) return;
+        var held = HeldFromHost.ToArray();
+        HeldFromHost.Clear();
+        _flushingHeld = true;
+        try
+        {
+            foreach (var m in held)
+            {
+                bool live;
+                try { live = m.Runner != null && m.Runner.IsRunning; } catch (Exception ex) { DebugLog.Error("core", ex, "ModNet.FlushHeldFromHost"); live = false; }
+                if (live) Deliver(m.Runner, m);
+            }
+        }
+        finally { _flushingHeld = false; }
+        DebugLog.Info(LogId, $"{held.Length} message(s) from the host delivered after waiting for its player ({(HostRef.IsRealPlayer ? "known now" : "still unknown")})");
     }
 
     /// <summary>Host: forwards a guest's message to its target (0 = every other modded guest with the channel).</summary>
@@ -780,15 +855,17 @@ internal static class ModNet
     /// <summary>Hello / welcome payload: mod version, then the channels this side currently runs.</summary>
     private static byte[] Advert()
     {
-        var w = new NetWriter(64).String(Core.CorePlugin.Version, 24);
         var active = new List<ChannelDef>();
         foreach (var d in Defs.Values)
             if (IsActive(d)) active.Add(d);
         // Our channels first: other creators' channels (1000 and up) never push one of ours out of the list.
         var list = AdvertOrder.Pick(active, d => d.Id, MaxChannelsAdvertised);
-        w.Byte((byte)list.Count);
-        foreach (var d in list) w.UShort(d.Id).Byte(d.Opts.Version);
-        return w.ToArray();
+        var channels = new List<(ushort, byte)>(list.Count);
+        foreach (var d in list) channels.Add((d.Id, d.Opts.Version));
+        // Our own player goes with it: a welcome's tells the guest who the host is (HostRef).
+        int me = 0;
+        try { var r = Runner; if (r != null) me = r.LocalPlayer.RawEncoded; } catch (Exception ex) { DebugLog.Error("core", ex, "ModNet.Advert"); }
+        return ModNetAdvert.Write(Core.CorePlugin.Version, channels, me);
     }
 
     private static bool IsActive(ChannelDef d)
@@ -805,21 +882,6 @@ internal static class ModNet
         return sb.ToString();
     }
 
-    private static string ReadAdvertInto(byte[] bytes, Dictionary<ushort, byte> into)
-    {
-        var rd = new NetReader(bytes);
-        string version = rd.String(24);
-        int n = rd.Byte();
-        into.Clear();
-        for (int i = 0; i < n && i < MaxChannelsAdvertised && rd.Ok; i++)
-        {
-            ushort ch = rd.UShort();
-            byte v = rd.Byte();
-            if (rd.Ok && ch != Channels.Control && v > 0) into[ch] = v;
-        }
-        return string.IsNullOrEmpty(version) ? "?" : version;
-    }
-
     private static void HandleControl(NetworkRunner r, bool server, PlayerRef from, byte type, byte[] bytes)
     {
         if (server)
@@ -834,7 +896,7 @@ internal static class ModNet
                 PeerMap[raw] = peer = new Peer { Ref = from, Since = Time.unscaledTime };
                 Core.CorePlugin.Logger?.LogInfo($"[ModNet] Player {from.PlayerId} runs the mod network");
             }
-            peer.ModVersion = ReadAdvertInto(bytes, peer.Channels);
+            peer.ModVersion = ModNetAdvert.Read(bytes, peer.Channels, MaxChannelsAdvertised, Channels.Control, out _);
             DebugLog.Info(LogId, $"hello from player {from.PlayerId}: mod {peer.ModVersion}, channels {ModNetAdvert.ChannelSummary(peer.Channels.Keys, KnownChannelName)}; welcoming ({PeerMap.Count} modded guests)");
             SendControl(r, from, false, CtlWelcome, Advert());
             foreach (var h in PeerReadyHooks)
@@ -854,7 +916,11 @@ internal static class ModNet
         }
         if (type != CtlWelcome) return;
         bool first = _hostLink != HostLink.Ready;
-        _hostModVersion = ReadAdvertInto(bytes, HostChannelMap);
+        _hostModVersion = ModNetAdvert.Read(bytes, HostChannelMap, MaxChannelsAdvertised, Channels.Control, out int hostRaw);
+        // (never our own player: a welcome that names us as the host is wrong, and would make every host message an echo)
+        int mine = 0;
+        try { mine = r.LocalPlayer.RawEncoded; } catch (Exception ex) { DebugLog.Error("core", ex, "ModNet.HandleControl"); }
+        if (hostRaw != 0 && hostRaw != mine) _hostRaw = hostRaw;
         if (first || DebugLog.IsVerbose)
             DebugLog.Info(LogId, $"welcome from the host: mod {_hostModVersion}, channels {ModNetAdvert.ChannelSummary(HostChannelMap.Keys, KnownChannelName)}");
         SetLink(HostLink.Ready, "the host welcomed us");

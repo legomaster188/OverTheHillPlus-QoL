@@ -31,6 +31,9 @@ internal static class CarLookNet
     private const int MaxPeers = 64;
     private const float AskBackGap = 3f;
     private const float ApplyGap = 2f;
+    /// <summary>Asking everyone again because the host couldn't be told from ourselves: at most this often.</summary>
+    private const float AskAgainGap = 20f;
+    private static float _askedAgainAt = -1000f;
 
     private static readonly Dictionary<(int player, string car), CarLook> Looks = new();
     /// <summary>A player's newest look not shown yet (their previous change was less than <see cref="ApplyGap"/> ago).</summary>
@@ -125,17 +128,24 @@ internal static class CarLookNet
     private static void OnMessage(Net.Message m)
     {
         var from = m.From;
-        bool fromHost = false;
-        if (m.FromHost && !m.Relayed)
-        {
-            // From the host itself: on a guest the transport's sender may not be the host's player ref.
-            fromHost = true;
-            try { var sp = OverlandSessionPlayers.Instance; if (sp != null && sp.HostPlayerRef.IsRealPlayer) from = sp.HostPlayerRef; } catch (Exception ex) { DebugLog.Error("core", ex, "CarLookNet.OnMessage"); }
-        }
+        // From the host itself: the mod network hands it over with the host's player (Net.HostRef; on a guest Fusion's
+        // own sender is the guest's player).
+        bool fromHost = m.FromHost && !m.Relayed;
         try
         {
             var r = GameState.Runner;
-            if (r != null && r.LocalPlayer.RawEncoded == from.RawEncoded) return; // our own echo
+            if (r != null && r.LocalPlayer.RawEncoded == from.RawEncoded)
+            {
+                // Ours: an echo, unless it is the host's and nobody could say who the host is. Dropping those as echoes
+                // lost the host's paint for most cars in the first seconds after joining. A look can't be filed under
+                // nobody, so ask again in a moment: by then the host is known.
+                if (fromHost && Time.unscaledTime - _askedAgainAt > AskAgainGap)
+                {
+                    _askedAgainAt = Time.unscaledTime;
+                    foreach (var s in Mine.Values) s.Announced = false;
+                }
+                return;
+            }
         }
         catch (Exception ex) { DebugLog.Error("core", ex, "CarLookNet.OnMessage"); }
         if (m.Type != MsgLook && m.Type != MsgLookAskBack) return;

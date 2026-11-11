@@ -80,7 +80,9 @@ internal static class PlayerListRoster
     public static HashSet<int> Slotted(OverlandSessionPlayers sp)
     {
         var set = new HashSet<int>();
-        if (sp == null) return set;
+        // The session's player table is in the scene before Fusion has spawned it (a guest's first moments) and after
+        // Fusion has let it go (leaving): its networked tables throw then. Here and below it counts as not there.
+        if (!GameState.IsSpawned(sp)) return set;
         try
         {
             var order = sp.OrderedPlayerRefs;
@@ -97,7 +99,7 @@ internal static class PlayerListRoster
     /// <summary>Index of the player in the game's colour table (-1 = no colour slot, the game's default colour).</summary>
     public static int ColorSlot(OverlandSessionPlayers sp, PlayerRef p)
     {
-        if (sp == null) return -1;
+        if (!GameState.IsSpawned(sp)) return -1;
         try
         {
             var colors = sp.PlayerColors;
@@ -140,7 +142,7 @@ internal static class PlayerListRoster
             catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.AllPlayers"); }
         }
         var sp = OverlandSessionPlayers.Instance;
-        if (sp != null)
+        if (GameState.IsSpawned(sp))
         {
             try
             {
@@ -169,18 +171,19 @@ internal static class PlayerListRoster
     public static Entry Describe(OverlandSessionPlayers sp, PlayerRef p)
     {
         var e = new Entry { Ref = p, Name = NameOf(sp, p), Color = Color.white };
+        bool live = GameState.IsSpawned(sp);
         try { e.Color = UIManager.GetPlayerColor(p); } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.Describe"); }
-        try { e.IsHost = sp != null && sp.HostPlayerRef.RawEncoded == p.RawEncoded; } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.Describe"); }
+        try { e.IsHost = live && sp.HostPlayerRef.RawEncoded == p.RawEncoded; } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.Describe"); }
         try { var r = Runner; e.IsLocal = r != null && r.LocalPlayer.RawEncoded == p.RawEncoded; } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.Describe"); }
-        try { e.Supporter = sp != null && sp.OwnsSupporterEdition(p); } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.Describe"); }
-        try { e.Dev = sp != null && sp.IsDevTeamMember(p); } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.Describe"); }
+        try { e.Supporter = live && sp.OwnsSupporterEdition(p); } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.Describe"); }
+        try { e.Dev = live && sp.IsDevTeamMember(p); } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.Describe"); }
         return e;
     }
 
     public static string NameOf(OverlandSessionPlayers sp, PlayerRef p)
     {
         string n = null;
-        try { n = sp?.GetPlayerName(p); } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.NameOf"); }
+        try { if (GameState.IsSpawned(sp)) n = sp.GetPlayerName(p); } catch (Exception ex) { DebugLog.Error("core", ex, "PlayerListRoster.NameOf"); }
         if (string.IsNullOrEmpty(n) && TryKnownName(p, out var known)) n = known;
         return string.IsNullOrEmpty(n) ? $"Player {p.PlayerId}" : n;
     }

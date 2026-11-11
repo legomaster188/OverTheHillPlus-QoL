@@ -57,6 +57,7 @@ internal sealed class DiscordFeature : IFeature
         s.InWorld = runner != null && area != null;
         if (!s.InWorld) return s;
         s.Map = Localized(area.Name);
+        try { s.Activity = DiscordPresence.ActivityFor(OverTheHillPlus.Logging.Lifecycle.TopState()); } catch (Exception ex) { DebugLog.Error("discord", ex, "DiscordFeature.Read"); }
         try
         {
             foreach (var m in Core.Manager.ModManager.All)
@@ -85,6 +86,7 @@ internal sealed class DiscordFeature : IFeature
                 {
                     s.Players = session.PlayerCount;
                     s.MaxPlayers = session.MaxPlayers;
+                    s.PartyId = DiscordPresence.PartyIdFor(session.Name);
                     if (DiscordConfig.ShowServerName.Value) s.ServerName = ServerName(session);
                 }
                 try { s.Hosting = runner.IsServer; } catch { }

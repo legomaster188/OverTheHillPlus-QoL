@@ -202,7 +202,7 @@ internal static class GameModal
         try
         {
             var gsm = HybridSingleton<GameStateManager>.Instance;
-            var top = gsm?.PeekState();
+            var top = GameState.TopState(gsm);
             if (top == null || top.Pointer != _pushedPtr) return false;
             _closingByUs = true;
             gsm.PopState();

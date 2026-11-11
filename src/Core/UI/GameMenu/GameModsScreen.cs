@@ -76,7 +76,7 @@ internal static class GameModsScreen
             var gsm = HybridSingleton<GameStateManager>.Instance;
             if (gsm == null) return false;
             if (_screenPtr != IntPtr.Zero || gsm.ContainsState(Il2CppType.Of<StateLanguageSettingsMenu>())) return false; // ours or the game's: one at a time
-            var top = gsm.PeekState();
+            var top = GameState.TopState(gsm);
             _fromGameplay = top == null || top.TryCast<StateUI>() == null;
             if (_fromGameplay)
             {
@@ -110,7 +110,7 @@ internal static class GameModsScreen
         try
         {
             var gsm = HybridSingleton<GameStateManager>.Instance;
-            var top = gsm?.PeekState();
+            var top = GameState.TopState(gsm);
             if (top == null || _screenPtr == IntPtr.Zero || top.Pointer != _screenPtr) return false;
             gsm.PopState();
             return true;
@@ -125,7 +125,7 @@ internal static class GameModsScreen
     private static bool IsTop(State state)
     {
         if (state == null) return false;
-        var top = HybridSingleton<GameStateManager>.Instance?.PeekState();
+        var top = GameState.TopState();
         return top != null && top.Pointer == state.Pointer;
     }
 

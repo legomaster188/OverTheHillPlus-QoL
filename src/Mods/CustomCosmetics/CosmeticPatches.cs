@@ -26,7 +26,8 @@ internal static class InitVehicleUpgradesPatch
     }
 }
 
-/// <summary>A networked car's mounted parts changed (or it was just built): ours are checked first (cheap).</summary>
+/// <summary>A networked car's mounted parts changed (or it was just built): ours are checked first (cheap), and after
+/// the game has switched its parts the ones it switched on are looked for at once (they are built when first shown).</summary>
 [HarmonyPatch(typeof(VehicleCustomizationController), nameof(VehicleCustomizationController.RefreshMountedUpgrades))]
 internal static class RefreshCarPatch
 {
@@ -38,7 +39,7 @@ internal static class RefreshCarPatch
 
     private static void Postfix(VehicleCustomizationController __instance)
     {
-        try { PartObjects.Report(__instance.currentCarInfo, __instance.totalPartsDictionary, garage: false); }
+        try { PartBuilds.Refreshed(__instance.upgradesParent); }
         catch (Exception e) { DebugLog.Error(CustomCosmeticsPlugin.ModId, e, "RefreshCarPatch.Postfix"); }
     }
 }
@@ -76,7 +77,7 @@ internal static class RefreshGaragePatch
 
     private static void Postfix(LocalVehicleCustomizationController __instance, Car __0)
     {
-        try { PartObjects.Report(__instance.currentCarInfo ?? __0?.CarInfo, __instance.totalPartsDictionary, garage: true); }
+        try { PartBuilds.Refreshed(__instance.upgradesParent); }
         catch (Exception e) { DebugLog.Error(CustomCosmeticsPlugin.ModId, e, "RefreshGaragePatch.Postfix"); }
     }
 }

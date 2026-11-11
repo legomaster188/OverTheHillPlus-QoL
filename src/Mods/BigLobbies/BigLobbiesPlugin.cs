@@ -26,7 +26,7 @@ public class BigLobbiesPlugin : BasePlugin
 {
     public const string Guid = "com.oth.biglobbies";
     public const string Name = "Lobby+";
-    public const string Version = "1.2.1";
+    public const string Version = "1.2.2";
 
     /// <summary>Mod id: names the config file (oth.biglobbies.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "biglobbies";

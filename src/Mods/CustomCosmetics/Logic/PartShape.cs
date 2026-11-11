@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using OverTheHillPlus.Cars;
 
 namespace OverTheHillPlus.CustomCosmetics;
@@ -18,12 +19,8 @@ public static class PartShape
     public static MeshPart Pick(MeshBlob blob)
     {
         if (blob == null) return null;
-        var p = blob.Part(Full);
-        if (p != null && Drawable(p)) return p;
-        foreach (var q in blob.Parts)
-            if (q.Kind is MeshPartKind.Body or MeshPartKind.Other && q.Name.StartsWith(Full, StringComparison.Ordinal) &&
-                !q.Name.StartsWith("part_lod", StringComparison.Ordinal) && q.Name.IndexOf('@') < 0 && Drawable(q)) return q;
-        return null;
+        int i = Pick(Heads(blob));
+        return i < 0 ? null : blob.Parts[i];
     }
 
     /// <summary>The shape for a car: the first of <paramref name="cars"/> (its CarInfo name, its mod id, ...) with a
@@ -33,14 +30,8 @@ public static class PartShape
     {
         variant = "";
         if (blob == null) return null;
-        if (cars != null)
-            foreach (var car in cars)
-            {
-                if (string.IsNullOrEmpty(car)) continue;
-                var own = Find(blob, Full + "@" + car);
-                if (own != null) { variant = car; return own; }
-            }
-        return Pick(blob);
+        int i = Pick(Heads(blob), out variant, cars);
+        return i < 0 ? null : blob.Parts[i];
     }
 
     /// <summary>The lower detail mesh that goes with <paramref name="variant"/> (from <see cref="Pick(MeshBlob, out string, string[])"/>):
@@ -49,15 +40,67 @@ public static class PartShape
     public static MeshPart PickLod1(MeshBlob blob, string variant)
     {
         if (blob == null) return null;
-        return Find(blob, string.IsNullOrEmpty(variant) ? Lod1 : Lod1 + "@" + variant);
+        int i = PickLod1(Heads(blob), variant);
+        return i < 0 ? null : blob.Parts[i];
     }
 
-    private static MeshPart Find(MeshBlob blob, string name)
+    // The same choices over what a mesh file holds (PartMeshIndex), without its data: the place of the shape in the
+    // list, -1 for none. The picks above go through these, so both always agree.
+
+    /// <summary><see cref="Pick(MeshBlob)"/> by the shapes' heads: the place of the shared full-detail shape, -1 for none.</summary>
+    public static int Pick(IReadOnlyList<ShapeHead> shapes)
     {
-        foreach (var q in blob.Parts)
-            if (string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase) && Drawable(q)) return q;
-        return null;
+        if (shapes == null) return -1;
+        for (int i = 0; i < shapes.Count; i++)
+        {
+            // the first one named exactly "part" decides, as MeshBlob.Part does
+            if (!string.Equals(shapes[i].Name, Full, StringComparison.Ordinal)) continue;
+            if (shapes[i].Drawable) return i;
+            break;
+        }
+        for (int i = 0; i < shapes.Count; i++)
+        {
+            var q = shapes[i];
+            if (q.Kind is MeshPartKind.Body or MeshPartKind.Other && q.Name.StartsWith(Full, StringComparison.Ordinal) &&
+                !q.Name.StartsWith("part_lod", StringComparison.Ordinal) && q.Name.IndexOf('@') < 0 && q.Drawable) return i;
+        }
+        return -1;
     }
 
-    private static bool Drawable(MeshPart p) => p.Kind != MeshPartKind.Collider && p.Indices != null && p.Indices.Length >= 3 && p.Positions != null;
+    /// <summary><see cref="Pick(MeshBlob, out string, string[])"/> by the shapes' heads.</summary>
+    public static int Pick(IReadOnlyList<ShapeHead> shapes, out string variant, params string[] cars)
+    {
+        variant = "";
+        if (shapes == null) return -1;
+        if (cars != null)
+            foreach (var car in cars)
+            {
+                if (string.IsNullOrEmpty(car)) continue;
+                int own = Find(shapes, Full + "@" + car);
+                if (own >= 0) { variant = car; return own; }
+            }
+        return Pick(shapes);
+    }
+
+    /// <summary><see cref="PickLod1(MeshBlob, string)"/> by the shapes' heads.</summary>
+    public static int PickLod1(IReadOnlyList<ShapeHead> shapes, string variant)
+    {
+        if (shapes == null) return -1;
+        return Find(shapes, string.IsNullOrEmpty(variant) ? Lod1 : Lod1 + "@" + variant);
+    }
+
+    private static int Find(IReadOnlyList<ShapeHead> shapes, string name)
+    {
+        for (int i = 0; i < shapes.Count; i++)
+            if (string.Equals(shapes[i].Name, name, StringComparison.OrdinalIgnoreCase) && shapes[i].Drawable) return i;
+        return -1;
+    }
+
+    private static List<ShapeHead> Heads(MeshBlob blob)
+    {
+        var list = new List<ShapeHead>(blob.Parts.Count);
+        foreach (var p in blob.Parts)
+            list.Add(new ShapeHead(p.Name, p.Kind, p.Positions != null ? p.VertexCount : 0, p.Indices != null && p.Positions != null ? p.Indices.Length : 0));
+        return list;
+    }
 }

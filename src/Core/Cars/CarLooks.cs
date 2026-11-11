@@ -169,6 +169,9 @@ internal static class CarLooks
                 try
                 {
                     if (fp == null) continue;
+                    // A car Fusion has not spawned yet, or has already let go of (leaving a session), has no owner and
+                    // no livery to read: its networked values throw. It gets its look on a later tick, or is gone.
+                    if (!GameState.IsSpawned(fp)) continue;
                     var vcc = fp.GetComponent<VehicleCustomizationController>();
                     car = ModdedCars.ByCar(vcc);
                     if (car == null || !car.Ready) continue;

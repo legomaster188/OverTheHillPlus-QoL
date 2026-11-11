@@ -266,7 +266,9 @@ internal static class NetPerfRuntime
             var sim = cfg?.Simulation;
             if (sim != null)
             {
-                SessionLine = hosting ? NetPerfConfig.Describe(sim.TickRateSelection) : $"tick {r.TickRate} Hz (host's settings)";
+                // A guest only knows the host's tick rate once the host's first state update is in (Fusion throws before).
+                SessionLine = hosting ? NetPerfConfig.Describe(sim.TickRateSelection)
+                    : OverTheHillPlus.Features.Public.PingMonitor.PingTracker.HasServerState(r) ? $"tick {r.TickRate} Hz (host's settings)" : "";
                 bool aoi = false;
                 try { aoi = sim.AreaOfInterestEnabled; } catch (Exception ex) { DebugLog.Error("serverutils", ex, "NetPerfRuntime.RefreshStats"); }
                 string cell = "";

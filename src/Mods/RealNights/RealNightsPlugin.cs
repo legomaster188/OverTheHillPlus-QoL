@@ -26,7 +26,7 @@ public class RealNightsPlugin : BasePlugin
 {
     public const string Guid = "com.oth.realnights";
     public const string Name = "Nights+";
-    public const string Version = "1.2.1";
+    public const string Version = "1.2.2";
 
     /// <summary>Mod id: names the config file (oth.realnights.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = "realnights";

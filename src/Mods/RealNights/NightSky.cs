@@ -133,8 +133,10 @@ internal static class NightSky
         _clockFrame = frame;
         try
         {
+            // The game's clock sits in the scene before Fusion has spawned it (a host's session start, a guest's join)
+            // and after Fusion has let it go. Its hour is a networked value and throws then: the last known hour stays.
             var tm = TimeManager.Instance;
-            if (tm != null) _hour = tm.Hours + tm.Minutes / 60f;
+            if (GameState.IsSpawned(tm)) _hour = tm.Hours + tm.Minutes / 60f;
         }
         catch (Exception e) { Failed(e, "NightSky.Hour"); }
         return _hour;
