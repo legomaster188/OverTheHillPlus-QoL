@@ -37,7 +37,7 @@ public class MeerkatPlugin : BasePlugin
 {
     public const string Guid = "com.oth.meerkat";
     public const string Name = "Meerkat";
-    public const string Version = "1.0.7";
+    public const string Version = "1.0.8";
 
     /// <summary>Mod id: names the config file (oth.meerkat.cfg), the MODS page entry and the enabled switch.</summary>
     internal const string ModId = MeerkatDefinition.Id;
